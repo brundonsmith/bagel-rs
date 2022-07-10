@@ -5,7 +5,7 @@ use crate::model::{
     type_expressions::TypeExpression,
 };
 
-pub fn compile(ctx: &Context, ast: &AST) -> String {
+pub fn compile(_ctx: &Context, ast: &AST) -> String {
     match &ast.node {
         ASTEnum::Expression(expression) => match &expression {
             Expression::NilLiteral => "undefined".to_owned(),

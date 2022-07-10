@@ -1,7 +1,4 @@
-use std::{
-    fmt::{Debug, Display},
-    rc::Rc,
-};
+use std::fmt::{Debug, Display};
 
 use lazy_static::lazy_static;
 
@@ -16,12 +13,12 @@ pub enum Expression {
         value: String,
     },
     BinaryOperator {
-        left: Rc<AST>,
+        left: AST,
         op: BinaryOperator,
-        right: Rc<AST>,
+        right: AST,
     },
     Parenthesis {
-        inner: Rc<AST>,
+        inner: AST,
     },
 }
 

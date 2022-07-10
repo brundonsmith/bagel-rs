@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use super::ast::{ASTEnum, ModuleName};
+use super::ast::{ASTEnum, ModuleName, AST};
 
 pub struct Context<'a> {
     pub all_modules: &'a HashMap<ModuleName, ASTEnum>,
@@ -9,5 +9,5 @@ pub struct Context<'a> {
 
 #[derive(Debug, Clone)]
 pub enum Error {
-    TypeError,
+    TypeError { ast: AST, msg: String },
 }

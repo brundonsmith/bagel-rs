@@ -1,13 +1,15 @@
 use std::rc::Rc;
 
 use crate::model::{
-    ast::{ASTEnum, AST},
+    ast::{ASTEnum, NodeAndSourceInfo, AST},
     expressions::{BinaryOperator, Expression},
 };
 use chumsky::prelude::*;
 
 pub fn parser() -> impl Parser<char, AST, Error = Simple<char>> {
     recursive(|expr| {
+        let nil = text::keyword("nil").map(|_| Expression::NilLiteral);
+
         let number = filter(|c: &char| c.is_ascii_digit())
             .repeated()
             .at_least(1)
@@ -15,11 +17,12 @@ pub fn parser() -> impl Parser<char, AST, Error = Simple<char>> {
                 value: c.iter().cloned().collect(),
             });
 
-        let atom = number
+        let atom = nil
+            .or(number)
             .or(expr
                 .delimited_by(just('('), just(')'))
                 .map(|inner| Expression::Parenthesis {
-                    inner: Rc::new(AST::from_node(ASTEnum::Expression(inner))),
+                    inner: Rc::new(NodeAndSourceInfo::from_node(ASTEnum::Expression(inner))),
                 }))
             .padded();
 
@@ -35,9 +38,9 @@ pub fn parser() -> impl Parser<char, AST, Error = Simple<char>> {
                     .repeated(),
             )
             .foldl(|left, (op, right)| Expression::BinaryOperator {
-                left: Rc::new(AST::from_node(ASTEnum::Expression(left))),
+                left: Rc::new(NodeAndSourceInfo::from_node(ASTEnum::Expression(left))),
                 op,
-                right: Rc::new(AST::from_node(ASTEnum::Expression(right))),
+                right: Rc::new(NodeAndSourceInfo::from_node(ASTEnum::Expression(right))),
             });
 
         let sum = product
@@ -50,14 +53,14 @@ pub fn parser() -> impl Parser<char, AST, Error = Simple<char>> {
                     .repeated(),
             )
             .foldl(|left, (op, right)| Expression::BinaryOperator {
-                left: Rc::new(AST::from_node(ASTEnum::Expression(left))),
+                left: Rc::new(NodeAndSourceInfo::from_node(ASTEnum::Expression(left))),
                 op,
-                right: Rc::new(AST::from_node(ASTEnum::Expression(right))),
+                right: Rc::new(NodeAndSourceInfo::from_node(ASTEnum::Expression(right))),
             });
 
         sum
     })
-    .map(|expr| AST::from_node(ASTEnum::Expression(expr)))
+    .map(|expr| Rc::new(NodeAndSourceInfo::from_node(ASTEnum::Expression(expr))))
     .then_ignore(end())
 }
 
