@@ -1,33 +1,28 @@
-use std::rc::Rc;
-
 use crate::model::{
-    ast::{ASTEnum, WithSourceInfo, AST},
+    ast::{ast_from, ASTEnum, AST},
     expressions::{BinaryOperator, Expression},
 };
 use chumsky::prelude::*;
 
 pub fn parser() -> impl Parser<char, ASTEnum, Error = Simple<char>> {
     recursive(|expr: Recursive<char, AST<Expression>, _>| {
-        let nil =
-            text::keyword("nil").map(|_| Rc::new(WithSourceInfo::empty(Expression::NilLiteral)));
+        let nil = text::keyword("nil").map(|_| ast_from(Expression::NilLiteral));
 
         let number = filter(|c: &char| c.is_ascii_digit())
             .repeated()
             .at_least(1)
             .map(|c| {
-                Rc::new(WithSourceInfo::empty(Expression::NumberLiteral {
+                ast_from(Expression::NumberLiteral {
                     value: c.iter().cloned().collect(),
-                }))
+                })
             });
 
         let atom = nil
             .or(number)
             .or(expr
                 .delimited_by(just('('), just(')'))
-                .map(|inner| Rc::new(WithSourceInfo::empty(Expression::Parenthesis { inner })))
-                .recover_with(nested_delimiters('(', ')', [], |_| {
-                    Rc::new(WithSourceInfo::empty(Expression::ParseError))
-                }))
+                .map(|inner| ast_from(Expression::Parenthesis { inner }))
+                .recover_with(nested_delimiters('(', ')', [], |_| Err(())))
                 .recover_with(skip_then_retry_until([')'])))
             .padded();
 
@@ -42,13 +37,7 @@ pub fn parser() -> impl Parser<char, ASTEnum, Error = Simple<char>> {
                     .then(atom)
                     .repeated(),
             )
-            .foldl(|left, (op, right)| {
-                Rc::new(WithSourceInfo::empty(Expression::BinaryOperator {
-                    left,
-                    op,
-                    right,
-                }))
-            });
+            .foldl(|left, (op, right)| ast_from(Expression::BinaryOperator { left, op, right }));
 
         let sum = product
             .clone()
@@ -59,13 +48,7 @@ pub fn parser() -> impl Parser<char, ASTEnum, Error = Simple<char>> {
                     .then(product)
                     .repeated(),
             )
-            .foldl(|left, (op, right)| {
-                Rc::new(WithSourceInfo::empty(Expression::BinaryOperator {
-                    left,
-                    op,
-                    right,
-                }))
-            });
+            .foldl(|left, (op, right)| ast_from(Expression::BinaryOperator { left, op, right }));
 
         sum
     })

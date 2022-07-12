@@ -96,7 +96,7 @@ fn main() {
         if let Some(ast) = ast {
             println!("Parsed: {}", ast);
 
-            if let ASTEnum::Expression(expr) = &ast {
+            if let ASTEnum::Expression(Ok(expr)) = &ast {
                 println!(
                     "AST: {}\nInferred type: {:?}",
                     &expr.node,
@@ -127,10 +127,12 @@ fn main() {
                 &ast,
             );
 
-            let js_ast = boa::parse(compiled, false).unwrap();
+            if let Ok(compiled) = compiled {
+                let js_ast = boa::parse(compiled, false).unwrap();
 
-            let mut js_ctx = boa::context::Context::new();
-            println!("Result: {:?}", js_ast.run(&mut js_ctx));
+                let mut js_ctx = boa::context::Context::new();
+                println!("Result: {:?}", js_ast.run(&mut js_ctx));
+            }
         }
     }
 }

@@ -10,10 +10,14 @@ use crate::{
 
 pub fn typecheck(ctx: &mut Context, ast: &ASTEnum) {
     visit_ast(ast, &mut |ast| match ast {
-        ASTEnum::Expression(x) => match &x.node {
+        ASTEnum::Expression(Ok(x)) => match &x.node {
             Expression::NilLiteral => {}
             Expression::NumberLiteral { value: _ } => {}
-            Expression::BinaryOperator { left, op, right } => {
+            Expression::BinaryOperator {
+                left: Ok(left),
+                op,
+                right: Ok(right),
+            } => {
                 let left_type = infer_type(ctx, &left.node);
                 let right_type = infer_type(ctx, &right.node);
 
@@ -35,9 +39,9 @@ pub fn typecheck(ctx: &mut Context, ast: &ASTEnum) {
                 }
             }
             Expression::Parenthesis { inner: _ } => {}
-            Expression::ParseError => {}
+            _ => {}
         },
-        ASTEnum::TypeExpression(x) => match &x.node {
+        ASTEnum::TypeExpression(Ok(x)) => match &x.node {
             TypeExpression::UnknownType => {}
             TypeExpression::NilType => {}
             TypeExpression::BooleanType => {}
@@ -46,6 +50,7 @@ pub fn typecheck(ctx: &mut Context, ast: &ASTEnum) {
         },
         ASTEnum::PlainIdentifier(_) => {}
         ASTEnum::NameAndType { name: _, typ: _ } => {}
+        _ => {}
     })
 }
 

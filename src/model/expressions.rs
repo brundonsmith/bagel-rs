@@ -20,7 +20,6 @@ pub enum Expression {
     Parenthesis {
         inner: AST<Expression>,
     },
-    ParseError,
 }
 
 impl Display for Expression {
@@ -29,18 +28,31 @@ impl Display for Expression {
             Expression::NilLiteral => f.write_str("nil"),
             Expression::NumberLiteral { value } => f.write_str(value),
             Expression::BinaryOperator { left, op, right } => {
-                Display::fmt(&left, f)?;
+                if let Ok(left) = left {
+                    Display::fmt(&left, f)?;
+                } else {
+                    f.write_str("<parse error>")?;
+                }
+
                 f.write_str(" ")?;
                 Display::fmt(op, f)?;
                 f.write_str(" ")?;
-                Display::fmt(&right, f)
+
+                if let Ok(right) = right {
+                    Display::fmt(&right, f)
+                } else {
+                    f.write_str("<parse error>")
+                }
             }
             Expression::Parenthesis { inner } => {
                 f.write_str("(")?;
-                Display::fmt(&inner, f)?;
+                if let Ok(inner) = inner {
+                    Display::fmt(&inner, f)?;
+                } else {
+                    f.write_str("<parse error>")?;
+                }
                 f.write_str(")")
             }
-            Expression::ParseError => f.write_str("<parse error>"),
         }
     }
 }
