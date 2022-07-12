@@ -1,29 +1,34 @@
 use std::rc::Rc;
 
 use crate::model::{
-    ast::{ASTEnum, NodeAndSourceInfo, AST},
+    ast::{ASTEnum, WithSourceInfo, AST},
     expressions::{BinaryOperator, Expression},
 };
 use chumsky::prelude::*;
 
-pub fn parser() -> impl Parser<char, AST, Error = Simple<char>> {
-    recursive(|expr| {
-        let nil = text::keyword("nil").map(|_| Expression::NilLiteral);
+pub fn parser() -> impl Parser<char, ASTEnum, Error = Simple<char>> {
+    recursive(|expr: Recursive<char, AST<Expression>, _>| {
+        let nil =
+            text::keyword("nil").map(|_| Rc::new(WithSourceInfo::empty(Expression::NilLiteral)));
 
         let number = filter(|c: &char| c.is_ascii_digit())
             .repeated()
             .at_least(1)
-            .map(|c| Expression::NumberLiteral {
-                value: c.iter().cloned().collect(),
+            .map(|c| {
+                Rc::new(WithSourceInfo::empty(Expression::NumberLiteral {
+                    value: c.iter().cloned().collect(),
+                }))
             });
 
         let atom = nil
             .or(number)
             .or(expr
                 .delimited_by(just('('), just(')'))
-                .map(|inner| Expression::Parenthesis {
-                    inner: Rc::new(NodeAndSourceInfo::from_node(ASTEnum::Expression(inner))),
+                .map(|inner| Rc::new(WithSourceInfo::empty(Expression::Parenthesis { inner })))
+                .recover_with(nested_delimiters('(', ')', [], |_| {
+                    Rc::new(WithSourceInfo::empty(Expression::ParseError))
                 }))
+                .recover_with(skip_then_retry_until([')'])))
             .padded();
 
         let op = |c| just(c).padded();
@@ -37,10 +42,12 @@ pub fn parser() -> impl Parser<char, AST, Error = Simple<char>> {
                     .then(atom)
                     .repeated(),
             )
-            .foldl(|left, (op, right)| Expression::BinaryOperator {
-                left: Rc::new(NodeAndSourceInfo::from_node(ASTEnum::Expression(left))),
-                op,
-                right: Rc::new(NodeAndSourceInfo::from_node(ASTEnum::Expression(right))),
+            .foldl(|left, (op, right)| {
+                Rc::new(WithSourceInfo::empty(Expression::BinaryOperator {
+                    left,
+                    op,
+                    right,
+                }))
             });
 
         let sum = product
@@ -52,16 +59,18 @@ pub fn parser() -> impl Parser<char, AST, Error = Simple<char>> {
                     .then(product)
                     .repeated(),
             )
-            .foldl(|left, (op, right)| Expression::BinaryOperator {
-                left: Rc::new(NodeAndSourceInfo::from_node(ASTEnum::Expression(left))),
-                op,
-                right: Rc::new(NodeAndSourceInfo::from_node(ASTEnum::Expression(right))),
+            .foldl(|left, (op, right)| {
+                Rc::new(WithSourceInfo::empty(Expression::BinaryOperator {
+                    left,
+                    op,
+                    right,
+                }))
             });
 
         sum
     })
-    .map(|expr| Rc::new(NodeAndSourceInfo::from_node(ASTEnum::Expression(expr))))
-    .then_ignore(end())
+    .map(|expr| ASTEnum::Expression(expr))
+    .then_ignore(end().recover_with(skip_then_retry_until([])))
 }
 
 // recursive(|value| {

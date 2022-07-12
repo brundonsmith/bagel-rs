@@ -13,13 +13,14 @@ pub enum Expression {
         value: String,
     },
     BinaryOperator {
-        left: AST,
+        left: AST<Expression>,
         op: BinaryOperator,
-        right: AST,
+        right: AST<Expression>,
     },
     Parenthesis {
-        inner: AST,
+        inner: AST<Expression>,
     },
+    ParseError,
 }
 
 impl Display for Expression {
@@ -39,6 +40,7 @@ impl Display for Expression {
                 Display::fmt(&inner, f)?;
                 f.write_str(")")
             }
+            Expression::ParseError => f.write_str("<parse error>"),
         }
     }
 }
