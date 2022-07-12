@@ -1,5 +1,6 @@
 use crate::{
     model::{
+        ast::AST,
         expressions::{Expression, BINARY_OPERATOR_TYPES},
         misc::Context,
         type_expressions::TypeExpression,
@@ -18,9 +19,9 @@ fn infer_type_inner(ctx: &Context, ast: &Expression) -> TypeExpression {
         Expression::NilLiteral => TypeExpression::NilType,
         Expression::NumberLiteral { value: _ } => TypeExpression::NumberType,
         Expression::BinaryOperator {
-            left: Ok(left),
+            left: AST::Ok(left),
             op,
-            right: Ok(right),
+            right: AST::Ok(right),
         } => {
             let left_type = infer_type(ctx, &left.node);
             let right_type = infer_type(ctx, &right.node);
@@ -34,7 +35,9 @@ fn infer_type_inner(ctx: &Context, ast: &Expression) -> TypeExpression {
                 .map(|t| t.output.clone())
                 .unwrap_or(TypeExpression::UnknownType)
         }
-        Expression::Parenthesis { inner: Ok(inner) } => infer_type(ctx, &inner.node),
+        Expression::Parenthesis {
+            inner: AST::Ok(inner),
+        } => infer_type(ctx, &inner.node),
         _ => TypeExpression::UnknownType,
     }
 }

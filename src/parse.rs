@@ -22,7 +22,7 @@ pub fn parser() -> impl Parser<char, ASTEnum, Error = Simple<char>> {
             .or(expr
                 .delimited_by(just('('), just(')'))
                 .map(|inner| ast_from(Expression::Parenthesis { inner }))
-                .recover_with(nested_delimiters('(', ')', [], |_| Err(())))
+                .recover_with(nested_delimiters('(', ')', [], |_| AST::ParseError))
                 .recover_with(skip_then_retry_until([')'])))
             .padded();
 

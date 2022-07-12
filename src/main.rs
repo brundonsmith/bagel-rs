@@ -8,7 +8,10 @@ use model::ast::ASTEnum;
 use std::collections::HashMap;
 
 use crate::{
-    model::misc::{Context, Error},
+    model::{
+        ast::AST,
+        misc::{Context, Error},
+    },
     parse::parser,
     typecheck::typecheck,
     typeinfer::infer_type,
@@ -96,7 +99,7 @@ fn main() {
         if let Some(ast) = ast {
             println!("Parsed: {}", ast);
 
-            if let ASTEnum::Expression(Ok(expr)) = &ast {
+            if let ASTEnum::Expression(AST::Ok(expr)) = &ast {
                 println!(
                     "AST: {}\nInferred type: {:?}",
                     &expr.node,

@@ -1,6 +1,6 @@
 use crate::{
     model::{
-        ast::{visit_ast, ASTEnum},
+        ast::{visit_ast, ASTEnum, AST},
         expressions::{Expression, BINARY_OPERATOR_TYPES},
         misc::{Context, Error},
         type_expressions::TypeExpression,
@@ -10,13 +10,13 @@ use crate::{
 
 pub fn typecheck(ctx: &mut Context, ast: &ASTEnum) {
     visit_ast(ast, &mut |ast| match ast {
-        ASTEnum::Expression(Ok(x)) => match &x.node {
+        ASTEnum::Expression(AST::Ok(x)) => match &x.node {
             Expression::NilLiteral => {}
             Expression::NumberLiteral { value: _ } => {}
             Expression::BinaryOperator {
-                left: Ok(left),
+                left: AST::Ok(left),
                 op,
-                right: Ok(right),
+                right: AST::Ok(right),
             } => {
                 let left_type = infer_type(ctx, &left.node);
                 let right_type = infer_type(ctx, &right.node);
@@ -41,7 +41,7 @@ pub fn typecheck(ctx: &mut Context, ast: &ASTEnum) {
             Expression::Parenthesis { inner: _ } => {}
             _ => {}
         },
-        ASTEnum::TypeExpression(Ok(x)) => match &x.node {
+        ASTEnum::TypeExpression(AST::Ok(x)) => match &x.node {
             TypeExpression::UnknownType => {}
             TypeExpression::NilType => {}
             TypeExpression::BooleanType => {}

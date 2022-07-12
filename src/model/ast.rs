@@ -27,7 +27,20 @@ impl SourceInfo {
 #[derive(Clone, Debug)]
 pub struct ModuleName(pub String);
 
-pub type AST<T> = Result<Rc<WithSourceInfo<T>>, ()>;
+#[derive(Clone, Debug)]
+pub enum AST<T: Display> {
+    Ok(Rc<WithSourceInfo<T>>),
+    ParseError,
+}
+
+impl<T: Display> Display for AST<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AST::Ok(x) => Display::fmt(&x.node, f),
+            AST::ParseError => f.write_str("<parse error>"),
+        }
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct WithSourceInfo<T: Display> {
@@ -54,7 +67,7 @@ pub fn visit_ast<F: FnMut(&ASTEnum)>(ast: &ASTEnum, cb: &mut F) {
     cb(ast);
 
     match &ast {
-        ASTEnum::Expression(Ok(x)) => match &x.node {
+        ASTEnum::Expression(AST::Ok(x)) => match &x.node {
             Expression::NilLiteral => {}
             Expression::NumberLiteral { value: _ } => {}
             Expression::BinaryOperator { left, op: _, right } => {
@@ -65,7 +78,7 @@ pub fn visit_ast<F: FnMut(&ASTEnum)>(ast: &ASTEnum, cb: &mut F) {
                 visit_ast(&inner.clone().into(), cb);
             }
         },
-        ASTEnum::TypeExpression(Ok(x)) => match &x.node {
+        ASTEnum::TypeExpression(AST::Ok(x)) => match &x.node {
             TypeExpression::UnknownType => {}
             TypeExpression::NilType => {}
             TypeExpression::BooleanType => {}
@@ -142,19 +155,19 @@ pub enum ModuleType {
 impl Display for ASTEnum {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ASTEnum::Expression(Ok(x)) => Display::fmt(x, f),
-            ASTEnum::TypeExpression(Ok(x)) => Display::fmt(x, f),
-            ASTEnum::PlainIdentifier(Ok(x)) => Display::fmt(x, f),
+            ASTEnum::Expression(AST::Ok(x)) => Display::fmt(x, f),
+            ASTEnum::TypeExpression(AST::Ok(x)) => Display::fmt(x, f),
+            ASTEnum::PlainIdentifier(AST::Ok(x)) => Display::fmt(x, f),
             ASTEnum::NameAndType {
-                name: Ok(name),
-                typ: Some(Ok(typ)),
+                name: AST::Ok(name),
+                typ: Some(AST::Ok(typ)),
             } => {
                 f.write_str(name.node.0.as_str())?;
                 f.write_str(": ")?;
                 Display::fmt(&typ.node, f)
             }
             ASTEnum::NameAndType {
-                name: Ok(name),
+                name: AST::Ok(name),
                 typ: None,
             } => f.write_str(name.node.0.as_str()),
             _ => f.write_str("<parse error>"),
@@ -163,7 +176,7 @@ impl Display for ASTEnum {
 }
 
 pub fn ast_from(expr: Expression) -> AST<Expression> {
-    Ok(Rc::new(WithSourceInfo::empty(expr)))
+    AST::Ok(Rc::new(WithSourceInfo::empty(expr)))
 }
 
 impl From<AST<Expression>> for ASTEnum {
