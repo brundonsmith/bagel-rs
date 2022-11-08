@@ -1,41 +1,75 @@
-use crate::model::{
-    ast::{ASTEnum, AST},
-    expressions::Expression,
-    misc::Context,
-    type_expressions::TypeExpression,
-};
+use std::fmt::Result;
 
-pub fn compile(_ctx: &Context, ast: &ASTEnum) -> Result<String, ()> {
-    match &ast {
-        ASTEnum::Expression(AST::Ok(expression)) => match &expression.node {
-            Expression::NilLiteral => Ok("undefined".to_owned()),
-            Expression::NumberLiteral { value } => Ok(value.clone()),
-            Expression::BinaryOperator {
-                left: AST::Ok(left),
+use crate::ast::{Declaration, Expression, Module, TypeExpression};
+
+pub trait Compile {
+    fn compile(&self, f: &mut std::fmt::Formatter<'_>) -> Result;
+}
+
+impl Compile for Module {
+    fn compile(&self, f: &mut std::fmt::Formatter<'_>) -> Result {
+        for decl in &self.declarations {
+            decl.compile(f)?;
+        }
+
+        Ok(())
+    }
+}
+
+impl Compile for Declaration {
+    fn compile(&self, f: &mut std::fmt::Formatter<'_>) -> Result {
+        match self {
+            Declaration::ValueDeclaration {
+                span,
+                name,
+                type_annotation,
+                value,
+            } => {
+                f.write_str("const ")?;
+                f.write_str(&name.name)?;
+                if let Some(type_annotation) = type_annotation {
+                    type_annotation.compile(f)?;
+                }
+                f.write_str(" = ")?;
+                value.compile(f)?;
+                f.write_str(";")?;
+
+                Ok(())
+            }
+        }
+    }
+}
+
+impl Compile for Expression {
+    fn compile(&self, f: &mut std::fmt::Formatter<'_>) -> Result {
+        match self {
+            Expression::NilLiteral { span } => f.write_str("undefined"),
+            Expression::NumberLiteral { span, value } => f.write_str(value),
+            Expression::BinaryOperation {
+                span,
+                left,
                 op,
-                right: AST::Ok(right),
-            } => Ok(format!("{} {} {}", left, op, right)),
-            Expression::Parenthesis {
-                inner: AST::Ok(inner),
-            } => Ok(format!("({})", inner.node)),
-            _ => Err(()),
-        },
-        ASTEnum::TypeExpression(AST::Ok(x)) => match &x.node {
-            TypeExpression::UnknownType => todo!(),
-            TypeExpression::NilType => todo!(),
-            TypeExpression::BooleanType => todo!(),
-            TypeExpression::NumberType => todo!(),
-            TypeExpression::StringType => todo!(),
-        },
-        ASTEnum::PlainIdentifier(AST::Ok(x)) => Ok(x.node.0.clone()),
-        ASTEnum::NameAndType {
-            name: AST::Ok(name),
-            typ: Some(AST::Ok(typ)),
-        } => Ok(format!("{}: {}", name, typ.node)),
-        ASTEnum::NameAndType {
-            name: AST::Ok(name),
-            typ: None,
-        } => Ok(name.node.0.clone()),
-        _ => Err(()),
+                right,
+            } => todo!(),
+            Expression::Parenthesis { span, inner } => todo!(),
+            Expression::LocalIdentifier { span, name } => todo!(),
+            Expression::InlineConstGroup {
+                span,
+                declarations,
+                inner,
+            } => todo!(),
+        }
+    }
+}
+
+impl Compile for TypeExpression {
+    fn compile(&self, f: &mut std::fmt::Formatter<'_>) -> Result {
+        match self {
+            TypeExpression::UnknownType => f.write_str("unknown"),
+            TypeExpression::NilType => f.write_str("null | undefined"),
+            TypeExpression::BooleanType => f.write_str("boolean"),
+            TypeExpression::NumberType => f.write_str("number"),
+            TypeExpression::StringType => f.write_str("string"),
+        }
     }
 }

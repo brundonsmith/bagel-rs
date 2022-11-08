@@ -1,142 +1,59 @@
-use crate::model::{
-    ast::{ast_from, ASTEnum, AST},
-    expressions::{BinaryOperator, Expression},
+use crate::{
+    ast::{Declaration, Module, ModuleName},
+    errors::BagelError,
+    parse_utils::{parse_chain, ParseChain, ParseSeriesOptions},
 };
-use chumsky::prelude::*;
 
-pub fn parser() -> impl Parser<char, ASTEnum, Error = Simple<char>> {
-    recursive(|expr: Recursive<char, AST<Expression>, _>| {
-        let nil = text::keyword("nil").map(|_| ast_from(Expression::NilLiteral));
+pub fn bagel_module<'a>(module_name: ModuleName, code: &'a str) -> Result<Module, BagelError> {
+    let declarations =
+        parse_chain(code).parse_series(declaration, ParseSeriesOptions { delimiter: "" });
 
-        let number = filter(|c: &char| c.is_ascii_digit())
-            .repeated()
-            .at_least(1)
-            .map(|c| {
-                ast_from(Expression::NumberLiteral {
-                    value: c.iter().cloned().collect(),
-                })
-            });
-
-        let atom = nil
-            .or(number)
-            .or(expr
-                .delimited_by(just('('), just(')'))
-                .map(|inner| ast_from(Expression::Parenthesis { inner }))
-                .recover_with(nested_delimiters('(', ')', [], |_| AST::ParseError))
-                .recover_with(skip_then_retry_until([')'])))
-            .padded();
-
-        let op = |c| just(c).padded();
-
-        let product = atom
-            .clone()
-            .then(
-                op('*')
-                    .to(BinaryOperator::Times)
-                    .or(op('/').to(BinaryOperator::Divide))
-                    .then(atom)
-                    .repeated(),
-            )
-            .foldl(|left, (op, right)| ast_from(Expression::BinaryOperator { left, op, right }));
-
-        let sum = product
-            .clone()
-            .then(
-                op('+')
-                    .to(BinaryOperator::Plus)
-                    .or(op('-').to(BinaryOperator::Minus))
-                    .then(product)
-                    .repeated(),
-            )
-            .foldl(|left, (op, right)| ast_from(Expression::BinaryOperator { left, op, right }));
-
-        sum
-    })
-    .map(|expr| ASTEnum::Expression(expr))
-    .then_ignore(end().recover_with(skip_then_retry_until([])))
+    match declarations {
+        ParseChain::Parsing {
+            code,
+            index,
+            expecting,
+            collected: ((), declarations),
+        } => Ok(Module {
+            module_name,
+            declarations,
+        }),
+        ParseChain::None { index } => Err(BagelError::ParseError {
+            index,
+            module_name,
+            message: format!("Failed to consume entire input"),
+        }),
+        ParseChain::Error(error) => Err(BagelError::from(error)),
+    }
 }
 
-// recursive(|value| {
-//     let frac = just('.').chain(text::digits(10));
+fn declaration<'a>(code: &'a str) -> ParseChain<'a, Declaration> {
+    todo!()
+}
 
-//     let exp = just('e')
-//         .or(just('E'))
-//         .chain(just('+').or(just('-')).or_not())
-//         .chain(text::digits(10));
+// fn invocation<'a>(code: &'a str) -> ParseChain<'a, HList!(Invocation)> {
+//     parse_chain(code)
+//         .parse(identifier)
+//         .consume_whitespace()
+//         .consume("(")
+//         .expect()
+//         .consume_whitespace()
+//         .parse_series(expression, ParseSeriesOptions { delimiter: "," })
+//         .consume_whitespace()
+//         .consume(")")
+//         .collect(|collected| {
+//             let (arguments, subject) = collected.into_tuple2();
+//             Invocation { subject, arguments }
+//         })
+// }
 
-//     let number = just('-')
-//         .or_not()
-//         .chain(text::int(10))
-//         .chain(frac.or_not().flatten())
-//         .chain::<char, _, _>(exp.or_not().flatten())
-//         .collect::<String>()
-//         .from_str()
-//         .unwrapped()
-//         .labelled("number");
+// fn expression(code: &str) -> ParseResult<Expression> {
+//     unimplemented!()
+// }
 
-//     let escape = just('\\').ignore_then(
-//         just('\\')
-//             .or(just('/'))
-//             .or(just('"'))
-//             .or(just('b').to('\x08'))
-//             .or(just('f').to('\x0C'))
-//             .or(just('n').to('\n'))
-//             .or(just('r').to('\r'))
-//             .or(just('t').to('\t'))
-//             .or(just('u').ignore_then(
-//                 filter(|c: &char| c.is_digit(16))
-//                     .repeated()
-//                     .exactly(4)
-//                     .collect::<String>()
-//                     .validate(|digits, span, emit| {
-//                         char::from_u32(u32::from_str_radix(&digits, 16).unwrap())
-//                             .unwrap_or_else(|| {
-//                                 emit(Simple::custom(span, "invalid unicode character"));
-//                                 '\u{FFFD}' // unicode replacement character
-//                             })
-//                     }),
-//             )),
-//     );
-
-//     let string = just('"')
-//         .ignore_then(filter(|c| *c != '\\' && *c != '"').or(escape).repeated())
-//         .then_ignore(just('"'))
-//         .collect::<String>()
-//         .labelled("string");
-
-//     let array = value
-//         .clone()
-//         .chain(just(',').ignore_then(value.clone()).repeated())
-//         .or_not()
-//         .flatten()
-//         .delimited_by(just('['), just(']'))
-//         .map(Json::Array)
-//         .labelled("array");
-
-//     let member = string.clone().then_ignore(just(':').padded()).then(value);
-//     let object = member
-//         .clone()
-//         .chain(just(',').padded().ignore_then(member).repeated())
-//         .or_not()
-//         .flatten()
-//         .padded()
-//         .delimited_by(just('{'), just('}'))
-//         .collect::<HashMap<String, Json>>()
-//         .map(Json::Object)
-//         .labelled("object");
-
-//     just("null")
-//         .to(Json::Null)
-//         .labelled("null")
-//         .or(just("true").to(Json::Bool(true)).labelled("true"))
-//         .or(just("false").to(Json::Bool(false)).labelled("false"))
-//         .or(number.map(Json::Num))
-//         .or(string.map(Json::Str))
-//         .or(array)
-//         .or(object)
-//         .recover_with(nested_delimiters('{', '}', [('[', ']')], |_| Json::Invalid))
-//         .recover_with(nested_delimiters('[', ']', [('{', '}')], |_| Json::Invalid))
-//         .recover_with(skip_then_retry_until(['}', ']']))
-//         .padded()
-// })
-// .then_ignore(end().recover_with(skip_then_retry_until([])))
+// fn identifier(code: &str) -> ParseResult<String> {
+//     ParseResult::Success {
+//         parsed: String::from("foo"),
+//         code: &code[3..],
+//     }
+// }

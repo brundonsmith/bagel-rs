@@ -1,43 +1,59 @@
 use crate::{
-    model::{
-        ast::AST,
-        expressions::{Expression, BINARY_OPERATOR_TYPES},
-        misc::Context,
-        type_expressions::TypeExpression,
-    },
-    typecheck::subsumation_issues,
+    ast::{Expression, Module, TypeExpression},
+    resolve::{Binding, Resolve},
 };
 
-pub fn infer_type(ctx: &Context, ast: &Expression) -> TypeExpression {
-    let base_type = infer_type_inner(ctx, ast);
-
-    base_type
+pub struct InferTypeContext<'a> {
+    pub module: &'a Module,
 }
 
-fn infer_type_inner(ctx: &Context, ast: &Expression) -> TypeExpression {
-    match ast {
-        Expression::NilLiteral => TypeExpression::NilType,
-        Expression::NumberLiteral { value: _ } => TypeExpression::NumberType,
-        Expression::BinaryOperator {
-            left: AST::Ok(left),
-            op,
-            right: AST::Ok(right),
-        } => {
-            let left_type = infer_type(ctx, &left.node);
-            let right_type = infer_type(ctx, &right.node);
+impl Expression {
+    pub fn infer_type(&self, ctx: &InferTypeContext) -> TypeExpression {
+        match self {
+            Expression::NilLiteral { span: _ } => TypeExpression::NilType,
+            Expression::NumberLiteral { span: _, value: _ } => TypeExpression::NumberType,
+            Expression::BinaryOperation {
+                span: _,
+                left,
+                op,
+                right,
+            } => {
+                let left_type = left.infer_type(ctx);
+                let right_type = right.infer_type(ctx);
 
-            let matched_op_type = BINARY_OPERATOR_TYPES.get(op).unwrap().iter().find(|t| {
-                subsumation_issues(ctx, &t.left, &left_type).is_none()
-                    && subsumation_issues(ctx, &t.right, &right_type).is_none()
-            });
-
-            matched_op_type
-                .map(|t| t.output.clone())
-                .unwrap_or(TypeExpression::UnknownType)
+                match op {
+                    crate::ast::BinaryOperator::NullishCoalescing => todo!(),
+                    crate::ast::BinaryOperator::Or => todo!(),
+                    crate::ast::BinaryOperator::And => todo!(),
+                    crate::ast::BinaryOperator::Equals => todo!(),
+                    crate::ast::BinaryOperator::NotEquals => todo!(),
+                    crate::ast::BinaryOperator::LessEqual => todo!(),
+                    crate::ast::BinaryOperator::GreaterEqual => todo!(),
+                    crate::ast::BinaryOperator::Less => todo!(),
+                    crate::ast::BinaryOperator::Greater => todo!(),
+                    crate::ast::BinaryOperator::Plus => todo!(),
+                    crate::ast::BinaryOperator::Minus => todo!(),
+                    crate::ast::BinaryOperator::Times => todo!(),
+                    crate::ast::BinaryOperator::Divide => todo!(),
+                }
+            }
+            Expression::Parenthesis { span: _, inner } => inner.infer_type(ctx),
+            Expression::LocalIdentifier { span, name } => {
+                match ctx.module.resolve_symbol_within(name, &span.start) {
+                    Some(binding) => match binding {
+                        Binding::ValueDeclaration(decl) => decl
+                            .type_annotation
+                            .unwrap_or_else(|| decl.value.infer_type(ctx)),
+                        Binding::InlineConstDeclaration(_) => todo!(),
+                    },
+                    None => TypeExpression::UnknownType,
+                }
+            }
+            Expression::InlineConstGroup {
+                span: _,
+                declarations: _,
+                inner,
+            } => inner.infer_type(ctx),
         }
-        Expression::Parenthesis {
-            inner: AST::Ok(inner),
-        } => infer_type(ctx, &inner.node),
-        _ => TypeExpression::UnknownType,
     }
 }

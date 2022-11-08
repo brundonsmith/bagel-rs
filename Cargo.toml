@@ -1,11 +1,14 @@
 [package]
-name = "bagel-rs"
+name = "bagel"
 version = "0.1.0"
-authors = ["Brandon Smith <mail@brandonsmith.ninja>"]
-edition = "2018"
+authors = ["Brandon Smith <mail@brandons.me>"]
+edition = "2021"
 
 [dependencies]
-chumsky = "0.8.0"
-ariadne = "0.1.5"
+clap = { version = "= 4.0.22", features = ["derive"] }
+colored = "2.0.0"
+enum_variant_type = "0.3.1"
 lazy_static = "1.4.0"
 Boa = "0.13.0"
+# chumsky = "0.8.0"
+# ariadne = "0.1.5"
