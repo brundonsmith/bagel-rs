@@ -1,13 +1,12 @@
 #![allow(dead_code)]
 
-use ariadne::{Color, Fmt, Label, Report, ReportKind, Source};
-use boa::exec::Executable;
-use chumsky::prelude::*;
+use std::marker::PhantomData;
+
 use clap::{command, Parser};
 use cli::Command;
+use enum_variant_type::EnumVariantType;
 // use compile::compile;
 // use model::ast::ASTEnum;
-use std::collections::HashMap;
 
 mod ast;
 mod cli;
@@ -15,6 +14,7 @@ mod errors;
 // mod compile;
 // mod model;
 // mod parse;
+mod Check;
 mod check;
 mod compile;
 mod parse;
@@ -33,6 +33,12 @@ fn main() {
     let args = Args::parse();
 
     println!("{:?}", args);
+}
+
+#[derive(EnumVariantType)]
+enum Foo<'a> {
+    NoLifetimeVariant(usize, PhantomData<&'a str>),
+    LifetimeVariant(&'a str),
 }
 
 // fn main() {

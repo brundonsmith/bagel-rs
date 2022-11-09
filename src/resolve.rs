@@ -4,7 +4,7 @@ pub trait Resolve {
     fn resolve_symbol_within(&self, symbol: &str, index: &usize) -> Option<Binding>;
 }
 
-impl Resolve for Module {
+impl<'a> Resolve for Module<'a> {
     fn resolve_symbol_within(&self, symbol: &str, index: &usize) -> Option<Binding> {
         // look inside nested contexts
         for decl in &self.declarations {
@@ -30,6 +30,39 @@ impl Resolve for Module {
                         ));
                     }
                 }
+                Declaration::ImportAllDeclaration { span, name, path } => todo!(),
+                Declaration::ImportDeclaration {
+                    span,
+                    imports,
+                    path,
+                } => todo!(),
+                Declaration::TypeDeclaration {
+                    span,
+                    name,
+                    declared_type,
+                } => todo!(),
+                Declaration::FuncDeclaration {
+                    span,
+                    name,
+                    func,
+                    platforms,
+                    decorators,
+                } => todo!(),
+                Declaration::ProcDeclaration {
+                    span,
+                    name,
+                    proc,
+                    platforms,
+                    decorators,
+                } => todo!(),
+                Declaration::TestExprDeclaration { span, name, expr } => todo!(),
+                Declaration::TestBlockDeclaration { span, name, block } => todo!(),
+                Declaration::TestTypeDeclaration {
+                    span,
+                    name,
+                    destination_type,
+                    value_type,
+                } => todo!(),
             }
         }
 
@@ -37,7 +70,7 @@ impl Resolve for Module {
     }
 }
 
-impl Resolve for Declaration {
+impl<'a> Resolve for Declaration<'a> {
     fn resolve_symbol_within(&self, symbol: &str, index: &usize) -> Option<Binding> {
         match self {
             Declaration::ValueDeclaration {
@@ -46,17 +79,50 @@ impl Resolve for Declaration {
                 type_annotation: _,
                 value,
             } => {
-                if value.span().contains(index) {
+                if value.contains(index) {
                     return value.resolve_symbol_within(symbol, index);
                 }
             }
+            Declaration::ImportAllDeclaration { span, name, path } => todo!(),
+            Declaration::ImportDeclaration {
+                span,
+                imports,
+                path,
+            } => todo!(),
+            Declaration::TypeDeclaration {
+                span,
+                name,
+                declared_type,
+            } => todo!(),
+            Declaration::FuncDeclaration {
+                span,
+                name,
+                func,
+                platforms,
+                decorators,
+            } => todo!(),
+            Declaration::ProcDeclaration {
+                span,
+                name,
+                proc,
+                platforms,
+                decorators,
+            } => todo!(),
+            Declaration::TestExprDeclaration { span, name, expr } => todo!(),
+            Declaration::TestBlockDeclaration { span, name, block } => todo!(),
+            Declaration::TestTypeDeclaration {
+                span,
+                name,
+                destination_type,
+                value_type,
+            } => todo!(),
         }
 
         None
     }
 }
 
-impl Resolve for Expression {
+impl<'a> Resolve for Expression<'a> {
     fn resolve_symbol_within(&self, symbol: &str, index: &usize) -> Option<Binding> {
         match self {
             Expression::BinaryOperation {
@@ -65,20 +131,20 @@ impl Resolve for Expression {
                 op: _,
                 right,
             } => {
-                if left.span().contains(index) {
+                if left.contains(index) {
                     return left.resolve_symbol_within(symbol, index);
-                } else if right.span().contains(index) {
+                } else if right.contains(index) {
                     return right.resolve_symbol_within(symbol, index);
                 }
             }
             Expression::Parenthesis { span: _, inner } => {
-                if inner.span().contains(index) {
+                if inner.contains(index) {
                     return inner.resolve_symbol_within(symbol, index);
                 }
             }
 
             Expression::LocalIdentifier { span: _, name: _ } => {}
-            Expression::NilLiteral { span: _ } => {}
+            Expression::NilLiteral { span: _, p: _ } => {}
             Expression::NumberLiteral { span: _, value: _ } => {}
             Expression::InlineConstGroup {
                 span: _,
@@ -93,14 +159,93 @@ impl Resolve for Expression {
                     }
                 }
             }
+            Expression::BooleanLiteral { span, p: _, value } => todo!(),
+            Expression::StringLiteral { span, value } => todo!(),
+            Expression::ExactStringLiteral {
+                span,
+                tag,
+                segments,
+            } => todo!(),
+            Expression::ArrayLiteral { span, entries } => todo!(),
+            Expression::ObjectLiteral { span, entries } => todo!(),
+            Expression::NegationOperation { span, inner } => todo!(),
+            Expression::Func {
+                span,
+                type_annotation,
+                is_async,
+                is_pure,
+                body,
+            } => todo!(),
+            Expression::JsFunc {
+                span,
+                type_annotation,
+                is_async,
+                is_pure,
+                body,
+            } => todo!(),
+            Expression::Proc {
+                span,
+                type_annotation,
+                is_async,
+                is_pure,
+                body,
+            } => todo!(),
+            Expression::JsProc {
+                span,
+                type_annotation,
+                is_async,
+                is_pure,
+                body,
+            } => todo!(),
+            Expression::JavascriptEscapeExpression(_) => todo!(),
+            Expression::RangeExpression { span, start, end } => todo!(),
+            Expression::Invocation {
+                span,
+                subject,
+                args,
+                spread_args,
+                type_args,
+                bubbles,
+                awaited_or_detached,
+            } => todo!(),
+            Expression::PropertyAccessor {
+                span,
+                subject,
+                property,
+                optional,
+            } => todo!(),
+            Expression::IfElseExpression {
+                span,
+                cases,
+                default_case,
+            } => todo!(),
+            Expression::SwitchExpression {
+                span,
+                value,
+                cases,
+                default_case,
+            } => todo!(),
+            Expression::ElementTag {
+                span,
+                tag_name,
+                attributes,
+                children,
+            } => todo!(),
+            Expression::AsCast {
+                span,
+                inner,
+                as_type,
+            } => todo!(),
+            Expression::ErrorExpression { span, inner } => todo!(),
+            Expression::RegularExpression { span, expr, flags } => todo!(),
         };
 
         None
     }
 }
 
-impl Resolve for InlineConstDeclaration {
-    fn resolve_symbol_within(&self, symbol: &str, index: &usize) -> Option<Binding> {
+impl<'a> Resolve for InlineConstDeclaration<'a> {
+    fn resolve_symbol_within(&self, symbol: &str, index: &usize) -> Option<Binding<'a>> {
         if self.name.name == symbol {
             Some(Binding::InlineConstDeclaration(self.clone()))
         } else {
@@ -109,7 +254,7 @@ impl Resolve for InlineConstDeclaration {
     }
 }
 
-pub enum Binding {
-    ValueDeclaration(ValueDeclaration),
-    InlineConstDeclaration(InlineConstDeclaration),
+pub enum Binding<'a> {
+    ValueDeclaration(ValueDeclaration<'a>),
+    InlineConstDeclaration(InlineConstDeclaration<'a>),
 }

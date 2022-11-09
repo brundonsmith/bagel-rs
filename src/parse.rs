@@ -1,5 +1,5 @@
 use crate::{
-    ast::{Declaration, Module, ModuleName},
+    ast::{Declaration, Expression, Module, ModuleName},
     errors::BagelError,
     parse_utils::{parse_chain, ParseChain, ParseSeriesOptions},
 };
@@ -31,6 +31,10 @@ fn declaration<'a>(code: &'a str) -> ParseChain<'a, Declaration> {
     todo!()
 }
 
+fn expression<'a>(code: &'a str) -> ParseChain<'a, Expression> {
+    todo!()
+}
+
 // fn invocation<'a>(code: &'a str) -> ParseChain<'a, HList!(Invocation)> {
 //     parse_chain(code)
 //         .parse(identifier)
@@ -51,7 +55,9 @@ fn declaration<'a>(code: &'a str) -> ParseChain<'a, Declaration> {
 //     unimplemented!()
 // }
 
-// fn identifier(code: &str) -> ParseResult<String> {
+// fn local_identifier<'a>(code: &'a str) -> ParseChain<'a, LocalIdentifier> {
+//     // ch != null && (isAlpha(ch) || ch === "_" || (!isFirstCharacter && (isNumeric(ch) || ch === "$")));
+//     // let ident = &code[]
 //     ParseResult::Success {
 //         parsed: String::from("foo"),
 //         code: &code[3..],
