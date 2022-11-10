@@ -1,11 +1,5 @@
 #![allow(dead_code)]
 
-use std::marker::PhantomData;
-
-use clap::{command, Parser};
-use cli::Command;
-use enum_variant_type::EnumVariantType;
-
 mod ast;
 mod check;
 mod cli;
@@ -15,6 +9,9 @@ mod parse;
 mod parse_utils;
 mod resolve;
 mod typeinfer;
+
+use clap::{command, Parser};
+use cli::Command;
 
 #[derive(Parser, Debug, Clone)]
 // #[command(author, version, about, long_about = None)]

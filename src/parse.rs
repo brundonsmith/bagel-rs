@@ -1,38 +1,86 @@
+use std::borrow::Cow;
+
 use crate::{
-    ast::{Declaration, Expression, Module, ModuleName},
+    ast::{BooleanLiteral, Declaration, Expression, Module, ModuleName, NilLiteral, NumberLiteral},
     errors::BagelError,
-    parse_utils::{parse_chain, ParseChain, ParseSeriesOptions},
+    parse_utils::{consume, one_of, parse_series, ParseResult, PartialParseError},
 };
 
-pub fn bagel_module<'a>(module_name: ModuleName, code: &'a str) -> Result<Module, BagelError> {
-    let declarations =
-        parse_chain(code).parse_series(declaration, ParseSeriesOptions { delimiter: "" });
-
-    match declarations {
-        ParseChain::Parsing {
-            code,
-            index,
-            expecting,
-            collected: ((), declarations),
-        } => Ok(Module {
+pub fn bagel_module<'a>(module_name: ModuleName, src: &'a str) -> Result<Module, BagelError> {
+    match parse_series(src, declaration) {
+        Ok((_, declarations)) => Ok(Module {
             module_name,
             declarations,
         }),
-        ParseChain::None { index } => Err(BagelError::ParseError {
-            src: code,
+        Err(Some(PartialParseError { src, message })) => Err(BagelError::ParseError {
+            src,
+            module_name,
+            message,
+        }),
+        Err(None) => Err(BagelError::ParseError {
+            src,
             module_name,
             message: format!("Failed to consume entire input"),
         }),
-        ParseChain::Error(error) => Err(BagelError::from(error)),
     }
 }
 
-fn declaration<'a>(code: &'a str) -> ParseChain<'a, Declaration> {
+fn declaration<'a>(start_src: &'a str) -> ParseResult<'a, Declaration> {
     todo!()
 }
 
-fn expression<'a>(code: &'a str) -> ParseChain<'a, Expression> {
-    todo!()
+#[test]
+fn foo() {
+    println!("{:?}", expression("false"));
+}
+
+fn expression<'a>(start_src: &'a str) -> ParseResult<'a, Expression> {
+    one_of(
+        start_src,
+        [
+            |src| number_literal(src).map(|(src, parsed)| (src, Expression::from(parsed))),
+            |src| boolean_literal(src).map(|(src, parsed)| (src, Expression::from(parsed))),
+            |src| nil_literal(src).map(|(src, parsed)| (src, Expression::from(parsed))),
+        ],
+    )
+}
+
+fn number_literal<'a>(start_src: &'a str) -> ParseResult<'a, NumberLiteral> {
+    let src = start_src.trim_start_matches(char::is_numeric);
+    let parsed_chars = start_src.len() - src.len();
+
+    if parsed_chars > 0 {
+        let num_slice = &start_src[0..parsed_chars];
+        Ok((
+            src,
+            NumberLiteral {
+                src: Some(num_slice),
+                value: Cow::from(num_slice),
+            },
+        ))
+    } else {
+        Err(None)
+    }
+}
+
+fn boolean_literal<'a>(start_src: &'a str) -> ParseResult<'a, BooleanLiteral> {
+    one_of(
+        start_src,
+        [|src| consume(src, "true"), |src| consume(src, "false")],
+    )
+    .map(|(src, segment)| {
+        (
+            src,
+            BooleanLiteral {
+                src: Some(segment),
+                value: segment == "true",
+            },
+        )
+    })
+}
+
+fn nil_literal<'a>(start_src: &'a str) -> ParseResult<'a, NilLiteral> {
+    consume(start_src, "nil").map(|(src, segment)| (src, NilLiteral { src: Some(segment) }))
 }
 
 // fn invocation<'a>(code: &'a str) -> ParseChain<'a, HList!(Invocation)> {

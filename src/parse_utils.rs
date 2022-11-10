@@ -1,169 +1,69 @@
-use crate::errors::ParseError;
-
-#[derive(Debug)]
-pub enum ParseChain<'a, TCollected> {
-    Parsing {
-        code: &'a str,
-        index: usize,
-        expecting: bool,
-        collected: TCollected,
-    },
-    None {
-        index: usize,
-    },
-    Error(ParseError),
+#[derive(Clone, Debug, PartialEq)]
+pub struct PartialParseError<'a> {
+    pub src: &'a str,
+    pub message: String,
 }
 
-pub fn parse_chain<'a>(code: &'a str) -> ParseChain<'a, ()> {
-    ParseChain::Parsing {
-        code,
-        index: 0,
-        expecting: false,
-        collected: (),
+pub fn consume<'a>(src: &'a str, segment: &str) -> ParseResult<'a, &'a str> {
+    if src.starts_with(segment) {
+        Ok((&src[segment.len()..], &src[0..segment.len()]))
+    } else {
+        Err(None)
     }
 }
 
-impl<'a, TCollected> ParseChain<'a, TCollected> {
-    pub fn parse<R, F: Fn(&'a str) -> ParseChain<'a, R>>(
-        self,
-        parse_fn: F,
-    ) -> ParseChain<'a, (TCollected, R)> {
-        match self {
-            ParseChain::Parsing {
-                code,
-                index,
-                collected,
-                expecting,
-            } => match parse_fn(code) {
-                ParseChain::Parsing {
-                    code,
-                    index,
-                    expecting,
-                    collected: next,
-                } => ParseChain::Parsing {
-                    code,
-                    index,
-                    expecting,
-                    collected: (collected, next),
-                },
-                ParseChain::None { index } => {
-                    if expecting {
-                        ParseChain::Error(todo!())
-                    } else {
-                        ParseChain::None { index }
-                    }
-                }
-                ParseChain::Error(error) => ParseChain::Error(error),
-            },
-            ParseChain::None { index } => ParseChain::None { index },
-            ParseChain::Error(error) => ParseChain::Error(error),
+pub fn consume_whitespace<'a>(src: &'a str) -> ParseResult<'a, ()> {
+    Ok((src.trim_start(), ()))
+}
+
+pub fn parse_series<'a, R, F: Fn(&'a str) -> ParseResult<'a, R>>(
+    src: &'a str,
+    item: F,
+) -> ParseResult<'a, Vec<R>> {
+    todo!()
+}
+
+pub fn parse_optional<'a, R, F: Fn(&'a str) -> ParseResult<'a, R>>(
+    src: &'a str,
+    item: F,
+) -> ParseResult<'a, Option<R>> {
+    todo!()
+}
+
+pub type ParseResult<'a, T> = Result<(&'a str, T), Option<PartialParseError<'a>>>;
+
+pub trait ParseResultImpl<'a, T> {
+    fn require(self, src: &'a str, description: &'a str) -> Self;
+
+    // fn map_parsed<R, F: Fn(T) -> R>(self, f: F) -> impl ParseResultImpl<'a, R>;
+}
+
+impl<'a, T> ParseResultImpl<'a, T> for ParseResult<'a, T> {
+    fn require(self, src: &'a str, description: &'a str) -> Self {
+        if let Err(None) = self {
+            ParseResult::Err(Some(PartialParseError {
+                src,
+                message: format!("Expected {}", description),
+            }))
+        } else {
+            self
         }
     }
+}
 
-    pub fn parse_optional<R, F: Fn(&'a str) -> ParseChain<'a, R>>(
-        self,
-        parse_fn: F,
-    ) -> ParseChain<'a, (TCollected, Option<R>)> {
-        todo!()
-    }
+pub fn one_of<'a, 'b, const N: usize, T>(
+    src: &'a str,
+    fns: [fn(&'a str) -> ParseResult<'a, T>; N],
+) -> ParseResult<'a, T> {
+    fns.iter()
+        .find_map(|f| {
+            let res = f(src);
 
-    pub fn parse_series<R, F: Fn(&'a str) -> ParseChain<'a, R>>(
-        self,
-        parse_fn: F,
-        options: ParseSeriesOptions,
-    ) -> ParseChain<'a, (TCollected, Vec<R>)> {
-        todo!()
-        // ParseChain {
-        //     code: self.code,
-        //     mode: self.mode,
-        //     collected: self.collected.prepend(vec![]),
-        // }
-    }
-
-    pub fn consume(self, s: &str) -> Self {
-        if let ParseChain::Parsing {
-            code,
-            index,
-            expecting,
-            collected,
-        } = self
-        {
-            if code.starts_with(s) {
-                ParseChain::Parsing {
-                    code,
-                    index,
-                    expecting,
-                    collected,
-                }
+            if let Err(None) = res {
+                None
             } else {
-                if expecting {
-                    ParseChain::Error(todo!())
-                } else {
-                    ParseChain::None { index }
-                }
+                Some(res)
             }
-        } else {
-            self
-        }
-    }
-
-    pub fn consume_whitespace(self) -> Self {
-        if let ParseChain::Parsing {
-            code,
-            index,
-            expecting,
-            collected,
-        } = self
-        {
-            ParseChain::Parsing {
-                code: code.trim_start(),
-                index: index + (code.len() - code.trim_start().len()),
-                expecting,
-                collected,
-            }
-        } else {
-            self
-        }
-    }
-
-    pub fn expect(self) -> Self {
-        if let ParseChain::Parsing {
-            code,
-            index,
-            expecting,
-            collected,
-        } = self
-        {
-            ParseChain::Parsing {
-                code,
-                index,
-                expecting: true,
-                collected,
-            }
-        } else {
-            self
-        }
-    }
-
-    pub fn collect<R, F: Fn(TCollected) -> R>(self, collect_fn: F) -> ParseChain<'a, R> {
-        match self {
-            ParseChain::Parsing {
-                code,
-                index,
-                expecting,
-                collected,
-            } => ParseChain::Parsing {
-                code,
-                index,
-                expecting: true,
-                collected: collect_fn(collected),
-            },
-            ParseChain::None { index } => ParseChain::None { index },
-            ParseChain::Error(error) => ParseChain::Error(error),
-        }
-    }
-}
-
-pub struct ParseSeriesOptions<'a> {
-    pub delimiter: &'a str,
+        })
+        .unwrap_or(Err(None))
 }
