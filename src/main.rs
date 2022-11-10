@@ -68,11 +68,11 @@ fn main() {
 //                 )
 //             };
 
-//             let report = Report::build(ReportKind::Error, (), error.span().start)
+//             let report = Report::build(ReportKind::Error, (), error.src().start)
 //                 .with_message(msg)
-//                 // .with_label(Label::new(error.span()).with_message("Failed to parse!"))
+//                 // .with_label(Label::new(error.src()).with_message("Failed to parse!"))
 //                 .with_label(
-//                     Label::new(error.span())
+//                     Label::new(error.src())
 //                         .with_message(match error.reason() {
 //                             chumsky::error::SimpleReason::Custom(msg) => msg.clone(),
 //                             _ => format!(
@@ -87,8 +87,8 @@ fn main() {
 //                 );
 
 //             let report = match error.reason() {
-//                 chumsky::error::SimpleReason::Unclosed { span, delimiter } => report.with_label(
-//                     Label::new(span.clone())
+//                 chumsky::error::SimpleReason::Unclosed { src, delimiter } => report.with_label(
+//                     Label::new(src.clone())
 //                         .with_message(format!(
 //                             "Unclosed delimiter {}",
 //                             delimiter.fg(Color::Yellow)

@@ -2,14 +2,24 @@ use std::ops::Range;
 
 use super::Declaration;
 
-pub trait Span {
-    fn span(&self) -> Option<&Range<usize>>;
+pub trait Sourced {
+    fn src(&self) -> Option<&str>;
 
-    fn contains(&self, index: &usize) -> bool {
-        self.span()
-            .map(|range| range.contains(index))
+    fn contains(&self, other: &str) -> bool {
+        self.src()
+            .map(|s| slice_contains(s, other))
             .unwrap_or(false)
     }
+}
+
+fn slice_contains(slice: &str, other: &str) -> bool {
+    let slice_start = slice.as_ptr() as usize;
+    let slice_end = slice_start + slice.len();
+
+    let other_start = other.as_ptr() as usize;
+    let other_end = other_start + other.len();
+
+    other_start >= slice_start && other_end <= slice_end
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -41,12 +51,12 @@ pub struct Module<'a> {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct PlainIdentifier<'a> {
-    pub span: Option<Range<usize>>,
+    pub src: Option<&'a str>,
     pub name: &'a str,
 }
 
-impl<'a> Span for PlainIdentifier<'a> {
-    fn span(&self) -> Option<&Range<usize>> {
-        self.span.as_ref()
+impl<'a> Sourced for PlainIdentifier<'a> {
+    fn src(&self) -> Option<&str> {
+        self.src
     }
 }

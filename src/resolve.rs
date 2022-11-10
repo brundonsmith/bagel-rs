@@ -1,14 +1,16 @@
-use crate::ast::{Declaration, Expression, InlineConstDeclaration, Module, Span, ValueDeclaration};
+use crate::ast::{
+    Declaration, Expression, InlineConstDeclaration, Module, Sourced, ValueDeclaration,
+};
 
 pub trait Resolve {
-    fn resolve_symbol_within(&self, symbol: &str, index: &usize) -> Option<Binding>;
+    fn resolve_symbol_within(&self, symbol: &str, slice: &str) -> Option<Binding>;
 }
 
 impl<'a> Resolve for Module<'a> {
-    fn resolve_symbol_within(&self, symbol: &str, index: &usize) -> Option<Binding> {
+    fn resolve_symbol_within(&self, symbol: &str, slice: &str) -> Option<Binding> {
         // look inside nested contexts
         for decl in &self.declarations {
-            let inner = decl.resolve_symbol_within(symbol, index);
+            let inner = decl.resolve_symbol_within(symbol, slice);
 
             if inner.is_some() {
                 return inner;
@@ -19,7 +21,7 @@ impl<'a> Resolve for Module<'a> {
         for decl in &self.declarations {
             match decl {
                 Declaration::ValueDeclaration {
-                    span: _,
+                    src: _,
                     name,
                     type_annotation: _,
                     value: _,
@@ -30,35 +32,31 @@ impl<'a> Resolve for Module<'a> {
                         ));
                     }
                 }
-                Declaration::ImportAllDeclaration { span, name, path } => todo!(),
-                Declaration::ImportDeclaration {
-                    span,
-                    imports,
-                    path,
-                } => todo!(),
+                Declaration::ImportAllDeclaration { src, name, path } => todo!(),
+                Declaration::ImportDeclaration { src, imports, path } => todo!(),
                 Declaration::TypeDeclaration {
-                    span,
+                    src,
                     name,
                     declared_type,
                 } => todo!(),
                 Declaration::FuncDeclaration {
-                    span,
+                    src,
                     name,
                     func,
                     platforms,
                     decorators,
                 } => todo!(),
                 Declaration::ProcDeclaration {
-                    span,
+                    src,
                     name,
                     proc,
                     platforms,
                     decorators,
                 } => todo!(),
-                Declaration::TestExprDeclaration { span, name, expr } => todo!(),
-                Declaration::TestBlockDeclaration { span, name, block } => todo!(),
+                Declaration::TestExprDeclaration { src, name, expr } => todo!(),
+                Declaration::TestBlockDeclaration { src, name, block } => todo!(),
                 Declaration::TestTypeDeclaration {
-                    span,
+                    src,
                     name,
                     destination_type,
                     value_type,
@@ -71,47 +69,43 @@ impl<'a> Resolve for Module<'a> {
 }
 
 impl<'a> Resolve for Declaration<'a> {
-    fn resolve_symbol_within(&self, symbol: &str, index: &usize) -> Option<Binding> {
+    fn resolve_symbol_within(&self, symbol: &str, slice: &str) -> Option<Binding> {
         match self {
             Declaration::ValueDeclaration {
-                span: _,
+                src: _,
                 name: _,
                 type_annotation: _,
                 value,
             } => {
-                if value.contains(index) {
-                    return value.resolve_symbol_within(symbol, index);
+                if value.contains(slice) {
+                    return value.resolve_symbol_within(symbol, slice);
                 }
             }
-            Declaration::ImportAllDeclaration { span, name, path } => todo!(),
-            Declaration::ImportDeclaration {
-                span,
-                imports,
-                path,
-            } => todo!(),
+            Declaration::ImportAllDeclaration { src, name, path } => todo!(),
+            Declaration::ImportDeclaration { src, imports, path } => todo!(),
             Declaration::TypeDeclaration {
-                span,
+                src,
                 name,
                 declared_type,
             } => todo!(),
             Declaration::FuncDeclaration {
-                span,
+                src,
                 name,
                 func,
                 platforms,
                 decorators,
             } => todo!(),
             Declaration::ProcDeclaration {
-                span,
+                src,
                 name,
                 proc,
                 platforms,
                 decorators,
             } => todo!(),
-            Declaration::TestExprDeclaration { span, name, expr } => todo!(),
-            Declaration::TestBlockDeclaration { span, name, block } => todo!(),
+            Declaration::TestExprDeclaration { src, name, expr } => todo!(),
+            Declaration::TestBlockDeclaration { src, name, block } => todo!(),
             Declaration::TestTypeDeclaration {
-                span,
+                src,
                 name,
                 destination_type,
                 value_type,
@@ -123,84 +117,80 @@ impl<'a> Resolve for Declaration<'a> {
 }
 
 impl<'a> Resolve for Expression<'a> {
-    fn resolve_symbol_within(&self, symbol: &str, index: &usize) -> Option<Binding> {
+    fn resolve_symbol_within(&self, symbol: &str, slice: &str) -> Option<Binding> {
         match self {
             Expression::BinaryOperation {
-                span: _,
+                src: _,
                 left,
                 op: _,
                 right,
             } => {
-                if left.contains(index) {
-                    return left.resolve_symbol_within(symbol, index);
-                } else if right.contains(index) {
-                    return right.resolve_symbol_within(symbol, index);
+                if left.contains(slice) {
+                    return left.resolve_symbol_within(symbol, slice);
+                } else if right.contains(slice) {
+                    return right.resolve_symbol_within(symbol, slice);
                 }
             }
-            Expression::Parenthesis { span: _, inner } => {
-                if inner.contains(index) {
-                    return inner.resolve_symbol_within(symbol, index);
+            Expression::Parenthesis { src: _, inner } => {
+                if inner.contains(slice) {
+                    return inner.resolve_symbol_within(symbol, slice);
                 }
             }
 
-            Expression::LocalIdentifier { span: _, name: _ } => {}
-            Expression::NilLiteral { span: _, p: _ } => {}
-            Expression::NumberLiteral { span: _, value: _ } => {}
+            Expression::LocalIdentifier { src: _, name: _ } => {}
+            Expression::NilLiteral { src: _ } => {}
+            Expression::NumberLiteral { src: _, value: _ } => {}
             Expression::InlineConstGroup {
-                span: _,
+                src: _,
                 declarations,
                 inner: _,
             } => {
                 for decl in declarations {
-                    let inner = decl.resolve_symbol_within(symbol, index);
+                    let inner = decl.resolve_symbol_within(symbol, slice);
 
                     if inner.is_some() {
                         return inner;
                     }
                 }
             }
-            Expression::BooleanLiteral { span, p: _, value } => todo!(),
-            Expression::StringLiteral { span, value } => todo!(),
-            Expression::ExactStringLiteral {
-                span,
-                tag,
-                segments,
-            } => todo!(),
-            Expression::ArrayLiteral { span, entries } => todo!(),
-            Expression::ObjectLiteral { span, entries } => todo!(),
-            Expression::NegationOperation { span, inner } => todo!(),
+            Expression::BooleanLiteral { src, value } => todo!(),
+            Expression::StringLiteral { src, value } => todo!(),
+            Expression::ExactStringLiteral { src, tag, segments } => todo!(),
+            Expression::ArrayLiteral { src, entries } => todo!(),
+            Expression::ObjectLiteral { src, entries } => todo!(),
+            Expression::NegationOperation { src, inner } => todo!(),
             Expression::Func {
-                span,
+                src,
                 type_annotation,
                 is_async,
                 is_pure,
                 body,
             } => todo!(),
             Expression::JsFunc {
-                span,
+                src,
                 type_annotation,
                 is_async,
                 is_pure,
                 body,
             } => todo!(),
             Expression::Proc {
-                span,
+                src,
                 type_annotation,
                 is_async,
                 is_pure,
                 body,
             } => todo!(),
             Expression::JsProc {
-                span,
+                src,
                 type_annotation,
                 is_async,
                 is_pure,
                 body,
             } => todo!(),
             Expression::JavascriptEscapeExpression(_) => todo!(),
-            Expression::RangeExpression { span, start, end } => todo!(),
+            Expression::RangeExpression { src, start, end } => todo!(),
             Expression::Invocation {
-                span,
+                src,
                 subject,
                 args,
                 spread_args,
@@ -209,35 +199,35 @@ impl<'a> Resolve for Expression<'a> {
                 awaited_or_detached,
             } => todo!(),
             Expression::PropertyAccessor {
-                span,
+                src,
                 subject,
                 property,
                 optional,
             } => todo!(),
             Expression::IfElseExpression {
-                span,
+                src,
                 cases,
                 default_case,
             } => todo!(),
             Expression::SwitchExpression {
-                span,
+                src,
                 value,
                 cases,
                 default_case,
             } => todo!(),
             Expression::ElementTag {
-                span,
+                src,
                 tag_name,
                 attributes,
                 children,
             } => todo!(),
             Expression::AsCast {
-                span,
+                src,
                 inner,
                 as_type,
             } => todo!(),
-            Expression::ErrorExpression { span, inner } => todo!(),
-            Expression::RegularExpression { span, expr, flags } => todo!(),
+            Expression::ErrorExpression { src, inner } => todo!(),
+            Expression::RegularExpression { src, expr, flags } => todo!(),
         };
 
         None
@@ -245,7 +235,7 @@ impl<'a> Resolve for Expression<'a> {
 }
 
 impl<'a> Resolve for InlineConstDeclaration<'a> {
-    fn resolve_symbol_within(&self, symbol: &str, index: &usize) -> Option<Binding<'a>> {
+    fn resolve_symbol_within(&self, symbol: &str, slice: &str) -> Option<Binding<'a>> {
         if self.name.name == symbol {
             Some(Binding::InlineConstDeclaration(self.clone()))
         } else {

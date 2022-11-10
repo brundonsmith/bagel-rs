@@ -5,29 +5,29 @@ use enum_variant_type::EnumVariantType;
 use crate::ast::ModuleName;
 
 #[derive(Debug, Clone, PartialEq, EnumVariantType)]
-pub enum BagelError {
+pub enum BagelError<'a> {
     #[evt(derive(Debug, Clone, PartialEq))]
     ParseError {
-        index: usize,
+        src: &'a str,
         module_name: ModuleName,
         message: String,
     },
     #[evt(derive(Debug, Clone, PartialEq))]
     TypeError {
+        src: &'a str,
         module_name: ModuleName,
-        span: Range<usize>,
     },
 }
 
-impl BagelError {
-    pub fn pretty_print(&self, code: &str, color: bool) -> String {
+impl<'a> BagelError<'a> {
+    pub fn pretty_print(&self, code: &'a str, color: bool) -> String {
         match self {
             BagelError::ParseError {
-                index,
+                src,
                 module_name,
                 message,
             } => todo!(),
-            BagelError::TypeError { module_name, span } => todo!(),
+            BagelError::TypeError { src, module_name } => todo!(),
         }
     }
 }

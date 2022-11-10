@@ -3,36 +3,36 @@ use std::{collections::HashSet, ops::Range};
 use enum_variant_type::EnumVariantType;
 
 use super::{
-    ExactStringLiteral, Expression, Func, Invocation, LocalIdentifier, PlainIdentifier, Proc, Span,
-    Statement, TypeExpression,
+    ExactStringLiteral, Expression, Func, Invocation, LocalIdentifier, PlainIdentifier, Proc,
+    Sourced, Statement, TypeExpression,
 };
 
 #[derive(Clone, Debug, PartialEq, EnumVariantType)]
 pub enum Declaration<'a> {
     #[evt(derive(Debug, Clone, PartialEq))]
     ImportAllDeclaration {
-        span: Option<Range<usize>>,
+        src: Option<&'a str>,
         name: PlainIdentifier<'a>,
         path: ExactStringLiteral<'a>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ImportDeclaration {
-        span: Option<Range<usize>>,
+        src: Option<&'a str>,
         imports: Vec<ImportItem<'a>>,
         path: ExactStringLiteral<'a>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     TypeDeclaration {
-        span: Option<Range<usize>>,
+        src: Option<&'a str>,
         name: PlainIdentifier<'a>,
         declared_type: TypeExpression<'a>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     FuncDeclaration {
-        span: Option<Range<usize>>,
+        src: Option<&'a str>,
         name: PlainIdentifier<'a>,
         func: Func<'a>, // TODO:  | JsFunc
         platforms: HashSet<Platform>,
@@ -41,7 +41,7 @@ pub enum Declaration<'a> {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ProcDeclaration {
-        span: Option<Range<usize>>,
+        src: Option<&'a str>,
         name: PlainIdentifier<'a>,
         proc: Proc<'a>, // TODO:  | JsProc
         platforms: HashSet<Platform>,
@@ -50,7 +50,7 @@ pub enum Declaration<'a> {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ValueDeclaration {
-        span: Option<Range<usize>>,
+        src: Option<&'a str>,
         name: PlainIdentifier<'a>,
         type_annotation: Option<TypeExpression<'a>>,
         value: Expression<'a>,
@@ -58,21 +58,21 @@ pub enum Declaration<'a> {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     TestExprDeclaration {
-        span: Option<Range<usize>>,
+        src: Option<&'a str>,
         name: ExactStringLiteral<'a>,
         expr: Expression<'a>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     TestBlockDeclaration {
-        span: Option<Range<usize>>,
+        src: Option<&'a str>,
         name: ExactStringLiteral<'a>,
         block: Vec<Statement<'a>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     TestTypeDeclaration {
-        span: Option<Range<usize>>,
+        src: Option<&'a str>,
         name: ExactStringLiteral<'a>,
         destination_type: TypeExpression<'a>,
         value_type: TypeExpression<'a>,
@@ -98,44 +98,40 @@ pub struct ImportItem<'a> {
     pub alias: Option<PlainIdentifier<'a>>,
 }
 
-impl<'a> Span for Declaration<'a> {
-    fn span(&self) -> Option<&Range<usize>> {
+impl<'a> Sourced for Declaration<'a> {
+    fn src(&self) -> Option<&str> {
         match self {
             Declaration::ValueDeclaration {
-                span,
+                src,
                 name: _,
                 type_annotation: _,
                 value: _,
-            } => span.as_ref(),
-            Declaration::ImportAllDeclaration { span, name, path } => todo!(),
-            Declaration::ImportDeclaration {
-                span,
-                imports,
-                path,
-            } => todo!(),
+            } => *src,
+            Declaration::ImportAllDeclaration { src, name, path } => todo!(),
+            Declaration::ImportDeclaration { src, imports, path } => todo!(),
             Declaration::TypeDeclaration {
-                span,
+                src,
                 name,
                 declared_type,
             } => todo!(),
             Declaration::FuncDeclaration {
-                span,
+                src,
                 name,
                 func,
                 platforms,
                 decorators,
             } => todo!(),
             Declaration::ProcDeclaration {
-                span,
+                src,
                 name,
                 proc,
                 platforms,
                 decorators,
             } => todo!(),
-            Declaration::TestExprDeclaration { span, name, expr } => todo!(),
-            Declaration::TestBlockDeclaration { span, name, block } => todo!(),
+            Declaration::TestExprDeclaration { src, name, expr } => todo!(),
+            Declaration::TestBlockDeclaration { src, name, block } => todo!(),
             Declaration::TestTypeDeclaration {
-                span,
+                src,
                 name,
                 destination_type,
                 value_type,

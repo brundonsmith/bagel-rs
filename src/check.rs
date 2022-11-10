@@ -24,7 +24,7 @@ impl<'a> Check for Declaration<'a> {
     fn check<F: FnMut(BagelError)>(&self, ctx: &CheckContext, report_error: &mut F) {
         match self {
             Declaration::ValueDeclaration {
-                span,
+                src,
                 name,
                 type_annotation,
                 value,
@@ -34,35 +34,31 @@ impl<'a> Check for Declaration<'a> {
                 }
                 value.check(ctx, report_error);
             }
-            Declaration::ImportAllDeclaration { span, name, path } => todo!(),
-            Declaration::ImportDeclaration {
-                span,
-                imports,
-                path,
-            } => todo!(),
+            Declaration::ImportAllDeclaration { src, name, path } => todo!(),
+            Declaration::ImportDeclaration { src, imports, path } => todo!(),
             Declaration::TypeDeclaration {
-                span,
+                src,
                 name,
                 declared_type,
             } => todo!(),
             Declaration::FuncDeclaration {
-                span,
+                src,
                 name,
                 func,
                 platforms,
                 decorators,
             } => todo!(),
             Declaration::ProcDeclaration {
-                span,
+                src,
                 name,
                 proc,
                 platforms,
                 decorators,
             } => todo!(),
-            Declaration::TestExprDeclaration { span, name, expr } => todo!(),
-            Declaration::TestBlockDeclaration { span, name, block } => todo!(),
+            Declaration::TestExprDeclaration { src, name, expr } => todo!(),
+            Declaration::TestBlockDeclaration { src, name, block } => todo!(),
             Declaration::TestTypeDeclaration {
-                span,
+                src,
                 name,
                 destination_type,
                 value_type,
@@ -75,28 +71,24 @@ impl<'a> Check for Expression<'a> {
     fn check<F: FnMut(BagelError)>(&self, ctx: &CheckContext, report_error: &mut F) {
         match self {
             Expression::BinaryOperation {
-                span,
+                src,
                 left,
                 op,
                 right,
             } => todo!(),
-            Expression::Parenthesis { span, inner } => inner.check(ctx, report_error),
-            Expression::LocalIdentifier { span, name } => {
-                if let Some(span) = span {
-                    if ctx
-                        .module
-                        .resolve_symbol_within(name, &span.start)
-                        .is_none()
-                    {
+            Expression::Parenthesis { src, inner } => inner.check(ctx, report_error),
+            Expression::LocalIdentifier { src, name } => {
+                if let Some(src) = src {
+                    if ctx.module.resolve_symbol_within(name, src).is_none() {
                         report_error(BagelError::TypeError {
                             module_name: ctx.module.module_name.clone(),
-                            span: span.clone(),
+                            src,
                         })
                     }
                 }
             }
             Expression::InlineConstGroup {
-                span,
+                src,
                 declarations,
                 inner,
             } => {
@@ -107,50 +99,46 @@ impl<'a> Check for Expression<'a> {
                 inner.check(ctx, report_error);
             }
 
-            Expression::NilLiteral { span, p: _ } => {}
-            Expression::NumberLiteral { span, value } => {}
-            Expression::BooleanLiteral { span, p, value } => todo!(),
-            Expression::StringLiteral { span, value } => todo!(),
-            Expression::ExactStringLiteral {
-                span,
-                tag,
-                segments,
-            } => todo!(),
-            Expression::ArrayLiteral { span, entries } => todo!(),
-            Expression::ObjectLiteral { span, entries } => todo!(),
-            Expression::NegationOperation { span, inner } => todo!(),
+            Expression::NilLiteral { src } => {}
+            Expression::NumberLiteral { src, value } => {}
+            Expression::BooleanLiteral { src, value } => todo!(),
+            Expression::StringLiteral { src, value } => todo!(),
+            Expression::ExactStringLiteral { src, tag, segments } => todo!(),
+            Expression::ArrayLiteral { src, entries } => todo!(),
+            Expression::ObjectLiteral { src, entries } => todo!(),
+            Expression::NegationOperation { src, inner } => todo!(),
             Expression::Func {
-                span,
+                src,
                 type_annotation,
                 is_async,
                 is_pure,
                 body,
             } => todo!(),
             Expression::JsFunc {
-                span,
+                src,
                 type_annotation,
                 is_async,
                 is_pure,
                 body,
             } => todo!(),
             Expression::Proc {
-                span,
+                src,
                 type_annotation,
                 is_async,
                 is_pure,
                 body,
             } => todo!(),
             Expression::JsProc {
-                span,
+                src,
                 type_annotation,
                 is_async,
                 is_pure,
                 body,
             } => todo!(),
             Expression::JavascriptEscapeExpression(_) => todo!(),
-            Expression::RangeExpression { span, start, end } => todo!(),
+            Expression::RangeExpression { src, start, end } => todo!(),
             Expression::Invocation {
-                span,
+                src,
                 subject,
                 args,
                 spread_args,
@@ -159,35 +147,35 @@ impl<'a> Check for Expression<'a> {
                 awaited_or_detached,
             } => todo!(),
             Expression::PropertyAccessor {
-                span,
+                src,
                 subject,
                 property,
                 optional,
             } => todo!(),
             Expression::IfElseExpression {
-                span,
+                src,
                 cases,
                 default_case,
             } => todo!(),
             Expression::SwitchExpression {
-                span,
+                src,
                 value,
                 cases,
                 default_case,
             } => todo!(),
             Expression::ElementTag {
-                span,
+                src,
                 tag_name,
                 attributes,
                 children,
             } => todo!(),
             Expression::AsCast {
-                span,
+                src,
                 inner,
                 as_type,
             } => todo!(),
-            Expression::ErrorExpression { span, inner } => todo!(),
-            Expression::RegularExpression { span, expr, flags } => todo!(),
+            Expression::ErrorExpression { src, inner } => todo!(),
+            Expression::RegularExpression { src, expr, flags } => todo!(),
         };
     }
 }

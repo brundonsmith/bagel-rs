@@ -1,5 +1,3 @@
-use std::marker::PhantomData;
-
 use crate::{
     ast::{BinaryOperator, Expression, Module, Mutability, TypeExpression, ValueDeclaration},
     resolve::{Binding, Resolve},
@@ -12,16 +10,10 @@ pub struct InferTypeContext<'a> {
 impl<'a> Expression<'a> {
     pub fn infer_type(&self, ctx: &'a InferTypeContext) -> TypeExpression<'a> {
         match self {
-            Expression::NilLiteral { span, p } => TypeExpression::NilType {
-                span: span.clone(),
-                p: PhantomData,
-            },
-            Expression::NumberLiteral { span, value: _ } => TypeExpression::NumberType {
-                span: span.clone(),
-                p: PhantomData,
-            },
+            Expression::NilLiteral { src } => TypeExpression::NilType { src: *src },
+            Expression::NumberLiteral { src, value: _ } => TypeExpression::NumberType { src: *src },
             Expression::BinaryOperation {
-                span: _,
+                src: _,
                 left,
                 op,
                 right,
@@ -46,17 +38,16 @@ impl<'a> Expression<'a> {
                     BinaryOperator::InstanceOf => todo!(),
                 }
             }
-            Expression::Parenthesis { span: _, inner } => inner.infer_type(ctx),
-            Expression::LocalIdentifier { span, name } => {
-                let binding = span
-                    .as_ref()
-                    .map(|range| ctx.module.resolve_symbol_within(name, &range.start))
+            Expression::Parenthesis { src: _, inner } => inner.infer_type(ctx),
+            Expression::LocalIdentifier { src, name } => {
+                let binding = src
+                    .map(|s| ctx.module.resolve_symbol_within(name, s))
                     .flatten();
 
                 binding
                     .map(|binding| match binding {
                         Binding::ValueDeclaration(ValueDeclaration {
-                            span: _,
+                            src: _,
                             name: _,
                             type_annotation,
                             value,
@@ -64,58 +55,53 @@ impl<'a> Expression<'a> {
                         Binding::InlineConstDeclaration(_) => todo!(),
                     })
                     .unwrap_or_else(|| TypeExpression::UnknownType {
-                        span: span.clone(),
-                        p: PhantomData,
+                        src: *src,
                         mutability: Mutability::Readonly,
                     })
             }
             Expression::InlineConstGroup {
-                span: _,
+                src: _,
                 declarations: _,
                 inner,
             } => inner.infer_type(ctx),
-            Expression::BooleanLiteral { span, p: _, value } => todo!(),
-            Expression::StringLiteral { span, value } => todo!(),
-            Expression::ExactStringLiteral {
-                span,
-                tag,
-                segments,
-            } => todo!(),
-            Expression::ArrayLiteral { span, entries } => todo!(),
-            Expression::ObjectLiteral { span, entries } => todo!(),
-            Expression::NegationOperation { span, inner } => todo!(),
+            Expression::BooleanLiteral { src, value } => todo!(),
+            Expression::StringLiteral { src, value } => todo!(),
+            Expression::ExactStringLiteral { src, tag, segments } => todo!(),
+            Expression::ArrayLiteral { src, entries } => todo!(),
+            Expression::ObjectLiteral { src, entries } => todo!(),
+            Expression::NegationOperation { src, inner } => todo!(),
             Expression::Func {
-                span,
+                src,
                 type_annotation,
                 is_async,
                 is_pure,
                 body,
             } => todo!(),
             Expression::JsFunc {
-                span,
+                src,
                 type_annotation,
                 is_async,
                 is_pure,
                 body,
             } => todo!(),
             Expression::Proc {
-                span,
+                src,
                 type_annotation,
                 is_async,
                 is_pure,
                 body,
             } => todo!(),
             Expression::JsProc {
-                span,
+                src,
                 type_annotation,
                 is_async,
                 is_pure,
                 body,
             } => todo!(),
             Expression::JavascriptEscapeExpression(_) => todo!(),
-            Expression::RangeExpression { span, start, end } => todo!(),
+            Expression::RangeExpression { src, start, end } => todo!(),
             Expression::Invocation {
-                span,
+                src,
                 subject,
                 args,
                 spread_args,
@@ -124,35 +110,35 @@ impl<'a> Expression<'a> {
                 awaited_or_detached,
             } => todo!(),
             Expression::PropertyAccessor {
-                span,
+                src,
                 subject,
                 property,
                 optional,
             } => todo!(),
             Expression::IfElseExpression {
-                span,
+                src,
                 cases,
                 default_case,
             } => todo!(),
             Expression::SwitchExpression {
-                span,
+                src,
                 value,
                 cases,
                 default_case,
             } => todo!(),
             Expression::ElementTag {
-                span,
+                src,
                 tag_name,
                 attributes,
                 children,
             } => todo!(),
             Expression::AsCast {
-                span,
+                src,
                 inner,
                 as_type,
             } => todo!(),
-            Expression::ErrorExpression { span, inner } => todo!(),
-            Expression::RegularExpression { span, expr, flags } => todo!(),
+            Expression::ErrorExpression { src, inner } => todo!(),
+            Expression::RegularExpression { src, expr, flags } => todo!(),
         }
     }
 }

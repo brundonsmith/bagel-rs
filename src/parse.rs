@@ -19,7 +19,7 @@ pub fn bagel_module<'a>(module_name: ModuleName, code: &'a str) -> Result<Module
             declarations,
         }),
         ParseChain::None { index } => Err(BagelError::ParseError {
-            index,
+            src: code,
             module_name,
             message: format!("Failed to consume entire input"),
         }),

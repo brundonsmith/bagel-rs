@@ -8,7 +8,7 @@ use super::{BinaryOperator, Expression, Invocation, LocalIdentifier, PlainIdenti
 pub enum Statement<'a> {
     #[evt(derive(Debug, Clone, PartialEq))]
     DeclarationStatement {
-        span: Option<Range<usize>>,
+        src: Option<&'a str>,
         destination: (), // TODO  NameAndType | Destructure
         value: Expression<'a>,
         awaited: bool,
@@ -17,14 +17,14 @@ pub enum Statement<'a> {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     IfElseStatement {
-        span: Option<Range<usize>>,
+        src: Option<&'a str>,
         cases: Vec<(Expression<'a>, Vec<Statement<'a>>)>,
         default_case: Vec<Statement<'a>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ForLoop {
-        span: Option<Range<usize>>,
+        src: Option<&'a str>,
         item_identifier: PlainIdentifier<'a>,
         iterator: Expression<'a>,
         body: Vec<Statement<'a>>,
@@ -32,14 +32,14 @@ pub enum Statement<'a> {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     WhileLoop {
-        span: Option<Range<usize>>,
+        src: Option<&'a str>,
         condition: Expression<'a>,
         body: Vec<Statement<'a>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     Assignment {
-        span: Option<Range<usize>>,
+        src: Option<&'a str>,
         target: LocalIdentifier<'a>, // TODO  | PropertyAccessor
         value: Expression<'a>,
         operator: Option<BinaryOperator>,
@@ -47,7 +47,7 @@ pub enum Statement<'a> {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     TryCatch {
-        span: Option<Range<usize>>,
+        src: Option<&'a str>,
         try_block: Vec<Statement<'a>>,
         error_identifier: PlainIdentifier<'a>,
         catch_block: Vec<Statement<'a>>,
@@ -55,13 +55,13 @@ pub enum Statement<'a> {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ThrowStatement {
-        span: Option<Range<usize>>,
+        src: Option<&'a str>,
         error_expression: Expression<'a>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     Autorun {
-        span: Option<Range<usize>>,
+        src: Option<&'a str>,
         effect: Vec<Statement<'a>>,
         until: Option<Expression<'a>>,
     },
