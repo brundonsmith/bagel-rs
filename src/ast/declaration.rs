@@ -2,6 +2,8 @@ use std::{collections::HashSet, ops::Range};
 
 use enum_variant_type::EnumVariantType;
 
+use crate::slice::Slice;
+
 use super::{
     ExactStringLiteral, Expression, Func, Invocation, LocalIdentifier, PlainIdentifier, Proc,
     Sourced, Statement, TypeExpression,
@@ -11,28 +13,28 @@ use super::{
 pub enum Declaration<'a> {
     #[evt(derive(Debug, Clone, PartialEq))]
     ImportAllDeclaration {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         name: PlainIdentifier<'a>,
         path: ExactStringLiteral<'a>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ImportDeclaration {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         imports: Vec<ImportItem<'a>>,
         path: ExactStringLiteral<'a>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     TypeDeclaration {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         name: PlainIdentifier<'a>,
         declared_type: TypeExpression<'a>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     FuncDeclaration {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         name: PlainIdentifier<'a>,
         func: Func<'a>, // TODO:  | JsFunc
         platforms: HashSet<Platform>,
@@ -41,7 +43,7 @@ pub enum Declaration<'a> {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ProcDeclaration {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         name: PlainIdentifier<'a>,
         proc: Proc<'a>, // TODO:  | JsProc
         platforms: HashSet<Platform>,
@@ -50,7 +52,7 @@ pub enum Declaration<'a> {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ValueDeclaration {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         name: PlainIdentifier<'a>,
         type_annotation: Option<TypeExpression<'a>>,
         value: Expression<'a>,
@@ -58,21 +60,21 @@ pub enum Declaration<'a> {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     TestExprDeclaration {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         name: ExactStringLiteral<'a>,
         expr: Expression<'a>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     TestBlockDeclaration {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         name: ExactStringLiteral<'a>,
         block: Vec<Statement<'a>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     TestTypeDeclaration {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         name: ExactStringLiteral<'a>,
         destination_type: TypeExpression<'a>,
         value_type: TypeExpression<'a>,
@@ -98,8 +100,8 @@ pub struct ImportItem<'a> {
     pub alias: Option<PlainIdentifier<'a>>,
 }
 
-impl<'a> Sourced for Declaration<'a> {
-    fn src(&self) -> Option<&str> {
+impl<'a> Sourced<'a> for Declaration<'a> {
+    fn src(&self) -> Option<Slice<'a>> {
         match self {
             Declaration::ValueDeclaration {
                 src,

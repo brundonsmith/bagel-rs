@@ -5,9 +5,12 @@ mod check;
 mod cli;
 mod compile;
 mod errors;
-mod parse;
-mod parse_utils;
+// mod parse;
+mod parse_2;
+// mod parse_utils;
+mod precedence;
 mod resolve;
+mod slice;
 mod typeinfer;
 
 use clap::{command, Parser};

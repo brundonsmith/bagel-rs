@@ -78,8 +78,12 @@ impl<'a> Check for Expression<'a> {
             } => todo!(),
             Expression::Parenthesis { src, inner } => inner.check(ctx, report_error),
             Expression::LocalIdentifier { src, name } => {
-                if let Some(src) = src {
-                    if ctx.module.resolve_symbol_within(name, src).is_none() {
+                if let Some(src) = *src {
+                    if ctx
+                        .module
+                        .resolve_symbol_within(name.as_str(), src)
+                        .is_none()
+                    {
                         report_error(BagelError::TypeError {
                             module_name: ctx.module.module_name.clone(),
                             src,

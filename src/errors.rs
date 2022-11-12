@@ -1,26 +1,24 @@
-use std::ops::Range;
-
 use enum_variant_type::EnumVariantType;
 
-use crate::ast::ModuleName;
+use crate::{ast::ModuleName, slice::Slice};
 
 #[derive(Debug, Clone, PartialEq, EnumVariantType)]
 pub enum BagelError<'a> {
     #[evt(derive(Debug, Clone, PartialEq))]
     ParseError {
-        src: &'a str,
+        src: Slice<'a>,
         module_name: ModuleName,
         message: String,
     },
     #[evt(derive(Debug, Clone, PartialEq))]
     TypeError {
-        src: &'a str,
+        src: Slice<'a>,
         module_name: ModuleName,
     },
 }
 
 impl<'a> BagelError<'a> {
-    pub fn pretty_print(&self, code: &'a str, color: bool) -> String {
+    pub fn pretty_print(&self, color: bool) -> String {
         match self {
             BagelError::ParseError {
                 src,

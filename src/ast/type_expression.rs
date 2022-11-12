@@ -2,38 +2,40 @@ use std::{borrow::Cow, marker::PhantomData, ops::Range};
 
 use enum_variant_type::EnumVariantType;
 
+use crate::slice::Slice;
+
 use super::{BooleanLiteral, ExactStringLiteral, Expression, NumberLiteral, PlainIdentifier};
 
 #[derive(Clone, Debug, PartialEq, EnumVariantType)]
 pub enum TypeExpression<'a> {
     #[evt(derive(Debug, Clone, PartialEq))]
     UnionType {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         members: Vec<TypeExpression<'a>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     MaybeType {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         inner: Box<TypeExpression<'a>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     NamedType {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         name: PlainIdentifier<'a>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     GenericParamType {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         name: PlainIdentifier<'a>,
         extends: Option<Box<TypeExpression<'a>>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ProcType {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         args: Args<'a>,
         is_pure: bool,
         is_async: bool,
@@ -42,7 +44,7 @@ pub enum TypeExpression<'a> {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     FuncType {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         args: Args<'a>,
         is_pure: bool,
         returns: Option<Box<TypeExpression<'a>>>,
@@ -50,35 +52,35 @@ pub enum TypeExpression<'a> {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     GenericType {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         type_params: Vec<(PlainIdentifier<'a>, Option<TypeExpression<'a>>)>,
         inner: Box<TypeExpression<'a>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     BoundGenericType {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         type_args: Vec<TypeExpression<'a>>,
         generic: Box<TypeExpression<'a>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ObjectType {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         entries: Vec<ObjectTypeEntry<'a>>,
         mutability: Mutability,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     InterfaceType {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         entries: Vec<(PlainIdentifier<'a>, TypeExpression<'a>)>,
         mutability: Mutability,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     RecordType {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         key_type: Box<TypeExpression<'a>>,
         value_type: Box<TypeExpression<'a>>,
         mutability: Mutability,
@@ -86,119 +88,119 @@ pub enum TypeExpression<'a> {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ArrayType {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         element: Box<TypeExpression<'a>>,
         mutability: Mutability,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     TupleType {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         members: Vec<TypeExpression<'a>>,
         mutability: Mutability,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ReadonlyType {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         inner: Box<TypeExpression<'a>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    StringType { src: Option<&'a str> },
+    StringType { src: Option<Slice<'a>> },
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    NumberType { src: Option<&'a str> },
+    NumberType { src: Option<Slice<'a>> },
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    BooleanType { src: Option<&'a str> },
+    BooleanType { src: Option<Slice<'a>> },
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    NilType { src: Option<&'a str> },
+    NilType { src: Option<Slice<'a>> },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     LiteralType {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         value: LiteralTypeValue<'a>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     NominalType {
-        src: Option<&'a str>,
-        name: Cow<'a, str>,
+        src: Option<Slice<'a>>,
+        name: Slice<'a>,
         inner: Option<Box<TypeExpression<'a>>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     IteratorType {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         inner: Box<TypeExpression<'a>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     PlanType {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         inner: Box<TypeExpression<'a>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ErrorType {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         inner: Box<TypeExpression<'a>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ParenthesizedType {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         inner: Box<TypeExpression<'a>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     TypeofType {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         expression: Expression<'a>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     KeyofType {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         inner: Box<TypeExpression<'a>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ValueofType {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         inner: Box<TypeExpression<'a>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ElementofType {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         inner: Box<TypeExpression<'a>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     UnknownType {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
 
         mutability: Mutability,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    PoisonedType { src: Option<&'a str> },
+    PoisonedType { src: Option<Slice<'a>> },
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    AnyType { src: Option<&'a str> },
+    AnyType { src: Option<Slice<'a>> },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     RegularExpressionType {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         // TODO: Number of match groups?
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     PropertyType {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         subject: Box<TypeExpression<'a>>,
         property: PlainIdentifier<'a>, // TODO:  | TypeExpression
         optional: bool,

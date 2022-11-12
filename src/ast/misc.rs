@@ -1,25 +1,23 @@
-use std::ops::Range;
+use crate::slice::Slice;
 
 use super::Declaration;
 
-pub trait Sourced {
-    fn src(&self) -> Option<&str>;
+pub trait Sourced<'a> {
+    fn src(&self) -> Option<Slice<'a>>;
 
-    fn contains(&self, other: &str) -> bool {
-        self.src()
-            .map(|s| slice_contains(s, other))
-            .unwrap_or(false)
+    fn contains(&self, other: Slice<'a>) -> bool {
+        self.src().map(|s| s.contains(other)).unwrap_or(false)
     }
-}
 
-fn slice_contains(slice: &str, other: &str) -> bool {
-    let slice_start = slice.as_ptr() as usize;
-    let slice_end = slice_start + slice.len();
-
-    let other_start = other.as_ptr() as usize;
-    let other_end = other_start + other.len();
-
-    other_start >= slice_start && other_end <= slice_end
+    fn spanning<O: Sourced<'a>>(&self, other: &O) -> Option<Slice<'a>> {
+        self.src()
+            .map(|left_src| {
+                other
+                    .src()
+                    .map(move |right_src| left_src.spanning(right_src))
+            })
+            .flatten()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -51,12 +49,12 @@ pub struct Module<'a> {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct PlainIdentifier<'a> {
-    pub src: Option<&'a str>,
-    pub name: &'a str,
+    pub src: Option<Slice<'a>>,
+    pub name: Slice<'a>,
 }
 
-impl<'a> Sourced for PlainIdentifier<'a> {
-    fn src(&self) -> Option<&str> {
+impl<'a> Sourced<'a> for PlainIdentifier<'a> {
+    fn src(&self) -> Option<Slice<'a>> {
         self.src
     }
 }

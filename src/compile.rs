@@ -26,7 +26,7 @@ impl<'a> Compile for Declaration<'a> {
                 value,
             } => {
                 f.write_str("const ")?;
-                f.write_str(&name.name)?;
+                f.write_str(name.name.as_str())?;
                 if let Some(type_annotation) = type_annotation {
                     type_annotation.compile(f)?;
                 }
@@ -73,7 +73,7 @@ impl<'a> Compile for Expression<'a> {
     fn compile(&self, f: &mut std::fmt::Formatter<'_>) -> Result {
         match self {
             Expression::NilLiteral { src } => f.write_str("undefined"),
-            Expression::NumberLiteral { src, value } => f.write_str(value),
+            Expression::NumberLiteral { src, value } => f.write_str(value.as_str()),
             Expression::BinaryOperation {
                 src,
                 left,

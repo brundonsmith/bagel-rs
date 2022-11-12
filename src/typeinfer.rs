@@ -41,7 +41,7 @@ impl<'a> Expression<'a> {
             Expression::Parenthesis { src: _, inner } => inner.infer_type(ctx),
             Expression::LocalIdentifier { src, name } => {
                 let binding = src
-                    .map(|s| ctx.module.resolve_symbol_within(name, s))
+                    .map(|s| ctx.module.resolve_symbol_within(name.as_str(), s))
                     .flatten();
 
                 binding

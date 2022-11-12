@@ -3,50 +3,52 @@ use std::{borrow::Cow, collections::HashMap, marker::PhantomData, ops::Range};
 use enum_variant_type::EnumVariantType;
 use lazy_static::lazy_static;
 
+use crate::slice::Slice;
+
 use super::{FuncType, PlainIdentifier, ProcType, Sourced, Statement, TypeExpression};
 
 #[derive(Clone, Debug, PartialEq, EnumVariantType)]
 pub enum Expression<'a> {
     #[evt(derive(Debug, Clone, PartialEq))]
-    NilLiteral { src: Option<&'a str> },
+    NilLiteral { src: Option<Slice<'a>> },
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    BooleanLiteral { src: Option<&'a str>, value: bool },
+    BooleanLiteral { src: Option<Slice<'a>>, value: bool },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     NumberLiteral {
-        src: Option<&'a str>,
-        value: Cow<'a, str>,
+        src: Option<Slice<'a>>,
+        value: Slice<'a>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     StringLiteral {
-        src: Option<&'a str>,
-        value: Cow<'a, str>,
+        src: Option<Slice<'a>>,
+        value: Slice<'a>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ExactStringLiteral {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         tag: Option<PlainIdentifier<'a>>,
         segments: Vec<StringLiteralSegment<'a>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ArrayLiteral {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         entries: Vec<ArrayLiteralEntry<'a>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ObjectLiteral {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         entries: Vec<ObjectLiteralEntry<'a>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     BinaryOperation {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         left: Box<Expression<'a>>,
         op: BinaryOperator,
         right: Box<Expression<'a>>,
@@ -54,32 +56,32 @@ pub enum Expression<'a> {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     NegationOperation {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         inner: Box<Expression<'a>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     Parenthesis {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         inner: Box<Expression<'a>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     LocalIdentifier {
-        src: Option<&'a str>,
-        name: Cow<'a, str>,
+        src: Option<Slice<'a>>,
+        name: Slice<'a>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     InlineConstGroup {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         declarations: Vec<InlineConstDeclaration<'a>>,
         inner: Box<Expression<'a>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     Func {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         type_annotation: Box<FuncType<'a>>, // TODO:  | GenericFuncType
         is_async: bool,
         is_pure: bool,
@@ -88,16 +90,16 @@ pub enum Expression<'a> {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     JsFunc {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         type_annotation: Box<FuncType<'a>>, // TODO:  | GenericFuncType
         is_async: bool,
         is_pure: bool,
-        body: Cow<'a, str>,
+        body: Slice<'a>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     Proc {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         type_annotation: Box<ProcType<'a>>, // TODO:  | GenericProcType
         is_async: bool,
         is_pure: bool,
@@ -106,11 +108,11 @@ pub enum Expression<'a> {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     JsProc {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         type_annotation: Box<ProcType<'a>>, // TODO:  | GenericProcType
         is_async: bool,
         is_pure: bool,
-        body: Cow<'a, str>,
+        body: Slice<'a>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
@@ -118,14 +120,14 @@ pub enum Expression<'a> {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     RangeExpression {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         start: Box<Expression<'a>>,
         end: Box<Expression<'a>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     Invocation {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         subject: Box<Expression<'a>>,
         args: Vec<Expression<'a>>,
         spread_args: Option<Box<Expression<'a>>>,
@@ -136,7 +138,7 @@ pub enum Expression<'a> {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     PropertyAccessor {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         subject: Box<Expression<'a>>,
         property: Option<PlainIdentifier<'a>>, // TODO:  | Expression
         optional: bool,
@@ -144,14 +146,14 @@ pub enum Expression<'a> {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     IfElseExpression {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         cases: Vec<(Expression<'a>, Expression<'a>)>,
         default_case: Option<Box<Expression<'a>>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     SwitchExpression {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         value: Box<Expression<'a>>,
         cases: Vec<(TypeExpression<'a>, Expression<'a>)>,
         default_case: Option<Box<Expression<'a>>>,
@@ -159,7 +161,7 @@ pub enum Expression<'a> {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ElementTag {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         tag_name: PlainIdentifier<'a>,
         attributes: Vec<ObjectLiteralEntry<'a>>,
         children: Vec<Expression<'a>>,
@@ -167,21 +169,21 @@ pub enum Expression<'a> {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     AsCast {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         inner: Box<Expression<'a>>,
         as_type: Box<TypeExpression<'a>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ErrorExpression {
-        src: Option<&'a str>,
+        src: Option<Slice<'a>>,
         inner: Box<Expression<'a>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     RegularExpression {
-        src: Option<&'a str>,
-        expr: Cow<'a, str>,
+        src: Option<Slice<'a>>,
+        expr: Slice<'a>,
         flags: Vec<RegularExpressionFlag>,
     },
 }
@@ -205,13 +207,13 @@ pub enum AwaitOrDetach {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct JavascriptEscape<'a> {
-    pub src: Option<&'a str>,
-    pub js: Cow<'a, str>,
+    pub src: Option<Slice<'a>>,
+    pub js: Slice<'a>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum StringLiteralSegment<'a> {
-    String(Cow<'a, str>),
+    String(Slice<'a>),
     Expression(Expression<'a>),
 }
 
@@ -228,8 +230,8 @@ pub enum ObjectLiteralEntry<'a> {
     KeyValue(PlainIdentifier<'a>, Expression<'a>),
 }
 
-impl<'a> Sourced for Expression<'a> {
-    fn src(&self) -> Option<&str> {
+impl<'a> Sourced<'a> for Expression<'a> {
+    fn src(&self) -> Option<Slice<'a>> {
         match self {
             Expression::NilLiteral { src } => *src,
             Expression::NumberLiteral { src, value } => *src,
@@ -327,14 +329,14 @@ impl<'a> Sourced for Expression<'a> {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct InlineConstDeclaration<'a> {
-    pub src: Option<&'a str>,
+    pub src: Option<Slice<'a>>,
     pub name: PlainIdentifier<'a>,
     pub type_annotation: Option<TypeExpression<'a>>,
     pub value: Box<Expression<'a>>,
 }
 
-impl<'a> Sourced for InlineConstDeclaration<'a> {
-    fn src(&self) -> Option<&str> {
+impl<'a> Sourced<'a> for InlineConstDeclaration<'a> {
+    fn src(&self) -> Option<Slice<'a>> {
         self.src
     }
 }
@@ -355,6 +357,50 @@ pub enum BinaryOperator {
     Times,
     Divide,
     InstanceOf,
+}
+
+impl BinaryOperator {
+    pub const fn symbol(self) -> &'static str {
+        match self {
+            BinaryOperator::NullishCoalescing => "??",
+            BinaryOperator::Or => "||",
+            BinaryOperator::And => "&&",
+            BinaryOperator::Equals => "==",
+            BinaryOperator::NotEquals => "!=",
+            BinaryOperator::LessEqual => "<=",
+            BinaryOperator::GreaterEqual => ">=",
+            BinaryOperator::Less => "<",
+            BinaryOperator::Greater => ">",
+            BinaryOperator::Plus => "+",
+            BinaryOperator::Minus => "-",
+            BinaryOperator::Times => "*",
+            BinaryOperator::Divide => "/",
+            BinaryOperator::InstanceOf => "instanceof",
+        }
+    }
+
+    pub fn from_symbol(symbol: &str) -> Self {
+        match symbol {
+            "??" => BinaryOperator::NullishCoalescing,
+            "||" => BinaryOperator::Or,
+            "&&" => BinaryOperator::And,
+            "==" => BinaryOperator::Equals,
+            "!=" => BinaryOperator::NotEquals,
+            "<=" => BinaryOperator::LessEqual,
+            ">=" => BinaryOperator::GreaterEqual,
+            "<" => BinaryOperator::Less,
+            ">" => BinaryOperator::Greater,
+            "+" => BinaryOperator::Plus,
+            "-" => BinaryOperator::Minus,
+            "*" => BinaryOperator::Times,
+            "/" => BinaryOperator::Divide,
+            "instanceof" => BinaryOperator::InstanceOf,
+            _ => panic!(
+                "from_symbol() called with invalid operator symbol \"{}\"",
+                symbol
+            ),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]

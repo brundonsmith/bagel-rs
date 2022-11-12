@@ -1,13 +1,14 @@
-use crate::ast::{
-    Declaration, Expression, InlineConstDeclaration, Module, Sourced, ValueDeclaration,
+use crate::{
+    ast::{Declaration, Expression, InlineConstDeclaration, Module, Sourced, ValueDeclaration},
+    slice::Slice,
 };
 
-pub trait Resolve {
-    fn resolve_symbol_within(&self, symbol: &str, slice: &str) -> Option<Binding>;
+pub trait Resolve<'a> {
+    fn resolve_symbol_within(&self, symbol: &str, slice: Slice<'a>) -> Option<Binding>;
 }
 
-impl<'a> Resolve for Module<'a> {
-    fn resolve_symbol_within(&self, symbol: &str, slice: &str) -> Option<Binding> {
+impl<'a> Resolve<'a> for Module<'a> {
+    fn resolve_symbol_within(&self, symbol: &str, slice: Slice<'a>) -> Option<Binding> {
         // look inside nested contexts
         for decl in &self.declarations {
             let inner = decl.resolve_symbol_within(symbol, slice);
@@ -26,7 +27,7 @@ impl<'a> Resolve for Module<'a> {
                     type_annotation: _,
                     value: _,
                 } => {
-                    if name.name == symbol {
+                    if name.name.as_str() == symbol {
                         return Some(Binding::ValueDeclaration(
                             ValueDeclaration::try_from(decl.clone()).unwrap(),
                         ));
@@ -68,8 +69,8 @@ impl<'a> Resolve for Module<'a> {
     }
 }
 
-impl<'a> Resolve for Declaration<'a> {
-    fn resolve_symbol_within(&self, symbol: &str, slice: &str) -> Option<Binding> {
+impl<'a> Resolve<'a> for Declaration<'a> {
+    fn resolve_symbol_within(&self, symbol: &str, slice: Slice<'a>) -> Option<Binding> {
         match self {
             Declaration::ValueDeclaration {
                 src: _,
@@ -116,8 +117,8 @@ impl<'a> Resolve for Declaration<'a> {
     }
 }
 
-impl<'a> Resolve for Expression<'a> {
-    fn resolve_symbol_within(&self, symbol: &str, slice: &str) -> Option<Binding> {
+impl<'a> Resolve<'a> for Expression<'a> {
+    fn resolve_symbol_within(&self, symbol: &str, slice: Slice<'a>) -> Option<Binding> {
         match self {
             Expression::BinaryOperation {
                 src: _,
@@ -234,9 +235,9 @@ impl<'a> Resolve for Expression<'a> {
     }
 }
 
-impl<'a> Resolve for InlineConstDeclaration<'a> {
-    fn resolve_symbol_within(&self, symbol: &str, slice: &str) -> Option<Binding<'a>> {
-        if self.name.name == symbol {
+impl<'a> Resolve<'a> for InlineConstDeclaration<'a> {
+    fn resolve_symbol_within(&self, symbol: &str, slice: Slice<'a>) -> Option<Binding<'a>> {
+        if self.name.name.as_str() == symbol {
             Some(Binding::InlineConstDeclaration(self.clone()))
         } else {
             None
