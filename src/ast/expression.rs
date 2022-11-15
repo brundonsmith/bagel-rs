@@ -1,189 +1,181 @@
-use std::{borrow::Cow, collections::HashMap, marker::PhantomData, ops::Range};
-
 use enum_variant_type::EnumVariantType;
-use lazy_static::lazy_static;
 
 use crate::slice::Slice;
 
 use super::{FuncType, PlainIdentifier, ProcType, Sourced, Statement, TypeExpression};
 
 #[derive(Clone, Debug, PartialEq, EnumVariantType)]
-pub enum Expression<'a> {
+pub enum Expression {
     #[evt(derive(Debug, Clone, PartialEq))]
-    NilLiteral { src: Option<Slice<'a>> },
+    NilLiteral { src: Option<Slice> },
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    BooleanLiteral { src: Option<Slice<'a>>, value: bool },
+    BooleanLiteral { src: Option<Slice>, value: bool },
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    NumberLiteral {
-        src: Option<Slice<'a>>,
-        value: Slice<'a>,
-    },
+    NumberLiteral { src: Option<Slice>, value: String },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     StringLiteral {
-        src: Option<Slice<'a>>,
-        value: Slice<'a>,
+        src: Option<Slice>,
+        tag: Option<PlainIdentifier>,
+        segments: Vec<StringLiteralSegment>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ExactStringLiteral {
-        src: Option<Slice<'a>>,
-        tag: Option<PlainIdentifier<'a>>,
-        segments: Vec<StringLiteralSegment<'a>>,
+        src: Option<Slice>,
+        tag: Option<PlainIdentifier>,
+        value: String,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ArrayLiteral {
-        src: Option<Slice<'a>>,
-        entries: Vec<ArrayLiteralEntry<'a>>,
+        src: Option<Slice>,
+        entries: Vec<ArrayLiteralEntry>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ObjectLiteral {
-        src: Option<Slice<'a>>,
-        entries: Vec<ObjectLiteralEntry<'a>>,
+        src: Option<Slice>,
+        entries: Vec<ObjectLiteralEntry>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     BinaryOperation {
-        src: Option<Slice<'a>>,
-        left: Box<Expression<'a>>,
+        src: Option<Slice>,
+        left: Box<Expression>,
         op: BinaryOperator,
-        right: Box<Expression<'a>>,
+        right: Box<Expression>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     NegationOperation {
-        src: Option<Slice<'a>>,
-        inner: Box<Expression<'a>>,
+        src: Option<Slice>,
+        inner: Box<Expression>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     Parenthesis {
-        src: Option<Slice<'a>>,
-        inner: Box<Expression<'a>>,
+        src: Option<Slice>,
+        inner: Box<Expression>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    LocalIdentifier {
-        src: Option<Slice<'a>>,
-        name: Slice<'a>,
-    },
+    LocalIdentifier { src: Option<Slice>, name: String },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     InlineConstGroup {
-        src: Option<Slice<'a>>,
-        declarations: Vec<InlineConstDeclaration<'a>>,
-        inner: Box<Expression<'a>>,
+        src: Option<Slice>,
+        declarations: Vec<InlineConstDeclaration>,
+        inner: Box<Expression>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     Func {
-        src: Option<Slice<'a>>,
-        type_annotation: Box<FuncType<'a>>, // TODO:  | GenericFuncType
+        src: Option<Slice>,
+        type_annotation: Box<FuncType>, // TODO:  | GenericFuncType
         is_async: bool,
         is_pure: bool,
-        body: Box<Expression<'a>>,
+        body: Box<Expression>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     JsFunc {
-        src: Option<Slice<'a>>,
-        type_annotation: Box<FuncType<'a>>, // TODO:  | GenericFuncType
+        src: Option<Slice>,
+        type_annotation: Box<FuncType>, // TODO:  | GenericFuncType
         is_async: bool,
         is_pure: bool,
-        body: Slice<'a>,
+        body: String,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     Proc {
-        src: Option<Slice<'a>>,
-        type_annotation: Box<ProcType<'a>>, // TODO:  | GenericProcType
+        src: Option<Slice>,
+        type_annotation: Box<ProcType>, // TODO:  | GenericProcType
         is_async: bool,
         is_pure: bool,
-        body: Vec<Statement<'a>>,
+        body: Vec<Statement>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     JsProc {
-        src: Option<Slice<'a>>,
-        type_annotation: Box<ProcType<'a>>, // TODO:  | GenericProcType
+        src: Option<Slice>,
+        type_annotation: Box<ProcType>, // TODO:  | GenericProcType
         is_async: bool,
         is_pure: bool,
-        body: Slice<'a>,
+        body: String,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    JavascriptEscapeExpression(JavascriptEscape<'a>),
+    JavascriptEscapeExpression(JavascriptEscape),
 
     #[evt(derive(Debug, Clone, PartialEq))]
     RangeExpression {
-        src: Option<Slice<'a>>,
-        start: Box<Expression<'a>>,
-        end: Box<Expression<'a>>,
+        src: Option<Slice>,
+        start: Box<Expression>,
+        end: Box<Expression>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     Invocation {
-        src: Option<Slice<'a>>,
-        subject: Box<Expression<'a>>,
-        args: Vec<Expression<'a>>,
-        spread_args: Option<Box<Expression<'a>>>,
-        type_args: Vec<TypeExpression<'a>>,
+        src: Option<Slice>,
+        subject: Box<Expression>,
+        args: Vec<Expression>,
+        spread_args: Option<Box<Expression>>,
+        type_args: Vec<TypeExpression>,
         bubbles: bool,
         awaited_or_detached: Option<AwaitOrDetach>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     PropertyAccessor {
-        src: Option<Slice<'a>>,
-        subject: Box<Expression<'a>>,
-        property: Option<PlainIdentifier<'a>>, // TODO:  | Expression
+        src: Option<Slice>,
+        subject: Box<Expression>,
+        property: Option<PlainIdentifier>, // TODO:  | Expression
         optional: bool,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     IfElseExpression {
-        src: Option<Slice<'a>>,
-        cases: Vec<(Expression<'a>, Expression<'a>)>,
-        default_case: Option<Box<Expression<'a>>>,
+        src: Option<Slice>,
+        cases: Vec<(Expression, Expression)>,
+        default_case: Option<Box<Expression>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     SwitchExpression {
-        src: Option<Slice<'a>>,
-        value: Box<Expression<'a>>,
-        cases: Vec<(TypeExpression<'a>, Expression<'a>)>,
-        default_case: Option<Box<Expression<'a>>>,
+        src: Option<Slice>,
+        value: Box<Expression>,
+        cases: Vec<(TypeExpression, Expression)>,
+        default_case: Option<Box<Expression>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ElementTag {
-        src: Option<Slice<'a>>,
-        tag_name: PlainIdentifier<'a>,
-        attributes: Vec<ObjectLiteralEntry<'a>>,
-        children: Vec<Expression<'a>>,
+        src: Option<Slice>,
+        tag_name: PlainIdentifier,
+        attributes: Vec<ObjectLiteralEntry>,
+        children: Vec<Expression>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     AsCast {
-        src: Option<Slice<'a>>,
-        inner: Box<Expression<'a>>,
-        as_type: Box<TypeExpression<'a>>,
+        src: Option<Slice>,
+        inner: Box<Expression>,
+        as_type: Box<TypeExpression>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ErrorExpression {
-        src: Option<Slice<'a>>,
-        inner: Box<Expression<'a>>,
+        src: Option<Slice>,
+        inner: Box<Expression>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     RegularExpression {
-        src: Option<Slice<'a>>,
-        expr: Slice<'a>,
+        src: Option<Slice>,
+        expr: String,
         flags: Vec<RegularExpressionFlag>,
     },
 }
@@ -206,84 +198,84 @@ pub enum AwaitOrDetach {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct JavascriptEscape<'a> {
-    pub src: Option<Slice<'a>>,
-    pub js: Slice<'a>,
+pub struct JavascriptEscape {
+    pub src: Option<Slice>,
+    pub js: String,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum StringLiteralSegment<'a> {
-    String(Slice<'a>),
-    Expression(Expression<'a>),
+pub enum StringLiteralSegment {
+    String(Slice),
+    Expression(Expression),
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum ArrayLiteralEntry<'a> {
-    Spread(LocalIdentifier<'a>),
-    Element(Expression<'a>),
+pub enum ArrayLiteralEntry {
+    Spread(LocalIdentifier),
+    Element(Expression),
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum ObjectLiteralEntry<'a> {
-    Variable(LocalIdentifier<'a>),
-    Spread(LocalIdentifier<'a>),
-    KeyValue(PlainIdentifier<'a>, Expression<'a>),
+pub enum ObjectLiteralEntry {
+    Variable(LocalIdentifier),
+    Spread(LocalIdentifier),
+    KeyValue(PlainIdentifier, Expression),
 }
 
-impl<'a> Sourced<'a> for Expression<'a> {
-    fn src(&self) -> Option<Slice<'a>> {
+impl Sourced for Expression {
+    fn src(&self) -> Option<Slice> {
         match self {
-            Expression::NilLiteral { src } => *src,
-            Expression::NumberLiteral { src, value } => *src,
+            Expression::NilLiteral { src } => src.clone(),
+            Expression::NumberLiteral { src, value } => src.clone(),
             Expression::BinaryOperation {
                 src,
                 left,
                 op,
                 right,
-            } => *src,
-            Expression::Parenthesis { src, inner } => *src,
-            Expression::LocalIdentifier { src, name } => *src,
+            } => src.clone(),
+            Expression::Parenthesis { src, inner } => src.clone(),
+            Expression::LocalIdentifier { src, name } => src.clone(),
             Expression::InlineConstGroup {
                 src,
                 declarations,
                 inner,
-            } => *src,
-            Expression::BooleanLiteral { src, value } => *src,
-            Expression::StringLiteral { src, value } => *src,
-            Expression::ExactStringLiteral { src, tag, segments } => *src,
-            Expression::ArrayLiteral { src, entries } => *src,
-            Expression::ObjectLiteral { src, entries } => *src,
-            Expression::NegationOperation { src, inner } => *src,
+            } => src.clone(),
+            Expression::BooleanLiteral { src, value } => src.clone(),
+            Expression::StringLiteral { src, tag, segments } => src.clone(),
+            Expression::ExactStringLiteral { src, tag, value } => src.clone(),
+            Expression::ArrayLiteral { src, entries } => src.clone(),
+            Expression::ObjectLiteral { src, entries } => src.clone(),
+            Expression::NegationOperation { src, inner } => src.clone(),
             Expression::Func {
                 src,
                 type_annotation,
                 is_async,
                 is_pure,
                 body,
-            } => *src,
+            } => src.clone(),
             Expression::JsFunc {
                 src,
                 type_annotation,
                 is_async,
                 is_pure,
                 body,
-            } => *src,
+            } => src.clone(),
             Expression::Proc {
                 src,
                 type_annotation,
                 is_async,
                 is_pure,
                 body,
-            } => *src,
+            } => src.clone(),
             Expression::JsProc {
                 src,
                 type_annotation,
                 is_async,
                 is_pure,
                 body,
-            } => *src,
-            Expression::JavascriptEscapeExpression(expr) => expr.src,
-            Expression::RangeExpression { src, start, end } => *src,
+            } => src.clone(),
+            Expression::JavascriptEscapeExpression(expr) => expr.src.clone(),
+            Expression::RangeExpression { src, start, end } => src.clone(),
             Expression::Invocation {
                 src,
                 subject,
@@ -292,52 +284,52 @@ impl<'a> Sourced<'a> for Expression<'a> {
                 type_args,
                 bubbles,
                 awaited_or_detached,
-            } => *src,
+            } => src.clone(),
             Expression::PropertyAccessor {
                 src,
                 subject,
                 property,
                 optional,
-            } => *src,
+            } => src.clone(),
             Expression::IfElseExpression {
                 src,
                 cases,
                 default_case,
-            } => *src,
+            } => src.clone(),
             Expression::SwitchExpression {
                 src,
                 value,
                 cases,
                 default_case,
-            } => *src,
+            } => src.clone(),
             Expression::ElementTag {
                 src,
                 tag_name,
                 attributes,
                 children,
-            } => *src,
+            } => src.clone(),
             Expression::AsCast {
                 src,
                 inner,
                 as_type,
-            } => *src,
-            Expression::ErrorExpression { src, inner } => *src,
-            Expression::RegularExpression { src, expr, flags } => *src,
+            } => src.clone(),
+            Expression::ErrorExpression { src, inner } => src.clone(),
+            Expression::RegularExpression { src, expr, flags } => src.clone(),
         }
     }
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct InlineConstDeclaration<'a> {
-    pub src: Option<Slice<'a>>,
-    pub name: PlainIdentifier<'a>,
-    pub type_annotation: Option<TypeExpression<'a>>,
-    pub value: Box<Expression<'a>>,
+pub struct InlineConstDeclaration {
+    pub src: Option<Slice>,
+    pub name: PlainIdentifier,
+    pub type_annotation: Option<TypeExpression>,
+    pub value: Box<Expression>,
 }
 
-impl<'a> Sourced<'a> for InlineConstDeclaration<'a> {
-    fn src(&self) -> Option<Slice<'a>> {
-        self.src
+impl Sourced for InlineConstDeclaration {
+    fn src(&self) -> Option<Slice> {
+        self.src.clone()
     }
 }
 
@@ -404,52 +396,8 @@ impl BinaryOperator {
 }
 
 #[derive(Clone, Debug)]
-pub struct BinaryOperatorType<'a> {
-    pub left: TypeExpression<'a>,
-    pub right: TypeExpression<'a>,
-    pub output: TypeExpression<'a>,
-}
-
-lazy_static! {
-    pub static ref BINARY_OPERATOR_TYPES: HashMap<BinaryOperator, Vec<BinaryOperatorType<'static>>> = {
-        let mut hm = HashMap::new();
-
-        hm.insert(
-            BinaryOperator::Plus,
-            vec![BinaryOperatorType {
-                left: TypeExpression::NumberType { src: None },
-                right: TypeExpression::NumberType { src: None },
-                output: TypeExpression::NumberType { src: None },
-            }],
-        );
-
-        hm.insert(
-            BinaryOperator::Minus,
-            vec![BinaryOperatorType {
-                left: TypeExpression::NumberType { src: None },
-                right: TypeExpression::NumberType { src: None },
-                output: TypeExpression::NumberType { src: None },
-            }],
-        );
-
-        hm.insert(
-            BinaryOperator::Times,
-            vec![BinaryOperatorType {
-                left: TypeExpression::NumberType { src: None },
-                right: TypeExpression::NumberType { src: None },
-                output: TypeExpression::NumberType { src: None },
-            }],
-        );
-
-        hm.insert(
-            BinaryOperator::Divide,
-            vec![BinaryOperatorType {
-                left: TypeExpression::NumberType { src: None },
-                right: TypeExpression::NumberType { src: None },
-                output: TypeExpression::NumberType { src: None },
-            }],
-        );
-
-        hm
-    };
+pub struct BinaryOperatorType {
+    pub left: TypeExpression,
+    pub right: TypeExpression,
+    pub output: TypeExpression,
 }

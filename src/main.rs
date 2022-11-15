@@ -5,16 +5,31 @@ mod check;
 mod cli;
 mod compile;
 mod errors;
-// mod parse;
-mod parse_2;
-// mod parse_utils;
+mod format;
+mod parse;
 mod precedence;
 mod resolve;
 mod slice;
 mod typeinfer;
+mod utils;
+
+use std::{
+    collections::HashMap,
+    ffi::OsStr,
+    path::{Path, PathBuf},
+};
+
+use ast::{Declaration, Module, ModuleID};
 
 use clap::{command, Parser};
 use cli::Command;
+use glob::{glob, GlobResult, Paths};
+
+use crate::{
+    check::{Check, CheckContext},
+    errors::{pretty_print_parse_error, BagelError, ParseError},
+    parse::parse,
+};
 
 #[derive(Parser, Debug, Clone)]
 // #[command(author, version, about, long_about = None)]
@@ -25,9 +40,142 @@ struct Args {
 
 fn main() {
     let args = Args::parse();
-
     println!("{:?}", args);
+
+    let mut modules_store = HashMap::new();
+
+    match args.command {
+        Command::New { dir } => todo!(),
+        Command::Init => todo!(),
+        Command::Build { target, watch } => todo!(),
+        Command::Run { target, node, deno } => todo!(),
+        Command::Transpile { target, watch } => todo!(),
+        Command::Check { target, watch } => {
+            let entrypoints = get_all_entrypoints(glob(target.as_str()).unwrap());
+
+            for path in entrypoints {
+                let module_id = ModuleID::try_from(path.as_path()).unwrap();
+                load_module_and_dependencies(&mut modules_store, module_id);
+            }
+
+            let mut error_output = String::new();
+            let output_ref = &mut error_output;
+            for module in modules_store.values() {
+                match module {
+                    Ok(module) => {
+                        module.check(
+                            CheckContext { module: &module },
+                            &mut |error: BagelError| {
+                                error.pretty_print(output_ref, &module.src, true);
+                            },
+                        );
+                    }
+                    Err(error) => {
+                        pretty_print_parse_error(error, output_ref, true);
+                    }
+                }
+            }
+            println!("{}", error_output);
+        }
+        Command::Test {
+            target,
+            test_filter,
+            watch,
+        } => todo!(),
+    }
 }
+
+fn get_all_entrypoints(paths: Paths) -> impl Iterator<Item = PathBuf> {
+    paths.filter_map(|path| {
+        let path = path.unwrap();
+
+        if path.is_dir() {
+            todo!() // recurse
+        } else if path.extension() == Some(OsStr::new("bgl")) {
+            Some(path)
+        } else {
+            None
+        }
+    })
+}
+
+fn load_module_and_dependencies(
+    modules_store: &mut HashMap<ModuleID, Result<Module, ParseError>>,
+    module_id: ModuleID,
+) -> std::io::Result<()> {
+    let mut bgl = std::fs::read_to_string(module_id.as_path())?;
+    bgl.push('\n'); // https://github.com/Geal/nom/issues/1573
+
+    let parsed = parse(module_id.clone(), bgl); // TODO
+    modules_store.insert(module_id.clone(), parsed);
+
+    if let Some(Ok(parsed)) = modules_store.get(&module_id) {
+        let imported: Vec<String> = parsed
+            .declarations
+            .iter()
+            .filter_map(|decl| {
+                if let Declaration::ImportAllDeclaration {
+                    src: _,
+                    name: _,
+                    path,
+                } = decl
+                {
+                    Some(path.value.clone())
+                } else if let Declaration::ImportDeclaration {
+                    src: _,
+                    imports: _,
+                    path,
+                } = decl
+                {
+                    Some(path.value.clone())
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        for path in imported {
+            let path = Path::new(&path);
+            let full_path = module_id.as_path().join(path);
+            let other_module_id = ModuleID::try_from(full_path.as_path()).unwrap();
+            // TODO: Handle https modules
+
+            if !modules_store.contains_key(&other_module_id) {
+                load_module_and_dependencies(modules_store, other_module_id)?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+// #[test]
+// fn dfsjlkghdsfg() {
+//     let code = "nil + 2";
+//     let module = &Module {
+//         module_id: "MyModule.bgl".to_owned().into(),
+//         declarations: vec![],
+//     };
+
+//     let parsed = parse_2::expression(Slice::new(code)).unwrap().1;
+
+//     parsed.check(CheckContext { module }, &mut |error| {
+//         println!("{:?}", error);
+//     });
+// }
+
+// #[test]
+// fn foo() {
+//     match parse(Slice::new("[1, 2")).map_err(|(index, message)| BagelError::ParseError {
+//         p: PhantomData,
+//         index,
+//         module_id: "FooBar.bgl".to_owned().into(),
+//         message,
+//     }) {
+//         Ok(parsed) => println!("{}", parsed),
+//         Err(err) => println!("{}", err),
+//     };
+// }
 
 // fn main() {
 //     let bgl = "3 * (nil + 2";

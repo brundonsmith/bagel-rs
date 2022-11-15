@@ -1,60 +1,66 @@
+use std::{
+    borrow::Cow,
+    path::{Path, PathBuf},
+};
+
 use crate::slice::Slice;
 
 use super::Declaration;
 
-pub trait Sourced<'a> {
-    fn src(&self) -> Option<Slice<'a>>;
+pub trait Sourced {
+    fn src(&self) -> Option<Slice>;
 
-    fn contains(&self, other: Slice<'a>) -> bool {
+    fn contains(&self, other: &Slice) -> bool {
         self.src().map(|s| s.contains(other)).unwrap_or(false)
     }
 
-    fn spanning<O: Sourced<'a>>(&self, other: &O) -> Option<Slice<'a>> {
+    fn spanning<O: Sourced>(&self, other: &O) -> Option<Slice> {
         self.src()
             .map(|left_src| {
                 other
                     .src()
-                    .map(move |right_src| left_src.spanning(right_src))
+                    .map(move |right_src| left_src.spanning(&right_src))
             })
             .flatten()
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct ModuleName(String);
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct ModuleID(PathBuf);
 
-impl Into<ModuleName> for String {
-    fn into(self) -> ModuleName {
-        ModuleName(self)
+impl ModuleID {
+    pub fn as_str(&self) -> Cow<'_, str> {
+        self.0.to_string_lossy()
+    }
+
+    pub fn as_path(&self) -> &Path {
+        self.0.as_path()
     }
 }
 
-impl Into<String> for ModuleName {
-    fn into(self) -> String {
-        self.0
-    }
-}
+impl TryFrom<&Path> for ModuleID {
+    type Error = std::io::Error;
 
-impl<'a> Into<&'a str> for &'a ModuleName {
-    fn into(self) -> &'a str {
-        self.0.as_str()
+    fn try_from(p: &Path) -> Result<ModuleID, std::io::Error> {
+        Ok(ModuleID(p.canonicalize()?))
     }
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct Module<'a> {
-    pub module_name: ModuleName,
-    pub declarations: Vec<Declaration<'a>>,
+pub struct Module {
+    pub module_id: ModuleID,
+    pub src: String,
+    pub declarations: Vec<Declaration>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct PlainIdentifier<'a> {
-    pub src: Option<Slice<'a>>,
-    pub name: Slice<'a>,
+pub struct PlainIdentifier {
+    pub src: Option<Slice>,
+    pub name: String,
 }
 
-impl<'a> Sourced<'a> for PlainIdentifier<'a> {
-    fn src(&self) -> Option<Slice<'a>> {
-        self.src
+impl Sourced for PlainIdentifier {
+    fn src(&self) -> Option<Slice> {
+        self.src.clone()
     }
 }

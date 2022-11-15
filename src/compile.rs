@@ -1,12 +1,12 @@
-use std::fmt::Result;
+use std::fmt::{Formatter, Result, Write};
 
-use crate::ast::{Declaration, Expression, Module, TypeExpression};
+use crate::ast::*;
 
 pub trait Compile {
     fn compile(&self, f: &mut std::fmt::Formatter<'_>) -> Result;
 }
 
-impl<'a> Compile for Module<'a> {
+impl Compile for Module {
     fn compile(&self, f: &mut std::fmt::Formatter<'_>) -> Result {
         for decl in &self.declarations {
             decl.compile(f)?;
@@ -16,7 +16,7 @@ impl<'a> Compile for Module<'a> {
     }
 }
 
-impl<'a> Compile for Declaration<'a> {
+impl Compile for Declaration {
     fn compile(&self, f: &mut std::fmt::Formatter<'_>) -> Result {
         match self {
             Declaration::ValueDeclaration {
@@ -24,6 +24,9 @@ impl<'a> Compile for Declaration<'a> {
                 name,
                 type_annotation,
                 value,
+                is_const,
+                exported,
+                platforms,
             } => {
                 f.write_str("const ")?;
                 f.write_str(name.name.as_str())?;
@@ -69,29 +72,65 @@ impl<'a> Compile for Declaration<'a> {
     }
 }
 
-impl<'a> Compile for Expression<'a> {
+impl Compile for Expression {
     fn compile(&self, f: &mut std::fmt::Formatter<'_>) -> Result {
         match self {
-            Expression::NilLiteral { src } => f.write_str("undefined"),
-            Expression::NumberLiteral { src, value } => f.write_str(value.as_str()),
+            Expression::NilLiteral { src } => f.write_str("undefined")?,
+            Expression::BooleanLiteral { src, value } => todo!(),
+            Expression::NumberLiteral { src, value } => f.write_str(value.as_str())?,
+            Expression::StringLiteral { src, tag, segments } => todo!(),
+            Expression::ExactStringLiteral { src, tag, value } => {
+                f.write_char('`')?;
+                f.write_str(value.as_str())?;
+                f.write_char('`')?;
+            }
+            Expression::ArrayLiteral { src: _, entries } => {
+                f.write_char('[')?;
+                for (index, entry) in entries.iter().enumerate() {
+                    if index > 0 {
+                        f.write_char(',')?;
+                    }
+
+                    f.write_char(' ')?;
+                    entry.compile(f)?;
+                }
+                f.write_str(" ]")?;
+            }
+            Expression::ObjectLiteral { src: _, entries } => {
+                f.write_char('{')?;
+                for (index, entry) in entries.iter().enumerate() {
+                    if index > 0 {
+                        f.write_char(',')?;
+                    }
+
+                    f.write_char(' ')?;
+                    entry.compile(f)?;
+                }
+                f.write_str(" }")?;
+            }
             Expression::BinaryOperation {
                 src,
                 left,
                 op,
                 right,
-            } => todo!(),
-            Expression::Parenthesis { src, inner } => todo!(),
-            Expression::LocalIdentifier { src, name } => todo!(),
+            } => {
+                left.compile(f)?;
+                f.write_char(' ')?;
+                op.compile(f)?;
+                f.write_char(' ')?;
+                right.compile(f)?;
+            }
+            Expression::Parenthesis { src, inner } => {
+                f.write_char('(')?;
+                inner.compile(f)?;
+                f.write_char(')')?;
+            }
+            Expression::LocalIdentifier { src, name } => f.write_str(name.as_str())?,
             Expression::InlineConstGroup {
                 src,
                 declarations,
                 inner,
             } => todo!(),
-            Expression::BooleanLiteral { src, value } => todo!(),
-            Expression::StringLiteral { src, value } => todo!(),
-            Expression::ExactStringLiteral { src, tag, segments } => todo!(),
-            Expression::ArrayLiteral { src, entries } => todo!(),
-            Expression::ObjectLiteral { src, entries } => todo!(),
             Expression::NegationOperation { src, inner } => todo!(),
             Expression::Func {
                 src,
@@ -162,11 +201,60 @@ impl<'a> Compile for Expression<'a> {
             } => todo!(),
             Expression::ErrorExpression { src, inner } => todo!(),
             Expression::RegularExpression { src, expr, flags } => todo!(),
+        };
+
+        Ok(())
+    }
+}
+
+impl Compile for BinaryOperator {
+    fn compile(&self, f: &mut std::fmt::Formatter<'_>) -> Result {
+        f.write_str(self.symbol())
+    }
+}
+
+impl Compile for ArrayLiteralEntry {
+    fn compile(&self, f: &mut Formatter<'_>) -> Result {
+        match self {
+            ArrayLiteralEntry::Spread(spread) => {
+                f.write_str("...")?;
+                f.write_str(spread.name.as_str())
+            }
+            ArrayLiteralEntry::Element(element) => element.compile(f),
         }
     }
 }
 
-impl<'a> Compile for TypeExpression<'a> {
+impl Compile for ObjectLiteralEntry {
+    fn compile(&self, f: &mut Formatter<'_>) -> Result {
+        match self {
+            ObjectLiteralEntry::Variable(x) => x.compile(f),
+            ObjectLiteralEntry::Spread(spread) => {
+                f.write_str("...")?;
+                f.write_str(spread.name.as_str())
+            }
+            ObjectLiteralEntry::KeyValue(key, value) => {
+                key.compile(f)?;
+                f.write_str(": ")?;
+                value.compile(f)
+            }
+        }
+    }
+}
+
+impl Compile for LocalIdentifier {
+    fn compile(&self, f: &mut Formatter<'_>) -> Result {
+        f.write_str(self.name.as_str())
+    }
+}
+
+impl Compile for PlainIdentifier {
+    fn compile(&self, f: &mut Formatter<'_>) -> Result {
+        f.write_str(self.name.as_str())
+    }
+}
+
+impl Compile for TypeExpression {
     fn compile(&self, f: &mut std::fmt::Formatter<'_>) -> Result {
         match self {
             TypeExpression::UnknownType { src, mutability } => f.write_str("unknown"),

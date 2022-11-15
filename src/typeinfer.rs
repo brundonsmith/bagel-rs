@@ -1,47 +1,71 @@
 use crate::{
-    ast::{BinaryOperator, Expression, Module, Mutability, TypeExpression, ValueDeclaration},
+    ast::*,
+    check::CheckContext,
     resolve::{Binding, Resolve},
 };
 
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct InferTypeContext<'a> {
-    pub module: &'a Module<'a>,
+    pub module: &'a Module,
 }
 
-impl<'a> Expression<'a> {
-    pub fn infer_type(&self, ctx: &'a InferTypeContext) -> TypeExpression<'a> {
+impl<'a> From<CheckContext<'a>> for InferTypeContext<'a> {
+    fn from(CheckContext { module }: CheckContext<'a>) -> Self {
+        Self { module }
+    }
+}
+
+impl<'a> Expression {
+    pub fn infer_type(&self, ctx: InferTypeContext<'a>) -> TypeExpression {
         match self {
             Expression::NilLiteral { src } => TypeExpression::NilType { src: *src },
             Expression::NumberLiteral { src, value: _ } => TypeExpression::NumberType { src: *src },
             Expression::BinaryOperation {
-                src: _,
+                src,
                 left,
                 op,
                 right,
-            } => {
-                let left_type = left.infer_type(ctx);
-                let right_type = right.infer_type(ctx);
+            } => match op {
+                BinaryOperator::NullishCoalescing => todo!(),
+                BinaryOperator::Or => todo!(),
+                BinaryOperator::And => todo!(),
+                BinaryOperator::Equals => TypeExpression::BooleanType { src: *src },
+                BinaryOperator::NotEquals => TypeExpression::BooleanType { src: *src },
+                BinaryOperator::LessEqual => TypeExpression::BooleanType { src: *src },
+                BinaryOperator::GreaterEqual => TypeExpression::BooleanType { src: *src },
+                BinaryOperator::Less => TypeExpression::BooleanType { src: *src },
+                BinaryOperator::Greater => TypeExpression::BooleanType { src: *src },
+                BinaryOperator::Plus => {
+                    let left_type = left.infer_type(ctx);
+                    let right_type = right.infer_type(ctx);
 
-                match op {
-                    BinaryOperator::NullishCoalescing => todo!(),
-                    BinaryOperator::Or => todo!(),
-                    BinaryOperator::And => todo!(),
-                    BinaryOperator::Equals => todo!(),
-                    BinaryOperator::NotEquals => todo!(),
-                    BinaryOperator::LessEqual => todo!(),
-                    BinaryOperator::GreaterEqual => todo!(),
-                    BinaryOperator::Less => todo!(),
-                    BinaryOperator::Greater => todo!(),
-                    BinaryOperator::Plus => todo!(),
-                    BinaryOperator::Minus => todo!(),
-                    BinaryOperator::Times => todo!(),
-                    BinaryOperator::Divide => todo!(),
-                    BinaryOperator::InstanceOf => todo!(),
+                    let ctx: SubsumationContext = ctx.into();
+
+                    if NUMBER_TYPE.subsumes(ctx, &left_type) {
+                        if NUMBER_TYPE.subsumes(ctx, &right_type) {
+                            return TypeExpression::NumberType { src: *src };
+                        } else if STRING_TYPE.subsumes(ctx, &right_type) {
+                            return TypeExpression::StringType { src: *src };
+                        }
+                    } else if STRING_TYPE.subsumes(ctx, &left_type) {
+                        if NUMBER_TYPE.subsumes(ctx, &right_type)
+                            || STRING_TYPE.subsumes(ctx, &right_type)
+                        {
+                            return TypeExpression::StringType { src: *src };
+                        }
+                    }
+
+                    UNKNOWN_TYPE
                 }
-            }
+                BinaryOperator::Minus => TypeExpression::NumberType { src: *src },
+                BinaryOperator::Times => TypeExpression::NumberType { src: *src },
+                BinaryOperator::Divide => TypeExpression::NumberType { src: *src },
+                BinaryOperator::InstanceOf => TypeExpression::BooleanType { src: *src },
+            },
             Expression::Parenthesis { src: _, inner } => inner.infer_type(ctx),
             Expression::LocalIdentifier { src, name } => {
                 let binding = src
-                    .map(|s| ctx.module.resolve_symbol_within(name.as_str(), s))
+                    .map(|s| ctx.module.resolve_symbol_within(name.as_str(), &s))
                     .flatten();
 
                 binding
@@ -51,6 +75,9 @@ impl<'a> Expression<'a> {
                             name: _,
                             type_annotation,
                             value,
+                            is_const: _,
+                            exported: _,
+                            platforms: _,
                         }) => type_annotation.unwrap_or_else(move || value.infer_type(ctx)),
                         Binding::InlineConstDeclaration(_) => todo!(),
                     })
@@ -65,8 +92,8 @@ impl<'a> Expression<'a> {
                 inner,
             } => inner.infer_type(ctx),
             Expression::BooleanLiteral { src, value } => todo!(),
-            Expression::StringLiteral { src, value } => todo!(),
-            Expression::ExactStringLiteral { src, tag, segments } => todo!(),
+            Expression::StringLiteral { src, tag, segments } => todo!(),
+            Expression::ExactStringLiteral { src, tag, value } => todo!(),
             Expression::ArrayLiteral { src, entries } => todo!(),
             Expression::ObjectLiteral { src, entries } => todo!(),
             Expression::NegationOperation { src, inner } => todo!(),

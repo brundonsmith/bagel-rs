@@ -1,4 +1,4 @@
-use std::{collections::HashSet, ops::Range};
+use std::collections::HashSet;
 
 use enum_variant_type::EnumVariantType;
 
@@ -10,74 +10,77 @@ use super::{
 };
 
 #[derive(Clone, Debug, PartialEq, EnumVariantType)]
-pub enum Declaration<'a> {
+pub enum Declaration {
     #[evt(derive(Debug, Clone, PartialEq))]
     ImportAllDeclaration {
-        src: Option<Slice<'a>>,
-        name: PlainIdentifier<'a>,
-        path: ExactStringLiteral<'a>,
+        src: Option<Slice>,
+        name: PlainIdentifier,
+        path: ExactStringLiteral,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ImportDeclaration {
-        src: Option<Slice<'a>>,
-        imports: Vec<ImportItem<'a>>,
-        path: ExactStringLiteral<'a>,
+        src: Option<Slice>,
+        imports: Vec<ImportItem>,
+        path: ExactStringLiteral,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     TypeDeclaration {
-        src: Option<Slice<'a>>,
-        name: PlainIdentifier<'a>,
-        declared_type: TypeExpression<'a>,
+        src: Option<Slice>,
+        name: PlainIdentifier,
+        declared_type: TypeExpression,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     FuncDeclaration {
-        src: Option<Slice<'a>>,
-        name: PlainIdentifier<'a>,
-        func: Func<'a>, // TODO:  | JsFunc
+        src: Option<Slice>,
+        name: PlainIdentifier,
+        func: Func, // TODO:  | JsFunc
         platforms: HashSet<Platform>,
-        decorators: Vec<Decorator<'a>>,
+        decorators: Vec<Decorator>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ProcDeclaration {
-        src: Option<Slice<'a>>,
-        name: PlainIdentifier<'a>,
-        proc: Proc<'a>, // TODO:  | JsProc
+        src: Option<Slice>,
+        name: PlainIdentifier,
+        proc: Proc, // TODO:  | JsProc
         platforms: HashSet<Platform>,
-        decorators: Vec<Decorator<'a>>,
+        decorators: Vec<Decorator>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ValueDeclaration {
-        src: Option<Slice<'a>>,
-        name: PlainIdentifier<'a>,
-        type_annotation: Option<TypeExpression<'a>>,
-        value: Expression<'a>,
+        src: Option<Slice>,
+        name: PlainIdentifier,
+        type_annotation: Option<TypeExpression>,
+        value: Expression,
+        is_const: bool,
+        exported: bool,
+        platforms: HashSet<Platform>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     TestExprDeclaration {
-        src: Option<Slice<'a>>,
-        name: ExactStringLiteral<'a>,
-        expr: Expression<'a>,
+        src: Option<Slice>,
+        name: ExactStringLiteral,
+        expr: Expression,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     TestBlockDeclaration {
-        src: Option<Slice<'a>>,
-        name: ExactStringLiteral<'a>,
-        block: Vec<Statement<'a>>,
+        src: Option<Slice>,
+        name: ExactStringLiteral,
+        block: Vec<Statement>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     TestTypeDeclaration {
-        src: Option<Slice<'a>>,
-        name: ExactStringLiteral<'a>,
-        destination_type: TypeExpression<'a>,
-        value_type: TypeExpression<'a>,
+        src: Option<Slice>,
+        name: ExactStringLiteral,
+        destination_type: TypeExpression,
+        value_type: TypeExpression,
     },
 }
 
@@ -89,26 +92,29 @@ pub enum Platform {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Decorator<'a> {
-    LocalIdentifier(LocalIdentifier<'a>),
-    Invocation(Invocation<'a>),
+pub enum Decorator {
+    LocalIdentifier(LocalIdentifier),
+    Invocation(Invocation),
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct ImportItem<'a> {
-    pub name: PlainIdentifier<'a>,
-    pub alias: Option<PlainIdentifier<'a>>,
+pub struct ImportItem {
+    pub name: PlainIdentifier,
+    pub alias: Option<PlainIdentifier>,
 }
 
-impl<'a> Sourced<'a> for Declaration<'a> {
-    fn src(&self) -> Option<Slice<'a>> {
+impl Sourced for Declaration {
+    fn src(&self) -> Option<Slice> {
         match self {
             Declaration::ValueDeclaration {
                 src,
                 name: _,
                 type_annotation: _,
                 value: _,
-            } => *src,
+                is_const: _,
+                exported: _,
+                platforms: _,
+            } => src.clone(),
             Declaration::ImportAllDeclaration { src, name, path } => todo!(),
             Declaration::ImportDeclaration { src, imports, path } => todo!(),
             Declaration::TypeDeclaration {

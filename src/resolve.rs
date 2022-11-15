@@ -3,15 +3,15 @@ use crate::{
     slice::Slice,
 };
 
-pub trait Resolve<'a> {
-    fn resolve_symbol_within(&self, symbol: &str, slice: Slice<'a>) -> Option<Binding>;
+pub trait Resolve {
+    fn resolve_symbol_within(&self, symbol: &str, slice: &Slice) -> Option<Binding>;
 }
 
-impl<'a> Resolve<'a> for Module<'a> {
-    fn resolve_symbol_within(&self, symbol: &str, slice: Slice<'a>) -> Option<Binding> {
+impl Resolve for Module {
+    fn resolve_symbol_within(&self, symbol: &str, slice: &Slice) -> Option<Binding> {
         // look inside nested contexts
         for decl in &self.declarations {
-            let inner = decl.resolve_symbol_within(symbol, slice);
+            let inner = decl.resolve_symbol_within(symbol, &slice);
 
             if inner.is_some() {
                 return inner;
@@ -26,6 +26,9 @@ impl<'a> Resolve<'a> for Module<'a> {
                     name,
                     type_annotation: _,
                     value: _,
+                    is_const: _,
+                    exported: _,
+                    platforms: _,
                 } => {
                     if name.name.as_str() == symbol {
                         return Some(Binding::ValueDeclaration(
@@ -69,17 +72,20 @@ impl<'a> Resolve<'a> for Module<'a> {
     }
 }
 
-impl<'a> Resolve<'a> for Declaration<'a> {
-    fn resolve_symbol_within(&self, symbol: &str, slice: Slice<'a>) -> Option<Binding> {
+impl Resolve for Declaration {
+    fn resolve_symbol_within(&self, symbol: &str, slice: &Slice) -> Option<Binding> {
         match self {
             Declaration::ValueDeclaration {
                 src: _,
                 name: _,
                 type_annotation: _,
                 value,
+                is_const: _,
+                exported: _,
+                platforms: _,
             } => {
-                if value.contains(slice) {
-                    return value.resolve_symbol_within(symbol, slice);
+                if value.contains(&slice) {
+                    return value.resolve_symbol_within(symbol, &slice);
                 }
             }
             Declaration::ImportAllDeclaration { src, name, path } => todo!(),
@@ -117,8 +123,8 @@ impl<'a> Resolve<'a> for Declaration<'a> {
     }
 }
 
-impl<'a> Resolve<'a> for Expression<'a> {
-    fn resolve_symbol_within(&self, symbol: &str, slice: Slice<'a>) -> Option<Binding> {
+impl Resolve for Expression {
+    fn resolve_symbol_within(&self, symbol: &str, slice: &Slice) -> Option<Binding> {
         match self {
             Expression::BinaryOperation {
                 src: _,
@@ -155,8 +161,8 @@ impl<'a> Resolve<'a> for Expression<'a> {
                 }
             }
             Expression::BooleanLiteral { src, value } => todo!(),
-            Expression::StringLiteral { src, value } => todo!(),
-            Expression::ExactStringLiteral { src, tag, segments } => todo!(),
+            Expression::StringLiteral { src, tag, segments } => todo!(),
+            Expression::ExactStringLiteral { src, tag, value } => todo!(),
             Expression::ArrayLiteral { src, entries } => todo!(),
             Expression::ObjectLiteral { src, entries } => todo!(),
             Expression::NegationOperation { src, inner } => todo!(),
@@ -235,8 +241,8 @@ impl<'a> Resolve<'a> for Expression<'a> {
     }
 }
 
-impl<'a> Resolve<'a> for InlineConstDeclaration<'a> {
-    fn resolve_symbol_within(&self, symbol: &str, slice: Slice<'a>) -> Option<Binding<'a>> {
+impl Resolve for InlineConstDeclaration {
+    fn resolve_symbol_within(&self, symbol: &str, slice: &Slice) -> Option<Binding> {
         if self.name.name.as_str() == symbol {
             Some(Binding::InlineConstDeclaration(self.clone()))
         } else {
@@ -245,7 +251,7 @@ impl<'a> Resolve<'a> for InlineConstDeclaration<'a> {
     }
 }
 
-pub enum Binding<'a> {
-    ValueDeclaration(ValueDeclaration<'a>),
-    InlineConstDeclaration(InlineConstDeclaration<'a>),
+pub enum Binding {
+    ValueDeclaration(ValueDeclaration),
+    InlineConstDeclaration(InlineConstDeclaration),
 }
