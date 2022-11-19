@@ -23,7 +23,7 @@ use ast::{Declaration, Module, ModuleID};
 
 use clap::{command, Parser};
 use cli::Command;
-use glob::{glob, GlobResult, Paths};
+use glob::{glob, Paths};
 
 use crate::{
     check::{Check, CheckContext},
@@ -114,20 +114,10 @@ fn load_module_and_dependencies(
             .declarations
             .iter()
             .filter_map(|decl| {
-                if let Declaration::ImportAllDeclaration {
-                    src: _,
-                    name: _,
-                    path,
-                } = decl
-                {
-                    Some(path.value.clone())
-                } else if let Declaration::ImportDeclaration {
-                    src: _,
-                    imports: _,
-                    path,
-                } = decl
-                {
-                    Some(path.value.clone())
+                if let Declaration::ImportAllDeclaration { name: _, path } = &decl.node {
+                    Some(path.node.value.clone())
+                } else if let Declaration::ImportDeclaration { imports: _, path } = &decl.node {
+                    Some(path.node.value.clone())
                 } else {
                     None
                 }
@@ -235,7 +225,7 @@ fn load_module_and_dependencies(
 //                 );
 
 //             let report = match error.reason() {
-//                 chumsky::error::SimpleReason::Unclosed { src, delimiter } => report.with_label(
+//                 chumsky::error::SimpleReason::Unclosed {  delimiter } => report.with_label(
 //                     Label::new(src.clone())
 //                         .with_message(format!(
 //                             "Unclosed delimiter {}",

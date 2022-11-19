@@ -7,24 +7,6 @@ use crate::slice::Slice;
 
 use super::Declaration;
 
-pub trait Sourced {
-    fn src(&self) -> Option<Slice>;
-
-    fn contains(&self, other: &Slice) -> bool {
-        self.src().map(|s| s.contains(other)).unwrap_or(false)
-    }
-
-    fn spanning<O: Sourced>(&self, other: &O) -> Option<Slice> {
-        self.src()
-            .map(|left_src| {
-                other
-                    .src()
-                    .map(move |right_src| left_src.spanning(&right_src))
-            })
-            .flatten()
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ModuleID(PathBuf);
 
@@ -50,17 +32,39 @@ impl TryFrom<&Path> for ModuleID {
 pub struct Module {
     pub module_id: ModuleID,
     pub src: String,
-    pub declarations: Vec<Declaration>,
+    pub declarations: Vec<Src<Declaration>>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct PlainIdentifier {
-    pub src: Option<Slice>,
     pub name: String,
 }
 
-impl Sourced for PlainIdentifier {
-    fn src(&self) -> Option<Slice> {
-        self.src.clone()
+#[derive(Clone, Debug, PartialEq)]
+pub struct Src<T> {
+    pub src: Option<Slice>,
+    pub node: T,
+}
+
+impl<T: Clone + std::fmt::Debug + PartialEq> Src<T> {
+    pub fn contains(&self, other: &Slice) -> bool {
+        self.src.map(|s| s.contains(other)).unwrap_or(false)
+    }
+
+    pub fn spanning<O>(&self, other: &Src<O>) -> Option<Slice> {
+        self.src
+            .map(|left_src| {
+                other
+                    .src
+                    .map(move |right_src| left_src.spanning(&right_src))
+            })
+            .flatten()
+    }
+
+    pub fn map<O, F: Fn(T) -> O>(self, f: F) -> Src<O> {
+        Src {
+            src: self.src,
+            node: f(self.node),
+        }
     }
 }

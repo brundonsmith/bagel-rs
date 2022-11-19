@@ -5,221 +5,180 @@ use crate::{
     ast::{BooleanLiteral, ExactStringLiteral, Expression, Module, NumberLiteral, PlainIdentifier},
     check::CheckContext,
     errors::SubsumationIssue,
-    slice::Slice,
     typeinfer::InferTypeContext,
 };
+
+use super::Src;
 
 #[derive(Clone, Debug, EnumVariantType)]
 pub enum TypeExpression {
     #[evt(derive(Debug, Clone, PartialEq))]
-    UnionType {
-        src: Option<Slice>,
-        members: Vec<TypeExpression>,
-    },
+    UnionType { members: Vec<Src<TypeExpression>> },
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    MaybeType {
-        src: Option<Slice>,
-        inner: Box<TypeExpression>,
-    },
+    MaybeType { inner: Box<Src<TypeExpression>> },
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    NamedType {
-        src: Option<Slice>,
-        name: PlainIdentifier,
-    },
+    NamedType { name: Src<PlainIdentifier> },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     GenericParamType {
-        src: Option<Slice>,
-        name: PlainIdentifier,
-        extends: Option<Box<TypeExpression>>,
+        name: Src<PlainIdentifier>,
+        extends: Option<Box<Src<TypeExpression>>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ProcType {
-        src: Option<Slice>,
-        args: Args,
+        args: Src<Args>,
         is_pure: bool,
         is_async: bool,
-        throws: Option<Box<TypeExpression>>,
+        throws: Option<Box<Src<TypeExpression>>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     FuncType {
-        src: Option<Slice>,
-        args: Args,
+        args: Src<Args>,
         is_pure: bool,
-        returns: Option<Box<TypeExpression>>,
+        returns: Option<Box<Src<TypeExpression>>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     GenericType {
-        src: Option<Slice>,
-        type_params: Vec<(PlainIdentifier, Option<TypeExpression>)>,
-        inner: Box<TypeExpression>,
+        type_params: Vec<(Src<PlainIdentifier>, Option<Src<TypeExpression>>)>,
+        inner: Box<Src<TypeExpression>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     BoundGenericType {
-        src: Option<Slice>,
-        type_args: Vec<TypeExpression>,
-        generic: Box<TypeExpression>,
+        type_args: Vec<Src<TypeExpression>>,
+        generic: Box<Src<TypeExpression>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ObjectType {
-        src: Option<Slice>,
         entries: Vec<ObjectTypeEntry>,
         mutability: Mutability,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     InterfaceType {
-        src: Option<Slice>,
-        entries: Vec<(PlainIdentifier, TypeExpression)>,
+        entries: Vec<(Src<PlainIdentifier>, Src<TypeExpression>)>,
         mutability: Mutability,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     RecordType {
-        src: Option<Slice>,
-        key_type: Box<TypeExpression>,
-        value_type: Box<TypeExpression>,
+        key_type: Box<Src<TypeExpression>>,
+        value_type: Box<Src<TypeExpression>>,
         mutability: Mutability,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ArrayType {
-        src: Option<Slice>,
-        element: Box<TypeExpression>,
+        element: Box<Src<TypeExpression>>,
         mutability: Mutability,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     TupleType {
-        src: Option<Slice>,
-        members: Vec<TypeExpression>,
+        members: Vec<Src<TypeExpression>>,
         mutability: Mutability,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    ReadonlyType {
-        src: Option<Slice>,
-        inner: Box<TypeExpression>,
-    },
+    ReadonlyType { inner: Box<Src<TypeExpression>> },
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    StringType { src: Option<Slice> },
+    StringType,
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    NumberType { src: Option<Slice> },
+    NumberType,
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    BooleanType { src: Option<Slice> },
+    BooleanType,
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    NilType { src: Option<Slice> },
+    NilType,
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    LiteralType {
-        src: Option<Slice>,
-        value: LiteralTypeValue,
-    },
+    LiteralType { value: LiteralTypeValue },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     NominalType {
-        src: Option<Slice>,
         name: String,
-        inner: Option<Box<TypeExpression>>,
+        inner: Option<Box<Src<TypeExpression>>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    IteratorType {
-        src: Option<Slice>,
-        inner: Box<TypeExpression>,
-    },
+    IteratorType { inner: Box<Src<TypeExpression>> },
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    PlanType {
-        src: Option<Slice>,
-        inner: Box<TypeExpression>,
-    },
+    PlanType { inner: Box<Src<TypeExpression>> },
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    ErrorType {
-        src: Option<Slice>,
-        inner: Box<TypeExpression>,
-    },
+    ErrorType { inner: Box<Src<TypeExpression>> },
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    ParenthesizedType {
-        src: Option<Slice>,
-        inner: Box<TypeExpression>,
-    },
+    ParenthesizedType { inner: Box<Src<TypeExpression>> },
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    TypeofType {
-        src: Option<Slice>,
-        expression: Expression,
-    },
+    TypeofType { expression: Expression },
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    KeyofType {
-        src: Option<Slice>,
-        inner: Box<TypeExpression>,
-    },
+    KeyofType { inner: Box<Src<TypeExpression>> },
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    ValueofType {
-        src: Option<Slice>,
-        inner: Box<TypeExpression>,
-    },
+    ValueofType { inner: Box<Src<TypeExpression>> },
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    ElementofType {
-        src: Option<Slice>,
-        inner: Box<TypeExpression>,
-    },
+    ElementofType { inner: Box<Src<TypeExpression>> },
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    UnknownType {
-        src: Option<Slice>,
-
-        mutability: Mutability,
-    },
+    UnknownType { mutability: Mutability },
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    PoisonedType { src: Option<Slice> },
+    PoisonedType,
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    AnyType { src: Option<Slice> },
+    AnyType,
 
     #[evt(derive(Debug, Clone, PartialEq))]
     RegularExpressionType {
-        src: Option<Slice>,
         // TODO: Number of match groups?
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     PropertyType {
-        src: Option<Slice>,
-        subject: Box<TypeExpression>,
-        property: PlainIdentifier, // TODO:  | TypeExpression
+        subject: Box<Src<TypeExpression>>,
+        property: Src<PlainIdentifier>, // TODO:  | TypeExpression
         optional: bool,
     },
 }
 
-pub const NIL_TYPE: TypeExpression = TypeExpression::NilType { src: None };
-pub const BOOLEAN_TYPE: TypeExpression = TypeExpression::BooleanType { src: None };
-pub const NUMBER_TYPE: TypeExpression = TypeExpression::NumberType { src: None };
-pub const STRING_TYPE: TypeExpression = TypeExpression::StringType { src: None };
-pub const UNKNOWN_TYPE: TypeExpression = TypeExpression::UnknownType {
+pub const NIL_TYPE: Src<TypeExpression> = Src {
     src: None,
-    mutability: Mutability::Mutable,
+    node: TypeExpression::NilType,
+};
+pub const BOOLEAN_TYPE: Src<TypeExpression> = Src {
+    src: None,
+    node: TypeExpression::BooleanType,
+};
+pub const NUMBER_TYPE: Src<TypeExpression> = Src {
+    src: None,
+    node: TypeExpression::NumberType,
+};
+pub const STRING_TYPE: Src<TypeExpression> = Src {
+    src: None,
+    node: TypeExpression::StringType,
+};
+pub const UNKNOWN_TYPE: Src<TypeExpression> = Src {
+    src: None,
+    node: TypeExpression::UnknownType {
+        mutability: Mutability::Mutable,
+    },
 };
 
-impl TypeExpression {
+impl Src<TypeExpression> {
     pub fn subsumation_issues(
         &self,
         ctx: SubsumationContext,
@@ -232,8 +191,8 @@ impl TypeExpression {
             return None;
         }
 
-        match &destination {
-            TypeExpression::UnionType { src, members } => {
+        match &destination.node {
+            TypeExpression::UnionType { members } => {
                 if members.iter().any(|member| member.subsumes(ctx, &value)) {
                     return None;
                 }
@@ -260,9 +219,11 @@ impl TypeExpression {
     }
 
     pub fn union(self, other: Self) -> Self {
-        TypeExpression::UnionType {
+        Src {
             src: None,
-            members: vec![self, other],
+            node: TypeExpression::UnionType {
+                members: vec![self, other],
+            },
         }
     }
 }
@@ -307,22 +268,22 @@ pub enum Mutability {
 pub enum Args {
     Individual(Vec<Arg>),
     Spread {
-        name: Option<PlainIdentifier>,
-        type_annotation: Box<TypeExpression>,
+        name: Option<Src<PlainIdentifier>>,
+        type_annotation: Box<Src<TypeExpression>>,
     },
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Arg {
-    pub name: PlainIdentifier,
-    pub type_annotation: Option<TypeExpression>,
+    pub name: Src<PlainIdentifier>,
+    pub type_annotation: Option<Src<TypeExpression>>,
     pub optional: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ObjectTypeEntry {
     Spread(NamedType),
-    KeyValue(PlainIdentifier, Box<TypeExpression>),
+    KeyValue(Src<PlainIdentifier>, Box<Src<TypeExpression>>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -335,58 +296,33 @@ pub enum LiteralTypeValue {
 impl PartialEq for TypeExpression {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (
-                Self::UnionType {
-                    src: _,
-                    members: l_members,
-                },
-                Self::UnionType {
-                    src: _,
-                    members: r_members,
-                },
-            ) => l_members == r_members,
-            (
-                Self::MaybeType {
-                    src: _,
-                    inner: l_inner,
-                },
-                Self::MaybeType {
-                    src: _,
-                    inner: r_inner,
-                },
-            ) => l_inner == r_inner,
-            (
-                Self::NamedType {
-                    src: _,
-                    name: l_name,
-                },
-                Self::NamedType {
-                    src: _,
-                    name: r_name,
-                },
-            ) => l_name == r_name,
+            (Self::UnionType { members: l_members }, Self::UnionType { members: r_members }) => {
+                l_members == r_members
+            }
+            (Self::MaybeType { inner: l_inner }, Self::MaybeType { inner: r_inner }) => {
+                l_inner == r_inner
+            }
+            (Self::NamedType { name: l_name }, Self::NamedType { name: r_name }) => {
+                l_name == r_name
+            }
             (
                 Self::GenericParamType {
-                    src: _,
                     name: l_name,
                     extends: l_extends,
                 },
                 Self::GenericParamType {
-                    src: _,
                     name: r_name,
                     extends: r_extends,
                 },
             ) => l_name == r_name && l_extends == r_extends,
             (
                 Self::ProcType {
-                    src: _,
                     args: l_args,
                     is_pure: l_is_pure,
                     is_async: l_is_async,
                     throws: l_throws,
                 },
                 Self::ProcType {
-                    src: _,
                     args: r_args,
                     is_pure: r_is_pure,
                     is_async: r_is_async,
@@ -400,13 +336,11 @@ impl PartialEq for TypeExpression {
             }
             (
                 Self::FuncType {
-                    src: _,
                     args: l_args,
                     is_pure: l_is_pure,
                     returns: l_returns,
                 },
                 Self::FuncType {
-                    src: _,
                     args: r_args,
                     is_pure: r_is_pure,
                     returns: r_returns,
@@ -414,61 +348,51 @@ impl PartialEq for TypeExpression {
             ) => l_args == r_args && l_is_pure == r_is_pure && l_returns == r_returns,
             (
                 Self::GenericType {
-                    src: _,
                     type_params: l_type_params,
                     inner: l_inner,
                 },
                 Self::GenericType {
-                    src: _,
                     type_params: r_type_params,
                     inner: r_inner,
                 },
             ) => l_type_params == r_type_params && l_inner == r_inner,
             (
                 Self::BoundGenericType {
-                    src: _,
                     type_args: l_type_args,
                     generic: l_generic,
                 },
                 Self::BoundGenericType {
-                    src: _,
                     type_args: r_type_args,
                     generic: r_generic,
                 },
             ) => l_type_args == r_type_args && l_generic == r_generic,
             (
                 Self::ObjectType {
-                    src: _,
                     entries: l_entries,
                     mutability: l_mutability,
                 },
                 Self::ObjectType {
-                    src: _,
                     entries: r_entries,
                     mutability: r_mutability,
                 },
             ) => l_entries == r_entries && l_mutability == r_mutability,
             (
                 Self::InterfaceType {
-                    src: _,
                     entries: l_entries,
                     mutability: l_mutability,
                 },
                 Self::InterfaceType {
-                    src: _,
                     entries: r_entries,
                     mutability: r_mutability,
                 },
             ) => l_entries == r_entries && l_mutability == r_mutability,
             (
                 Self::RecordType {
-                    src: _,
                     key_type: l_key_type,
                     value_type: l_value_type,
                     mutability: l_mutability,
                 },
                 Self::RecordType {
-                    src: _,
                     key_type: r_key_type,
                     value_type: r_value_type,
                     mutability: r_mutability,
@@ -480,168 +404,92 @@ impl PartialEq for TypeExpression {
             }
             (
                 Self::ArrayType {
-                    src: _,
                     element: l_element,
                     mutability: l_mutability,
                 },
                 Self::ArrayType {
-                    src: _,
                     element: r_element,
                     mutability: r_mutability,
                 },
             ) => l_element == r_element && l_mutability == r_mutability,
             (
                 Self::TupleType {
-                    src: _,
                     members: l_members,
                     mutability: l_mutability,
                 },
                 Self::TupleType {
-                    src: _,
                     members: r_members,
                     mutability: r_mutability,
                 },
             ) => l_members == r_members && l_mutability == r_mutability,
-            (
-                Self::ReadonlyType {
-                    src: _,
-                    inner: l_inner,
-                },
-                Self::ReadonlyType {
-                    src: _,
-                    inner: r_inner,
-                },
-            ) => l_inner == r_inner,
-            (Self::StringType { src: _ }, Self::StringType { src: _ }) => true,
-            (Self::NumberType { src: _ }, Self::NumberType { src: _ }) => true,
-            (Self::BooleanType { src: _ }, Self::BooleanType { src: _ }) => true,
-            (Self::NilType { src: _ }, Self::NilType { src: _ }) => true,
-            (
-                Self::LiteralType {
-                    src: _,
-                    value: l_value,
-                },
-                Self::LiteralType {
-                    src: _,
-                    value: r_value,
-                },
-            ) => l_value == r_value,
+            (Self::ReadonlyType { inner: l_inner }, Self::ReadonlyType { inner: r_inner }) => {
+                l_inner == r_inner
+            }
+            (Self::StringType, Self::StringType) => true,
+            (Self::NumberType, Self::NumberType) => true,
+            (Self::BooleanType, Self::BooleanType) => true,
+            (Self::NilType, Self::NilType) => true,
+            (Self::LiteralType { value: l_value }, Self::LiteralType { value: r_value }) => {
+                l_value == r_value
+            }
             (
                 Self::NominalType {
-                    src: _,
                     name: l_name,
                     inner: l_inner,
                 },
                 Self::NominalType {
-                    src: _,
                     name: r_name,
                     inner: r_inner,
                 },
             ) => l_name == r_name && l_inner == r_inner,
+            (Self::IteratorType { inner: l_inner }, Self::IteratorType { inner: r_inner }) => {
+                l_inner == r_inner
+            }
+            (Self::PlanType { inner: l_inner }, Self::PlanType { inner: r_inner }) => {
+                l_inner == r_inner
+            }
+            (Self::ErrorType { inner: l_inner }, Self::ErrorType { inner: r_inner }) => {
+                l_inner == r_inner
+            }
             (
-                Self::IteratorType {
-                    src: _,
-                    inner: l_inner,
-                },
-                Self::IteratorType {
-                    src: _,
-                    inner: r_inner,
-                },
-            ) => l_inner == r_inner,
-            (
-                Self::PlanType {
-                    src: _,
-                    inner: l_inner,
-                },
-                Self::PlanType {
-                    src: _,
-                    inner: r_inner,
-                },
-            ) => l_inner == r_inner,
-            (
-                Self::ErrorType {
-                    src: _,
-                    inner: l_inner,
-                },
-                Self::ErrorType {
-                    src: _,
-                    inner: r_inner,
-                },
-            ) => l_inner == r_inner,
-            (
-                Self::ParenthesizedType {
-                    src: _,
-                    inner: l_inner,
-                },
-                Self::ParenthesizedType {
-                    src: _,
-                    inner: r_inner,
-                },
+                Self::ParenthesizedType { inner: l_inner },
+                Self::ParenthesizedType { inner: r_inner },
             ) => l_inner == r_inner,
             (
                 Self::TypeofType {
-                    src: _,
                     expression: l_expression,
                 },
                 Self::TypeofType {
-                    src: _,
                     expression: r_expression,
                 },
             ) => l_expression == r_expression,
-            (
-                Self::KeyofType {
-                    src: _,
-                    inner: l_inner,
-                },
-                Self::KeyofType {
-                    src: _,
-                    inner: r_inner,
-                },
-            ) => l_inner == r_inner,
-            (
-                Self::ValueofType {
-                    src: _,
-                    inner: l_inner,
-                },
-                Self::ValueofType {
-                    src: _,
-                    inner: r_inner,
-                },
-            ) => l_inner == r_inner,
-            (
-                Self::ElementofType {
-                    src: _,
-                    inner: l_inner,
-                },
-                Self::ElementofType {
-                    src: _,
-                    inner: r_inner,
-                },
-            ) => l_inner == r_inner,
+            (Self::KeyofType { inner: l_inner }, Self::KeyofType { inner: r_inner }) => {
+                l_inner == r_inner
+            }
+            (Self::ValueofType { inner: l_inner }, Self::ValueofType { inner: r_inner }) => {
+                l_inner == r_inner
+            }
+            (Self::ElementofType { inner: l_inner }, Self::ElementofType { inner: r_inner }) => {
+                l_inner == r_inner
+            }
             (
                 Self::UnknownType {
-                    src: _,
                     mutability: l_mutability,
                 },
                 Self::UnknownType {
-                    src: _,
                     mutability: r_mutability,
                 },
             ) => l_mutability == r_mutability,
-            (Self::PoisonedType { src: _ }, Self::PoisonedType { src: _ }) => true,
-            (Self::AnyType { src: _ }, Self::AnyType { src: _ }) => true,
-            (Self::RegularExpressionType { src: _ }, Self::RegularExpressionType { src: _ }) => {
-                true
-            }
+            (Self::PoisonedType, Self::PoisonedType) => true,
+            (Self::AnyType, Self::AnyType) => true,
+            (Self::RegularExpressionType {}, Self::RegularExpressionType {}) => true,
             (
                 Self::PropertyType {
-                    src: _,
                     subject: l_subject,
                     property: l_property,
                     optional: l_optional,
                 },
                 Self::PropertyType {
-                    src: _,
                     subject: r_subject,
                     property: r_property,
                     optional: r_optional,

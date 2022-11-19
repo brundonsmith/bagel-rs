@@ -1,69 +1,57 @@
 use enum_variant_type::EnumVariantType;
 
-use crate::slice::Slice;
-
-use super::{BinaryOperator, Expression, Invocation, LocalIdentifier, PlainIdentifier};
+use super::{BinaryOperator, Expression, Invocation, LocalIdentifier, PlainIdentifier, Src};
 
 #[derive(Clone, Debug, PartialEq, EnumVariantType)]
 pub enum Statement {
     #[evt(derive(Debug, Clone, PartialEq))]
     DeclarationStatement {
-        src: Option<Slice>,
         destination: (), // TODO  NameAndType | Destructure
-        value: Expression,
+        value: Src<Expression>,
         awaited: bool,
         is_const: bool,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     IfElseStatement {
-        src: Option<Slice>,
-        cases: Vec<(Expression, Vec<Statement>)>,
-        default_case: Vec<Statement>,
+        cases: Vec<(Src<Expression>, Vec<Src<Statement>>)>,
+        default_case: Vec<Src<Statement>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ForLoop {
-        src: Option<Slice>,
-        item_identifier: PlainIdentifier,
-        iterator: Expression,
-        body: Vec<Statement>,
+        item_identifier: Src<PlainIdentifier>,
+        iterator: Src<Expression>,
+        body: Vec<Src<Statement>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     WhileLoop {
-        src: Option<Slice>,
-        condition: Expression,
-        body: Vec<Statement>,
+        condition: Src<Expression>,
+        body: Vec<Src<Statement>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     Assignment {
-        src: Option<Slice>,
-        target: LocalIdentifier, // TODO  | PropertyAccessor
-        value: Expression,
+        target: Src<LocalIdentifier>, // TODO  | PropertyAccessor
+        value: Src<Expression>,
         operator: Option<BinaryOperator>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     TryCatch {
-        src: Option<Slice>,
-        try_block: Vec<Statement>,
-        error_identifier: PlainIdentifier,
-        catch_block: Vec<Statement>,
+        try_block: Vec<Src<Statement>>,
+        error_identifier: Src<PlainIdentifier>,
+        catch_block: Vec<Src<Statement>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    ThrowStatement {
-        src: Option<Slice>,
-        error_expression: Expression,
-    },
+    ThrowStatement { error_expression: Src<Expression> },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     Autorun {
-        src: Option<Slice>,
-        effect: Vec<Statement>,
-        until: Option<Expression>,
+        effect: Vec<Src<Statement>>,
+        until: Option<Src<Expression>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]

@@ -4,7 +4,7 @@ use colored::Colorize;
 use enum_variant_type::EnumVariantType;
 
 use crate::{
-    ast::{LocalIdentifier, ModuleID},
+    ast::{LocalIdentifier, ModuleID, Src},
     slice::Slice,
 };
 
@@ -14,7 +14,6 @@ pub enum BagelError {
     ModuleNotFoundError {
         module_id: ModuleID,
         importer_module_id: Option<ModuleID>,
-        src: Option<Slice>,
     },
     #[evt(derive(Debug, Clone, PartialEq))]
     ParseError {
@@ -32,8 +31,7 @@ pub enum BagelError {
     #[evt(derive(Debug, Clone, PartialEq))]
     NotFoundError {
         module_id: ModuleID,
-        src: Option<Slice>,
-        identifier: LocalIdentifier,
+        identifier: Src<LocalIdentifier>,
     },
 }
 
@@ -60,7 +58,6 @@ impl BagelError {
             BagelError::ModuleNotFoundError {
                 module_id,
                 importer_module_id,
-                src,
             } => todo!(),
             BagelError::ParseError {
                 module_src,
@@ -121,7 +118,6 @@ impl BagelError {
             }
             BagelError::NotFoundError {
                 module_id,
-                src,
                 identifier,
             } => todo!(),
         };

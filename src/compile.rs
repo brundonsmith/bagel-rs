@@ -16,11 +16,10 @@ impl Compile for Module {
     }
 }
 
-impl Compile for Declaration {
+impl Compile for Src<Declaration> {
     fn compile(&self, f: &mut std::fmt::Formatter<'_>) -> Result {
-        match self {
+        match &self.node {
             Declaration::ValueDeclaration {
-                src,
                 name,
                 type_annotation,
                 value,
@@ -29,7 +28,7 @@ impl Compile for Declaration {
                 platforms,
             } => {
                 f.write_str("const ")?;
-                f.write_str(name.name.as_str())?;
+                f.write_str(name.node.name.as_str())?;
                 if let Some(type_annotation) = type_annotation {
                     type_annotation.compile(f)?;
                 }
@@ -39,31 +38,30 @@ impl Compile for Declaration {
 
                 Ok(())
             }
-            Declaration::ImportAllDeclaration { src, name, path } => todo!(),
-            Declaration::ImportDeclaration { src, imports, path } => todo!(),
+            Declaration::ImportAllDeclaration { name, path } => todo!(),
+            Declaration::ImportDeclaration { imports, path } => todo!(),
             Declaration::TypeDeclaration {
-                src,
                 name,
                 declared_type,
+                exported,
             } => todo!(),
             Declaration::FuncDeclaration {
-                src,
                 name,
                 func,
+                exported,
                 platforms,
                 decorators,
             } => todo!(),
             Declaration::ProcDeclaration {
-                src,
                 name,
                 proc,
+                exported,
                 platforms,
                 decorators,
             } => todo!(),
-            Declaration::TestExprDeclaration { src, name, expr } => todo!(),
-            Declaration::TestBlockDeclaration { src, name, block } => todo!(),
+            Declaration::TestExprDeclaration { name, expr } => todo!(),
+            Declaration::TestBlockDeclaration { name, block } => todo!(),
             Declaration::TestTypeDeclaration {
-                src,
                 name,
                 destination_type,
                 value_type,
@@ -72,19 +70,19 @@ impl Compile for Declaration {
     }
 }
 
-impl Compile for Expression {
+impl Compile for Src<Expression> {
     fn compile(&self, f: &mut std::fmt::Formatter<'_>) -> Result {
-        match self {
-            Expression::NilLiteral { src } => f.write_str("undefined")?,
-            Expression::BooleanLiteral { src, value } => todo!(),
-            Expression::NumberLiteral { src, value } => f.write_str(value.as_str())?,
-            Expression::StringLiteral { src, tag, segments } => todo!(),
-            Expression::ExactStringLiteral { src, tag, value } => {
+        match &self.node {
+            Expression::NilLiteral => f.write_str("undefined")?,
+            Expression::BooleanLiteral { value } => todo!(),
+            Expression::NumberLiteral { value } => f.write_str(value.as_str())?,
+            Expression::StringLiteral { tag, segments } => todo!(),
+            Expression::ExactStringLiteral { tag, value } => {
                 f.write_char('`')?;
                 f.write_str(value.as_str())?;
                 f.write_char('`')?;
             }
-            Expression::ArrayLiteral { src: _, entries } => {
+            Expression::ArrayLiteral { entries } => {
                 f.write_char('[')?;
                 for (index, entry) in entries.iter().enumerate() {
                     if index > 0 {
@@ -96,7 +94,7 @@ impl Compile for Expression {
                 }
                 f.write_str(" ]")?;
             }
-            Expression::ObjectLiteral { src: _, entries } => {
+            Expression::ObjectLiteral { entries } => {
                 f.write_char('{')?;
                 for (index, entry) in entries.iter().enumerate() {
                     if index > 0 {
@@ -108,62 +106,51 @@ impl Compile for Expression {
                 }
                 f.write_str(" }")?;
             }
-            Expression::BinaryOperation {
-                src,
-                left,
-                op,
-                right,
-            } => {
+            Expression::BinaryOperation { left, op, right } => {
                 left.compile(f)?;
                 f.write_char(' ')?;
                 op.compile(f)?;
                 f.write_char(' ')?;
                 right.compile(f)?;
             }
-            Expression::Parenthesis { src, inner } => {
+            Expression::Parenthesis { inner } => {
                 f.write_char('(')?;
                 inner.compile(f)?;
                 f.write_char(')')?;
             }
-            Expression::LocalIdentifier { src, name } => f.write_str(name.as_str())?,
+            Expression::LocalIdentifier { name } => f.write_str(name.as_str())?,
             Expression::InlineConstGroup {
-                src,
                 declarations,
                 inner,
             } => todo!(),
-            Expression::NegationOperation { src, inner } => todo!(),
+            Expression::NegationOperation { inner } => todo!(),
             Expression::Func {
-                src,
                 type_annotation,
                 is_async,
                 is_pure,
                 body,
             } => todo!(),
             Expression::JsFunc {
-                src,
                 type_annotation,
                 is_async,
                 is_pure,
                 body,
             } => todo!(),
             Expression::Proc {
-                src,
                 type_annotation,
                 is_async,
                 is_pure,
                 body,
             } => todo!(),
             Expression::JsProc {
-                src,
                 type_annotation,
                 is_async,
                 is_pure,
                 body,
             } => todo!(),
             Expression::JavascriptEscapeExpression(_) => todo!(),
-            Expression::RangeExpression { src, start, end } => todo!(),
+            Expression::RangeExpression { start, end } => todo!(),
             Expression::Invocation {
-                src,
                 subject,
                 args,
                 spread_args,
@@ -172,165 +159,157 @@ impl Compile for Expression {
                 awaited_or_detached,
             } => todo!(),
             Expression::PropertyAccessor {
-                src,
                 subject,
                 property,
                 optional,
             } => todo!(),
             Expression::IfElseExpression {
-                src,
                 cases,
                 default_case,
             } => todo!(),
             Expression::SwitchExpression {
-                src,
                 value,
                 cases,
                 default_case,
             } => todo!(),
             Expression::ElementTag {
-                src,
                 tag_name,
                 attributes,
                 children,
             } => todo!(),
-            Expression::AsCast {
-                src,
-                inner,
-                as_type,
-            } => todo!(),
-            Expression::ErrorExpression { src, inner } => todo!(),
-            Expression::RegularExpression { src, expr, flags } => todo!(),
+            Expression::AsCast { inner, as_type } => todo!(),
+            Expression::ErrorExpression { inner } => todo!(),
+            Expression::RegularExpression { expr, flags } => todo!(),
         };
 
         Ok(())
     }
 }
 
-impl Compile for BinaryOperator {
+impl Compile for Src<BinaryOperator> {
     fn compile(&self, f: &mut std::fmt::Formatter<'_>) -> Result {
-        f.write_str(self.symbol())
+        f.write_str(self.node.symbol())
     }
 }
 
-impl Compile for ArrayLiteralEntry {
+impl Compile for Src<ArrayLiteralEntry> {
     fn compile(&self, f: &mut Formatter<'_>) -> Result {
-        match self {
+        match &self.node {
             ArrayLiteralEntry::Spread(spread) => {
                 f.write_str("...")?;
                 f.write_str(spread.name.as_str())
             }
-            ArrayLiteralEntry::Element(element) => element.compile(f),
+            ArrayLiteralEntry::Element(element) => Src {
+                src: self.src,
+                node: element.clone(),
+            }
+            .compile(f),
         }
     }
 }
 
-impl Compile for ObjectLiteralEntry {
+impl Compile for Src<ObjectLiteralEntry> {
     fn compile(&self, f: &mut Formatter<'_>) -> Result {
-        match self {
-            ObjectLiteralEntry::Variable(x) => x.compile(f),
+        match &self.node {
+            ObjectLiteralEntry::Variable(x) => Src {
+                src: self.src,
+                node: x.clone(),
+            }
+            .compile(f),
             ObjectLiteralEntry::Spread(spread) => {
                 f.write_str("...")?;
                 f.write_str(spread.name.as_str())
             }
             ObjectLiteralEntry::KeyValue(key, value) => {
-                key.compile(f)?;
+                Src {
+                    src: self.src,
+                    node: key.clone(),
+                }
+                .compile(f)?;
                 f.write_str(": ")?;
-                value.compile(f)
+                Src {
+                    src: self.src,
+                    node: value.clone(),
+                }
+                .compile(f)
             }
         }
     }
 }
 
-impl Compile for LocalIdentifier {
+impl Compile for Src<LocalIdentifier> {
     fn compile(&self, f: &mut Formatter<'_>) -> Result {
-        f.write_str(self.name.as_str())
+        f.write_str(self.node.name.as_str())
     }
 }
 
-impl Compile for PlainIdentifier {
+impl Compile for Src<PlainIdentifier> {
     fn compile(&self, f: &mut Formatter<'_>) -> Result {
-        f.write_str(self.name.as_str())
+        f.write_str(self.node.name.as_str())
     }
 }
 
-impl Compile for TypeExpression {
+impl Compile for Src<TypeExpression> {
     fn compile(&self, f: &mut std::fmt::Formatter<'_>) -> Result {
-        match self {
-            TypeExpression::UnknownType { src, mutability } => f.write_str("unknown"),
-            TypeExpression::NilType { src } => f.write_str("null | undefined"),
-            TypeExpression::BooleanType { src } => f.write_str("boolean"),
-            TypeExpression::NumberType { src } => f.write_str("number"),
-            TypeExpression::StringType { src } => f.write_str("string"),
-            TypeExpression::UnionType { src, members } => todo!(),
-            TypeExpression::MaybeType { src, inner } => todo!(),
-            TypeExpression::NamedType { src, name } => todo!(),
-            TypeExpression::GenericParamType { src, name, extends } => todo!(),
+        match &self.node {
+            TypeExpression::UnknownType { mutability } => f.write_str("unknown"),
+            TypeExpression::NilType => f.write_str("null | undefined"),
+            TypeExpression::BooleanType => f.write_str("boolean"),
+            TypeExpression::NumberType => f.write_str("number"),
+            TypeExpression::StringType => f.write_str("string"),
+            TypeExpression::UnionType { members } => todo!(),
+            TypeExpression::MaybeType { inner } => todo!(),
+            TypeExpression::NamedType { name } => todo!(),
+            TypeExpression::GenericParamType { name, extends } => todo!(),
             TypeExpression::ProcType {
-                src,
                 args,
                 is_pure,
                 is_async,
                 throws,
             } => todo!(),
             TypeExpression::FuncType {
-                src,
                 args,
                 is_pure,
                 returns,
             } => todo!(),
-            TypeExpression::GenericType {
-                src,
-                type_params,
-                inner,
-            } => todo!(),
-            TypeExpression::BoundGenericType {
-                src,
-                type_args,
-                generic,
-            } => todo!(),
+            TypeExpression::GenericType { type_params, inner } => todo!(),
+            TypeExpression::BoundGenericType { type_args, generic } => todo!(),
             TypeExpression::ObjectType {
-                src,
                 entries,
                 mutability,
             } => todo!(),
             TypeExpression::InterfaceType {
-                src,
                 entries,
                 mutability,
             } => todo!(),
             TypeExpression::RecordType {
-                src,
                 key_type,
                 value_type,
                 mutability,
             } => todo!(),
             TypeExpression::ArrayType {
-                src,
                 element,
                 mutability,
             } => todo!(),
             TypeExpression::TupleType {
-                src,
                 members,
                 mutability,
             } => todo!(),
-            TypeExpression::ReadonlyType { src, inner } => todo!(),
-            TypeExpression::LiteralType { src, value } => todo!(),
-            TypeExpression::NominalType { src, name, inner } => todo!(),
-            TypeExpression::IteratorType { src, inner } => todo!(),
-            TypeExpression::PlanType { src, inner } => todo!(),
-            TypeExpression::ErrorType { src, inner } => todo!(),
-            TypeExpression::ParenthesizedType { src, inner } => todo!(),
-            TypeExpression::TypeofType { src, expression } => todo!(),
-            TypeExpression::KeyofType { src, inner } => todo!(),
-            TypeExpression::ValueofType { src, inner } => todo!(),
-            TypeExpression::ElementofType { src, inner } => todo!(),
-            TypeExpression::PoisonedType { src } => todo!(),
-            TypeExpression::AnyType { src } => todo!(),
-            TypeExpression::RegularExpressionType { src } => todo!(),
+            TypeExpression::ReadonlyType { inner } => todo!(),
+            TypeExpression::LiteralType { value } => todo!(),
+            TypeExpression::NominalType { name, inner } => todo!(),
+            TypeExpression::IteratorType { inner } => todo!(),
+            TypeExpression::PlanType { inner } => todo!(),
+            TypeExpression::ErrorType { inner } => todo!(),
+            TypeExpression::ParenthesizedType { inner } => todo!(),
+            TypeExpression::TypeofType { expression } => todo!(),
+            TypeExpression::KeyofType { inner } => todo!(),
+            TypeExpression::ValueofType { inner } => todo!(),
+            TypeExpression::ElementofType { inner } => todo!(),
+            TypeExpression::PoisonedType => todo!(),
+            TypeExpression::AnyType => todo!(),
+            TypeExpression::RegularExpressionType {} => todo!(),
             TypeExpression::PropertyType {
-                src,
                 subject,
                 property,
                 optional,

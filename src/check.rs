@@ -17,11 +17,10 @@ impl<'a> Check<'a> for Module {
     }
 }
 
-impl<'a> Check<'a> for Declaration {
+impl<'a> Check<'a> for Src<Declaration> {
     fn check<F: FnMut(BagelError)>(&self, ctx: CheckContext<'a>, report_error: &mut F) {
-        match self {
+        match &self.node {
             Declaration::ValueDeclaration {
-                src,
                 name,
                 type_annotation,
                 value,
@@ -40,37 +39,36 @@ impl<'a> Check<'a> for Declaration {
                     if let Some(issues) = issues {
                         report_error(BagelError::AssignmentError {
                             module_id: ctx.module.module_id.clone(),
-                            src: value.src(),
+                            src: value.src,
                             issues,
                         });
                     }
                 }
             }
-            Declaration::ImportAllDeclaration { src, name, path } => todo!(),
-            Declaration::ImportDeclaration { src, imports, path } => todo!(),
+            Declaration::ImportAllDeclaration { name, path } => todo!(),
+            Declaration::ImportDeclaration { imports, path } => todo!(),
             Declaration::TypeDeclaration {
-                src,
                 name,
                 declared_type,
+                exported,
             } => todo!(),
             Declaration::FuncDeclaration {
-                src,
                 name,
                 func,
+                exported,
                 platforms,
                 decorators,
             } => todo!(),
             Declaration::ProcDeclaration {
-                src,
                 name,
                 proc,
+                exported,
                 platforms,
                 decorators,
             } => todo!(),
-            Declaration::TestExprDeclaration { src, name, expr } => todo!(),
-            Declaration::TestBlockDeclaration { src, name, block } => todo!(),
+            Declaration::TestExprDeclaration { name, expr } => todo!(),
+            Declaration::TestBlockDeclaration { name, block } => todo!(),
             Declaration::TestTypeDeclaration {
-                src,
                 name,
                 destination_type,
                 value_type,
@@ -79,28 +77,23 @@ impl<'a> Check<'a> for Declaration {
     }
 }
 
-impl<'a> Check<'a> for Expression {
+impl<'a> Check<'a> for Src<Expression> {
     fn check<F: FnMut(BagelError)>(&self, ctx: CheckContext<'a>, report_error: &mut F) {
-        match self {
-            Expression::BinaryOperation {
-                src: _,
-                left,
-                op,
-                right,
-            } => {
+        match &self.node {
+            Expression::BinaryOperation { left, op, right } => {
                 let ctx: InferTypeContext = ctx.into();
                 let left_type = left.infer_type(ctx);
                 let right_type = right.infer_type(ctx);
 
                 let number_or_string = NUMBER_TYPE.union(STRING_TYPE);
 
-                if *op == BinaryOperator::Plus {
+                if op.node == BinaryOperator::Plus {
                     if let Some(issues) =
                         number_or_string.subsumation_issues(ctx.into(), &left_type)
                     {
                         report_error(BagelError::AssignmentError {
                             module_id: ctx.module.module_id.clone(),
-                            src: left.src(),
+                            src: left.src,
                             issues,
                         })
                     }
@@ -110,18 +103,18 @@ impl<'a> Check<'a> for Expression {
                     {
                         report_error(BagelError::AssignmentError {
                             module_id: ctx.module.module_id.clone(),
-                            src: right.src(),
+                            src: right.src,
                             issues,
                         })
                     }
-                } else if *op == BinaryOperator::Minus
-                    || *op == BinaryOperator::Times
-                    || *op == BinaryOperator::Divide
+                } else if op.node == BinaryOperator::Minus
+                    || op.node == BinaryOperator::Times
+                    || op.node == BinaryOperator::Divide
                 {
                     if let Some(issues) = NUMBER_TYPE.subsumation_issues(ctx.into(), &left_type) {
                         report_error(BagelError::AssignmentError {
                             module_id: ctx.module.module_id.clone(),
-                            src: left.src(),
+                            src: left.src,
                             issues,
                         })
                     }
@@ -129,7 +122,7 @@ impl<'a> Check<'a> for Expression {
                     if let Some(issues) = NUMBER_TYPE.subsumation_issues(ctx.into(), &right_type) {
                         report_error(BagelError::AssignmentError {
                             module_id: ctx.module.module_id.clone(),
-                            src: right.src(),
+                            src: right.src,
                             issues,
                         })
                     }
@@ -148,27 +141,25 @@ impl<'a> Check<'a> for Expression {
                 //     BinaryOperator::InstanceOf => todo!(),
                 // }
             }
-            Expression::Parenthesis { src, inner } => inner.check(ctx, report_error),
-            Expression::LocalIdentifier { src, name } => {
-                if let Some(src) = src {
+            Expression::Parenthesis { inner } => inner.check(ctx, report_error),
+            Expression::LocalIdentifier { name } => {
+                if let Some(src) = self.src {
                     if ctx
                         .module
                         .resolve_symbol_within(name.as_str(), &src)
                         .is_none()
                     {
                         report_error(BagelError::NotFoundError {
-                            src: Some(src.clone()),
                             module_id: ctx.module.module_id.clone(),
-                            identifier: LocalIdentifier {
-                                src: Some(src.clone()),
-                                name: name.clone(),
+                            identifier: Src {
+                                src: Some(src),
+                                node: LocalIdentifier { name: name.clone() },
                             },
                         })
                     }
                 }
             }
             Expression::InlineConstGroup {
-                src,
                 declarations,
                 inner,
             } => {
@@ -179,46 +170,41 @@ impl<'a> Check<'a> for Expression {
                 inner.check(ctx, report_error);
             }
 
-            Expression::NilLiteral { src } => {}
-            Expression::NumberLiteral { src, value } => {}
-            Expression::BooleanLiteral { src, value } => todo!(),
-            Expression::StringLiteral { src, tag, segments } => todo!(),
-            Expression::ExactStringLiteral { src, tag, value } => todo!(),
-            Expression::ArrayLiteral { src, entries } => todo!(),
-            Expression::ObjectLiteral { src, entries } => todo!(),
-            Expression::NegationOperation { src, inner } => todo!(),
+            Expression::NilLiteral => {}
+            Expression::NumberLiteral { value } => {}
+            Expression::BooleanLiteral { value } => todo!(),
+            Expression::StringLiteral { tag, segments } => todo!(),
+            Expression::ExactStringLiteral { tag, value } => todo!(),
+            Expression::ArrayLiteral { entries } => todo!(),
+            Expression::ObjectLiteral { entries } => todo!(),
+            Expression::NegationOperation { inner } => todo!(),
             Expression::Func {
-                src,
                 type_annotation,
                 is_async,
                 is_pure,
                 body,
             } => todo!(),
             Expression::JsFunc {
-                src,
                 type_annotation,
                 is_async,
                 is_pure,
                 body,
             } => todo!(),
             Expression::Proc {
-                src,
                 type_annotation,
                 is_async,
                 is_pure,
                 body,
             } => todo!(),
             Expression::JsProc {
-                src,
                 type_annotation,
                 is_async,
                 is_pure,
                 body,
             } => todo!(),
             Expression::JavascriptEscapeExpression(_) => todo!(),
-            Expression::RangeExpression { src, start, end } => todo!(),
+            Expression::RangeExpression { start, end } => todo!(),
             Expression::Invocation {
-                src,
                 subject,
                 args,
                 spread_args,
@@ -227,50 +213,42 @@ impl<'a> Check<'a> for Expression {
                 awaited_or_detached,
             } => todo!(),
             Expression::PropertyAccessor {
-                src,
                 subject,
                 property,
                 optional,
             } => todo!(),
             Expression::IfElseExpression {
-                src,
                 cases,
                 default_case,
             } => todo!(),
             Expression::SwitchExpression {
-                src,
                 value,
                 cases,
                 default_case,
             } => todo!(),
             Expression::ElementTag {
-                src,
                 tag_name,
                 attributes,
                 children,
             } => todo!(),
-            Expression::AsCast {
-                src,
-                inner,
-                as_type,
-            } => todo!(),
-            Expression::ErrorExpression { src, inner } => todo!(),
-            Expression::RegularExpression { src, expr, flags } => todo!(),
+            Expression::AsCast { inner, as_type } => todo!(),
+            Expression::ErrorExpression { inner } => todo!(),
+            Expression::RegularExpression { expr, flags } => todo!(),
         };
     }
 }
 
-impl<'a> Check<'a> for InlineConstDeclaration {
+impl<'a> Check<'a> for Src<InlineConstDeclaration> {
     fn check<F: FnMut(BagelError)>(&self, ctx: CheckContext<'a>, report_error: &mut F) {
-        if let Some(type_annotation) = &self.type_annotation {
+        if let Some(type_annotation) = &self.node.type_annotation {
             type_annotation.check(ctx, report_error);
         }
 
-        self.value.check(ctx, report_error);
+        self.node.value.check(ctx, report_error);
     }
 }
 
-impl<'a> Check<'a> for TypeExpression {
+impl<'a> Check<'a> for Src<TypeExpression> {
     fn check<F: FnMut(BagelError)>(&self, ctx: CheckContext<'a>, report_error: &mut F) {
         todo!()
     }

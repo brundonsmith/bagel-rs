@@ -17,7 +17,7 @@ use nom::{
 
 use crate::{
     ast::*,
-    errors::{BagelError, ParseError},
+    errors::ParseError,
     precedence::{binary_op, precedence, Assoc, Operation},
     slice::Slice,
     utils::Loggable,
@@ -89,63 +89,233 @@ pub fn parse(module_id: ModuleID, module_src: String) -> Result<Module, ParseErr
 
 type ParseResult<'a, T> = IResult<StringAndSlice<'a>, T, VerboseError<StringAndSlice<'a>>>;
 
-fn declaration<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Declaration> {
+fn declaration<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<Declaration>> {
     preceded(
         whitespace,
-        alt((map(value_declaration, Declaration::from),)),
+        alt((
+            map(import_all_declaration, |x| x.map(Declaration::from)),
+            map(import_declaration, |x| x.map(Declaration::from)),
+            map(type_declaration, |x| x.map(Declaration::from)),
+            map(func_declaration, |x| x.map(Declaration::from)),
+            map(proc_declaration, |x| x.map(Declaration::from)),
+            map(value_declaration, |x| x.map(Declaration::from)),
+            map(test_expr_declaration, |x| x.map(Declaration::from)),
+            map(test_block_declaration, |x| x.map(Declaration::from)),
+            map(test_type_declaration, |x| x.map(Declaration::from)),
+        )),
     )(i)
 }
 
-fn value_declaration<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, ValueDeclaration> {
+fn import_all_declaration<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<ImportAllDeclaration>> {
     context(
-        "value declaration",
+        "import-all declaration",
         map(
             tuple((
-                alt((tag("const"), tag("let"))),
+                tag("import"),
+                preceded(whitespace, exact_string_literal),
+                preceded(whitespace, tag("as")),
+                preceded(whitespace, plain_identifier),
+            )),
+            |(start, path, _, name)| Src {
+                src: name.src.map(|name| start.slice.spanning(&name)),
+                node: ImportAllDeclaration { path, name },
+            },
+        ),
+    )(i)
+}
+
+fn import_declaration<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<ImportDeclaration>> {
+    context(
+        "import declaration",
+        map(
+            tuple((
+                tag("from"),
+                preceded(whitespace, exact_string_literal),
+                preceded(whitespace, tag("import")),
+                preceded(whitespace, tag("{")),
+                separated_list0(
+                    preceded(whitespace, tag(",")),
+                    pair(
+                        preceded(whitespace, plain_identifier),
+                        opt(map(
+                            pair(
+                                preceded(whitespace, tag("as")),
+                                preceded(whitespace, plain_identifier),
+                            ),
+                            |(_, alias)| alias,
+                        )),
+                    ),
+                ),
+                preceded(whitespace, tag("}")),
+            )),
+            |(start, path, _, _, imports, end)| Src {
+                src: Some(start.slice.spanning(&end.slice)),
+                node: ImportDeclaration { path, imports },
+            },
+        ),
+    )(i)
+}
+
+fn type_declaration<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<TypeDeclaration>> {
+    context(
+        "type declaration",
+        map(
+            tuple((
+                opt(tag("export")),
+                preceded(whitespace, tag("type")),
                 preceded(whitespace, plain_identifier),
                 preceded(whitespace, tag("=")),
-                opt(preceded(whitespace, type_annotation)),
+                preceded(whitespace, type_expression),
+            )),
+            |(export, keyword, name, _, declared_type)| Src {
+                src: declared_type
+                    .src
+                    .map(|decl| export.unwrap_or(keyword).slice.spanning(&decl)),
+                node: TypeDeclaration {
+                    name,
+                    declared_type,
+                    exported: export.is_some(),
+                },
+            },
+        ),
+    )(i)
+}
+
+fn func_declaration<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<FuncDeclaration>> {
+    context(
+        "func declaration",
+        map(
+            tuple((
+                opt(tag("export")),
+                opt(preceded(whitespace, tag("pure"))),
+                opt(preceded(whitespace, tag("async"))),
+                preceded(whitespace, tag("func")),
+                preceded(whitespace, plain_identifier),
+                preceded(whitespace, tag("(")),
+                preceded(whitespace, args),
+                preceded(whitespace, tag(")")),
+                opt(type_annotation),
+                preceded(whitespace, tag("=>")),
                 preceded(whitespace, expression),
             )),
-            |(keyword, name, _, type_annotation, value)| {
-                ValueDeclaration {
-                    src: value.src().map(|end| keyword.slice.spanning(&end)),
-                    name,
-                    type_annotation,
-                    value,
-                    is_const: keyword.as_str() == "const",
-                    exported: false,           // TODO
-                    platforms: HashSet::new(), // TODO
+            |(export, pure, asyn, keyword, name, _, args, _, return_type, _, body)| {
+                let src = body.src.map(|decl| {
+                    export
+                        .unwrap_or(pure.unwrap_or(asyn.unwrap_or(keyword)))
+                        .slice
+                        .spanning(&decl)
+                });
+
+                Src {
+                    src,
+                    node: FuncDeclaration {
+                        name,
+                        func: Src {
+                            src,
+                            node: Func {
+                                type_annotation: Src {
+                                    src: None,
+                                    node: FuncType {
+                                        args,
+                                        is_pure: pure.is_some(),
+                                        returns: return_type.map(Box::new),
+                                    },
+                                },
+                                is_async: asyn.is_some(),
+                                is_pure: pure.is_some(),
+                                body: Box::new(body),
+                            },
+                        },
+                        exported: export.is_some(),
+                        platforms: HashSet::new(), // TODO
+                        decorators: vec![],        // TODO
+                    },
                 }
             },
         ),
     )(i)
 }
 
-fn type_annotation<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, TypeExpression> {
-    preceded(tag(":"), preceded(whitespace, type_expression))(i)
+fn args<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<Args>> {
+    todo!()
+    //separated_list0(preceded(whitespace, tag(",")), )
 }
 
-fn type_expression<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, TypeExpression> {
+fn proc_declaration<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<ProcDeclaration>> {
     todo!()
 }
 
-fn expression<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Expression> {
+fn value_declaration<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<ValueDeclaration>> {
+    context(
+        "value declaration",
+        map(
+            tuple((
+                opt(tag("export")),
+                preceded(whitespace, alt((tag("const"), tag("let")))),
+                preceded(whitespace, plain_identifier),
+                preceded(whitespace, tag("=")),
+                opt(preceded(whitespace, type_annotation)),
+                preceded(whitespace, expression),
+            )),
+            |(export, keyword, name, _, type_annotation, value)| {
+                Src {
+                    src: value
+                        .src
+                        .map(|end| export.unwrap_or(keyword).slice.spanning(&end)),
+                    node: ValueDeclaration {
+                        name,
+                        type_annotation,
+                        value,
+                        is_const: keyword.as_str() == "const",
+                        exported: export.is_some(),
+                        platforms: HashSet::new(), // TODO
+                    },
+                }
+            },
+        ),
+    )(i)
+}
+
+fn test_expr_declaration<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<TestExprDeclaration>> {
+    todo!()
+}
+
+fn test_block_declaration<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<TestBlockDeclaration>> {
+    todo!()
+}
+
+fn test_type_declaration<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<TestTypeDeclaration>> {
+    todo!()
+}
+
+fn type_annotation<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<TypeExpression>> {
+    preceded(tag(":"), preceded(whitespace, type_expression))(i)
+}
+
+fn type_expression<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<TypeExpression>> {
+    todo!()
+}
+
+fn statement<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<Statement>> {
+    todo!()
+}
+
+fn expression<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<Expression>> {
     preceded(whitespace, alt((binary_operation, atomic_expression)))(i)
 }
 
-fn atomic_expression<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Expression> {
+fn atomic_expression<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<Expression>> {
     preceded(
         whitespace,
         alt((
-            map(parenthesis, Expression::from),
-            map(object_literal, Expression::from),
-            map(array_literal, Expression::from),
-            map(exact_string_literal, Expression::from),
-            map(number_literal, Expression::from),
-            map(boolean_literal, Expression::from),
-            map(nil_literal, Expression::from),
-            map(local_identifier, Expression::from),
+            map(parenthesis, |x| x.map(Expression::from)),
+            map(object_literal, |x| x.map(Expression::from)),
+            map(array_literal, |x| x.map(Expression::from)),
+            map(exact_string_literal, |x| x.map(Expression::from)),
+            map(number_literal, |x| x.map(Expression::from)),
+            map(boolean_literal, |x| x.map(Expression::from)),
+            map(nil_literal, |x| x.map(Expression::from)),
+            map(local_identifier, |x| x.map(Expression::from)),
         )),
     )(i)
 }
@@ -164,7 +334,7 @@ fn dfslkughsdfg() {
     println!("{:?}", atomic_expression(s));
 }
 
-fn binary_operation<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Expression> {
+fn binary_operation<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<Expression>> {
     context(
         "binary operation",
         precedence(
@@ -175,46 +345,59 @@ fn binary_operation<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Expression> {
                 binary_op(
                     2,
                     Assoc::Left,
-                    map(preceded(whitespace, tag("*")), |op| {
-                        BinaryOperator::from_symbol(op.as_str())
+                    map(preceded(whitespace, tag("*")), |op| Src {
+                        src: Some(op.slice),
+                        node: BinaryOperator::from_symbol(op.as_str()),
                     }),
                 ),
                 binary_op(
                     2,
                     Assoc::Left,
-                    map(preceded(whitespace, tag("/")), |op| {
-                        BinaryOperator::from_symbol(op.as_str())
+                    map(preceded(whitespace, tag("/")), |op| Src {
+                        src: Some(op.slice),
+                        node: BinaryOperator::from_symbol(op.as_str()),
                     }),
                 ),
                 binary_op(
                     3,
                     Assoc::Left,
-                    map(preceded(whitespace, tag("+")), |op| {
-                        BinaryOperator::from_symbol(op.as_str())
+                    map(preceded(whitespace, tag("+")), |op| Src {
+                        src: Some(op.slice),
+                        node: BinaryOperator::from_symbol(op.as_str()),
                     }),
                 ),
                 binary_op(
                     3,
                     Assoc::Left,
-                    map(preceded(whitespace, tag("-")), |op| {
-                        BinaryOperator::from_symbol(op.as_str())
+                    map(preceded(whitespace, tag("-")), |op| Src {
+                        src: Some(op.slice),
+                        node: BinaryOperator::from_symbol(op.as_str()),
                     }),
                 ),
             )),
             atomic_expression,
-            |op: Operation<BinaryOperator, BinaryOperator, BinaryOperator, Expression>| match op {
-                // Operation::Prefix("-", o) => Ok(-o),
-                Operation::Binary(left, op, right) => Ok(Expression::BinaryOperation {
-                    src: left.spanning(&right),
-                    left: Box::new(left),
-                    op,
-                    right: Box::new(right),
-                }),
-                // Operation::Binary(lhs, "*", rhs) => Ok(lhs * rhs),
-                // Operation::Binary(lhs, "/", rhs) => Ok(lhs / rhs),
-                // Operation::Binary(lhs, "+", rhs) => Ok(lhs + rhs),
-                // Operation::Binary(lhs, "-", rhs) => Ok(lhs - rhs),
-                _ => Err("Invalid combination"),
+            |op: Operation<
+                Src<BinaryOperator>,
+                Src<BinaryOperator>,
+                Src<BinaryOperator>,
+                Src<Expression>,
+            >| {
+                match op {
+                    // Operation::Prefix("-", o) => Ok(-o),
+                    Operation::Binary(left, op, right) => Ok(Src {
+                        src: left.spanning(&right),
+                        node: Expression::BinaryOperation {
+                            left: Box::new(left),
+                            op,
+                            right: Box::new(right),
+                        },
+                    }),
+                    // Operation::Binary(lhs, "*", rhs) => Ok(lhs * rhs),
+                    // Operation::Binary(lhs, "/", rhs) => Ok(lhs / rhs),
+                    // Operation::Binary(lhs, "+", rhs) => Ok(lhs + rhs),
+                    // Operation::Binary(lhs, "-", rhs) => Ok(lhs - rhs),
+                    _ => Err("Invalid combination"),
+                }
             },
         ),
     )(i)
@@ -249,7 +432,7 @@ fn binary_operation<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Expression> {
 /// }
 
 // + ContextError<Slice>
-fn parenthesis<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Parenthesis> {
+fn parenthesis<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<Parenthesis>> {
     context(
         "parenthesized expression",
         map(
@@ -260,15 +443,17 @@ fn parenthesis<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Parenthesis> {
                     preceded(whitespace, tag(")")),
                 )),
             ),
-            |(open_paren, (inner, close_paren))| Parenthesis {
+            |(open_paren, (inner, close_paren))| Src {
                 src: Some(open_paren.slice.spanning(&close_paren.slice)),
-                inner: Box::new(inner),
+                node: Parenthesis {
+                    inner: Box::new(inner),
+                },
             },
         ),
     )(i)
 }
 
-fn object_literal<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, ObjectLiteral> {
+fn object_literal<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<ObjectLiteral>> {
     context(
         "object",
         map(
@@ -279,20 +464,22 @@ fn object_literal<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, ObjectLiteral> {
                     preceded(whitespace, tag("}")),
                 )),
             ),
-            |(open_bracket, (entries, close_bracket))| ObjectLiteral {
+            |(open_bracket, (entries, close_bracket))| Src {
                 src: Some(open_bracket.slice.spanning(&close_bracket.slice)),
-                entries: entries
-                    .into_iter()
-                    .map(|(key, value)| {
-                        ObjectLiteralEntry::KeyValue(
-                            PlainIdentifier {
-                                src: Some(key.slice),
-                                name: key.as_str().to_owned(),
-                            },
-                            value,
-                        )
-                    })
-                    .collect(),
+                node: ObjectLiteral {
+                    entries: entries
+                        .into_iter()
+                        .map(|(key, value)| Src {
+                            src: None,
+                            node: ObjectLiteralEntry::KeyValue(
+                                PlainIdentifier {
+                                    name: key.as_str().to_owned(),
+                                },
+                                value,
+                            ),
+                        })
+                        .collect(),
+                },
             },
         ),
     )(i)
@@ -302,11 +489,11 @@ fn key_value<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, (StringAndSlice<'a>, 
     separated_pair(
         preceded(whitespace, identifier_like),
         cut(preceded(whitespace, char(':'))),
-        expression,
+        map(expression, |x| x.node),
     )(i)
 }
 
-fn array_literal<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, ArrayLiteral> {
+fn array_literal<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<ArrayLiteral>> {
     context(
         "array",
         map(
@@ -317,26 +504,30 @@ fn array_literal<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, ArrayLiteral> {
                     preceded(whitespace, tag("]")),
                 )),
             ),
-            |(open_bracket, (entries, close_bracket))| ArrayLiteral {
+            |(open_bracket, (entries, close_bracket))| Src {
                 src: Some(open_bracket.slice.spanning(&close_bracket.slice)),
-                entries: entries
-                    .into_iter()
-                    .map(ArrayLiteralEntry::Element)
-                    .collect(),
+                node: ArrayLiteral {
+                    entries: entries
+                        .into_iter()
+                        .map(|x| x.map(ArrayLiteralEntry::Element))
+                        .collect(),
+                },
             },
         ),
     )(i)
 }
 
-fn exact_string_literal<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, ExactStringLiteral> {
+fn exact_string_literal<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<ExactStringLiteral>> {
     context(
         "string",
         map(
             pair(tag("\'"), cut(pair(string_contents, tag("\'")))),
-            |(open_quote, (contents, close_quote))| ExactStringLiteral {
+            |(open_quote, (contents, close_quote))| Src {
                 src: Some(open_quote.slice.spanning(&close_quote.slice)),
-                tag: None, // TODO
-                value: contents.as_str().to_owned(),
+                node: ExactStringLiteral {
+                    tag: None, // TODO
+                    value: contents.as_str().to_owned(),
+                },
             },
         ),
     )(i)
@@ -346,7 +537,7 @@ fn string_contents<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, StringAndSlice<
     escaped(alphanumeric1, '\\', one_of("\"n\\"))(i)
 }
 
-fn number_literal<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, NumberLiteral> {
+fn number_literal<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<NumberLiteral>> {
     map(
         tuple((opt(tag("-")), numeric, opt(tuple((tag("."), cut(numeric)))))),
         |(neg, int, tail)| {
@@ -354,50 +545,57 @@ fn number_literal<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, NumberLiteral> {
             let back = tail.map(|(_, decimal)| decimal).unwrap_or(int);
             let full = front.spanning(&back);
 
-            NumberLiteral {
+            Src {
                 src: Some(full.slice),
-                value: full.as_str().to_owned(),
+                node: NumberLiteral {
+                    value: full.as_str().to_owned(),
+                },
             }
         },
     )(i)
 }
 
-fn boolean_literal<'a>(input: StringAndSlice<'a>) -> ParseResult<'a, BooleanLiteral> {
-    let parse_true = map(tag("true"), |src: StringAndSlice<'a>| BooleanLiteral {
+fn boolean_literal<'a>(input: StringAndSlice<'a>) -> ParseResult<'a, Src<BooleanLiteral>> {
+    let parse_true = map(tag("true"), |src: StringAndSlice<'a>| Src {
         src: Some(src.slice),
-        value: true,
+        node: BooleanLiteral { value: true },
     });
 
-    let parse_false = map(tag("false"), |src: StringAndSlice<'a>| BooleanLiteral {
+    let parse_false = map(tag("false"), |src: StringAndSlice<'a>| Src {
         src: Some(src.slice),
-        value: false,
+        node: BooleanLiteral { value: false },
     });
 
     alt((parse_true, parse_false))(input)
 }
 
-fn nil_literal<'a>(input: StringAndSlice<'a>) -> ParseResult<'a, NilLiteral> {
-    map(tag("nil"), |src: StringAndSlice<'a>| NilLiteral {
+fn nil_literal<'a>(input: StringAndSlice<'a>) -> ParseResult<'a, Src<NilLiteral>> {
+    map(tag("nil"), |src: StringAndSlice<'a>| Src {
         src: Some(src.slice),
+        node: NilLiteral,
     })(input)
 }
 
-fn local_identifier<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, LocalIdentifier> {
+fn local_identifier<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<LocalIdentifier>> {
     context(
         "identifier",
-        map(identifier_like, |name| LocalIdentifier {
+        map(identifier_like, |name| Src {
             src: Some(name.slice),
-            name: name.as_str().to_owned(),
+            node: LocalIdentifier {
+                name: name.as_str().to_owned(),
+            },
         }),
     )(i)
 }
 
-fn plain_identifier<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, PlainIdentifier> {
+fn plain_identifier<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<PlainIdentifier>> {
     context(
         "identifier",
-        map(identifier_like, |name| PlainIdentifier {
+        map(identifier_like, |name| Src {
             src: Some(name.slice),
-            name: name.as_str().to_owned(),
+            node: PlainIdentifier {
+                name: name.as_str().to_owned(),
+            },
         }),
     )(i)
 }
