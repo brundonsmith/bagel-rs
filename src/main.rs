@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 mod ast;
+mod bgl_type;
 mod check;
 mod cli;
 mod compile;
@@ -12,6 +13,9 @@ mod resolve;
 mod slice;
 mod typeinfer;
 mod utils;
+
+mod string_and_slice;
+mod tests;
 
 use std::{
     collections::HashMap,
@@ -58,24 +62,26 @@ fn main() {
                 load_module_and_dependencies(&mut modules_store, module_id);
             }
 
-            let mut error_output = String::new();
-            let output_ref = &mut error_output;
+            let mut error_output_buf = String::new();
+            let error_output_buf = &mut error_output_buf;
             for module in modules_store.values() {
                 match module {
                     Ok(module) => {
                         module.check(
                             CheckContext { module: &module },
                             &mut |error: BagelError| {
-                                error.pretty_print(output_ref, &module.src, true);
+                                error.pretty_print(error_output_buf, &module.src, true);
                             },
                         );
                     }
                     Err(error) => {
-                        pretty_print_parse_error(error, output_ref, true);
+                        pretty_print_parse_error(error, error_output_buf, true);
                     }
                 }
             }
-            println!("{}", error_output);
+
+            // write buffer to console
+            println!("{}", error_output_buf);
         }
         Command::Test {
             target,
@@ -102,41 +108,40 @@ fn get_all_entrypoints(paths: Paths) -> impl Iterator<Item = PathBuf> {
 fn load_module_and_dependencies(
     modules_store: &mut HashMap<ModuleID, Result<Module, ParseError>>,
     module_id: ModuleID,
-) -> std::io::Result<()> {
-    let mut bgl = std::fs::read_to_string(module_id.as_path())?;
-    bgl.push('\n'); // https://github.com/Geal/nom/issues/1573
+) {
+    if let Some(mut bgl) = module_id.load() {
+        bgl.push('\n'); // https://github.com/Geal/nom/issues/1573
 
-    let parsed = parse(module_id.clone(), bgl); // TODO
-    modules_store.insert(module_id.clone(), parsed);
+        let parsed = parse(module_id.clone(), bgl); // TODO
+        modules_store.insert(module_id.clone(), parsed);
 
-    if let Some(Ok(parsed)) = modules_store.get(&module_id) {
-        let imported: Vec<String> = parsed
-            .declarations
-            .iter()
-            .filter_map(|decl| {
-                if let Declaration::ImportAllDeclaration { name: _, path } = &decl.node {
-                    Some(path.node.value.clone())
-                } else if let Declaration::ImportDeclaration { imports: _, path } = &decl.node {
-                    Some(path.node.value.clone())
-                } else {
-                    None
+        if let Some(Ok(parsed)) = modules_store.get(&module_id) {
+            let imported: Vec<String> = parsed
+                .declarations
+                .iter()
+                .filter_map(|decl| {
+                    if let Declaration::ImportAllDeclaration { name: _, path } = &decl.node {
+                        Some(path.node.value.clone())
+                    } else if let Declaration::ImportDeclaration { imports: _, path } = &decl.node {
+                        Some(path.node.value.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            for path in imported {
+                let path = Path::new(&path);
+                let full_path = path.to_owned(); //module_id.as_path().join(path);
+                let other_module_id = ModuleID::try_from(full_path.as_path()).unwrap();
+                // TODO: Handle https modules
+
+                if !modules_store.contains_key(&other_module_id) {
+                    load_module_and_dependencies(modules_store, other_module_id);
                 }
-            })
-            .collect();
-
-        for path in imported {
-            let path = Path::new(&path);
-            let full_path = module_id.as_path().join(path);
-            let other_module_id = ModuleID::try_from(full_path.as_path()).unwrap();
-            // TODO: Handle https modules
-
-            if !modules_store.contains_key(&other_module_id) {
-                load_module_and_dependencies(modules_store, other_module_id)?;
             }
         }
     }
-
-    Ok(())
 }
 
 // #[test]

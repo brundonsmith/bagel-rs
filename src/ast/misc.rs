@@ -1,5 +1,5 @@
 use std::{
-    borrow::Cow,
+    fmt::Display,
     path::{Path, PathBuf},
 };
 
@@ -8,15 +8,29 @@ use crate::slice::Slice;
 use super::Declaration;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct ModuleID(PathBuf);
+pub enum ModuleID {
+    Local(PathBuf),
+    Remote(String),
+}
 
 impl ModuleID {
-    pub fn as_str(&self) -> Cow<'_, str> {
-        self.0.to_string_lossy()
+    pub fn load(&self) -> Option<String> {
+        match self {
+            ModuleID::Local(path) => std::fs::read_to_string(path).ok(),
+            ModuleID::Remote(url) => reqwest::blocking::get(url)
+                .ok()
+                .map(|res| res.text().ok())
+                .flatten(),
+        }
     }
+}
 
-    pub fn as_path(&self) -> &Path {
-        self.0.as_path()
+impl Display for ModuleID {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ModuleID::Local(p) => f.write_str(&p.to_string_lossy()),
+            ModuleID::Remote(s) => f.write_str(s),
+        }
     }
 }
 
@@ -24,7 +38,13 @@ impl TryFrom<&Path> for ModuleID {
     type Error = std::io::Error;
 
     fn try_from(p: &Path) -> Result<ModuleID, std::io::Error> {
-        Ok(ModuleID(p.canonicalize()?))
+        Ok(ModuleID::Local(p.canonicalize()?))
+    }
+}
+
+impl From<String> for ModuleID {
+    fn from(s: String) -> Self {
+        Self::Remote(s)
     }
 }
 
@@ -68,3 +88,21 @@ impl<T: Clone + std::fmt::Debug + PartialEq> Src<T> {
         }
     }
 }
+
+pub trait Srcable: Clone + std::fmt::Debug + PartialEq {
+    fn with_src(self, src: Slice) -> Src<Self> {
+        Src {
+            src: Some(src),
+            node: self,
+        }
+    }
+
+    fn no_src(self) -> Src<Self> {
+        Src {
+            src: None,
+            node: self,
+        }
+    }
+}
+
+impl<T: Clone + std::fmt::Debug + PartialEq> Srcable for T {}

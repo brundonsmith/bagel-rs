@@ -1,18 +1,14 @@
-use std::{
-    collections::HashSet,
-    ops::{RangeFrom, RangeTo},
-    str::{CharIndices, Chars},
-};
+use std::collections::HashSet;
 
 use nom::{
     branch::alt,
     bytes::complete::{escaped, tag, take_while, take_while1},
     character::complete::{alphanumeric1, char, one_of},
     combinator::{cut, fail, map, opt},
-    error::{context, VerboseError, VerboseErrorKind},
+    error::context,
     multi::separated_list0,
     sequence::{pair, preceded, separated_pair, terminated, tuple},
-    Compare, IResult, InputIter, InputLength, InputTake, Offset, UnspecializedInput,
+    IResult,
 };
 
 use crate::{
@@ -20,7 +16,7 @@ use crate::{
     errors::ParseError,
     precedence::{binary_op, precedence, Assoc, Operation},
     slice::Slice,
-    utils::Loggable,
+    string_and_slice::StringAndSlice,
 };
 
 pub fn parse(module_id: ModuleID, module_src: String) -> Result<Module, ParseError> {
@@ -48,46 +44,42 @@ pub fn parse(module_id: ModuleID, module_src: String) -> Result<Module, ParseErr
                 })
             }
         }
-        Err(error) => {
-            let errors = match error {
-                nom::Err::Error(VerboseError { errors }) => Some(errors),
-                nom::Err::Failure(VerboseError { errors }) => Some(errors),
-                nom::Err::Incomplete(_) => None,
-            };
-
-            let info = errors
-                .map(|errors| {
-                    errors
-                        .into_iter()
-                        .filter_map(|(input, kind)| {
-                            if let VerboseErrorKind::Context(context) = kind {
-                                Some((input, context))
-                            } else {
-                                None
-                            }
-                        })
-                        .next()
-                })
-                .flatten();
-
-            Err(info
-                .map(|(input, context)| ParseError {
-                    module_id: module_id.clone(),
-                    index: Some((input.slice.start - bgl_and_slice.slice.start) + input.len()),
-                    module_src: module_src.clone(),
-                    message: format!("Failed while parsing {}", context),
-                })
-                .unwrap_or_else(|| ParseError {
-                    module_id: module_id.clone(),
-                    index: None,
-                    module_src: module_src.clone(),
-                    message: "Failed to parse".to_owned(),
-                }))
-        }
+        Err(error) => match error {
+            nom::Err::Error(RawParseError {
+                module_src,
+                index,
+                details,
+            }) => Err(ParseError {
+                module_id: module_id.clone(),
+                index,
+                module_src,
+                message: match details {
+                    RawParseErrorDetails::Kind(kind) => kind.description().to_owned(),
+                    RawParseErrorDetails::Char(ch) => format!("Expected '{}'", ch),
+                },
+            }),
+            nom::Err::Failure(RawParseError {
+                module_src,
+                index,
+                details,
+            }) => Err(ParseError {
+                module_id: module_id.clone(),
+                index,
+                module_src,
+                message: match details {
+                    RawParseErrorDetails::Kind(kind) => kind.description().to_owned(),
+                    RawParseErrorDetails::Char(ch) => format!("Expected '{}'", ch),
+                },
+            }),
+            nom::Err::Incomplete(_) => Err(ParseError {
+                module_id: module_id.clone(),
+                index: None,
+                module_src: module_src.clone(),
+                message: "Incomplete".to_owned(),
+            }),
+        },
     }
 }
-
-type ParseResult<'a, T> = IResult<StringAndSlice<'a>, T, VerboseError<StringAndSlice<'a>>>;
 
 fn declaration<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<Declaration>> {
     preceded(
@@ -97,11 +89,11 @@ fn declaration<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<Declaration>> {
             map(import_declaration, |x| x.map(Declaration::from)),
             map(type_declaration, |x| x.map(Declaration::from)),
             map(func_declaration, |x| x.map(Declaration::from)),
-            map(proc_declaration, |x| x.map(Declaration::from)),
+            // map(proc_declaration, |x| x.map(Declaration::from)),
             map(value_declaration, |x| x.map(Declaration::from)),
-            map(test_expr_declaration, |x| x.map(Declaration::from)),
-            map(test_block_declaration, |x| x.map(Declaration::from)),
-            map(test_type_declaration, |x| x.map(Declaration::from)),
+            // map(test_expr_declaration, |x| x.map(Declaration::from)),
+            // map(test_block_declaration, |x| x.map(Declaration::from)),
+            // map(test_type_declaration, |x| x.map(Declaration::from)),
         )),
     )(i)
 }
@@ -194,7 +186,7 @@ fn func_declaration<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<FuncDeclar
                 preceded(whitespace, tag("(")),
                 preceded(whitespace, args),
                 preceded(whitespace, tag(")")),
-                opt(type_annotation),
+                preceded(whitespace, opt(type_annotation)),
                 preceded(whitespace, tag("=>")),
                 preceded(whitespace, expression),
             )),
@@ -237,8 +229,26 @@ fn func_declaration<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<FuncDeclar
 }
 
 fn args<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<Args>> {
-    todo!()
-    //separated_list0(preceded(whitespace, tag(",")), )
+    map(
+        separated_list0(
+            preceded(whitespace, tag(",")),
+            preceded(whitespace, pair(plain_identifier, opt(type_annotation))),
+        ),
+        |args| Src {
+            src: None,
+            node: Args::Individual(
+                args.into_iter()
+                    .map(|(name, type_annotation)| {
+                        Arg {
+                            name,
+                            type_annotation,
+                            optional: false, // TODO
+                        }
+                    })
+                    .collect(),
+            ),
+        },
+    )(i)
 }
 
 fn proc_declaration<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<ProcDeclaration>> {
@@ -253,11 +263,11 @@ fn value_declaration<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<ValueDecl
                 opt(tag("export")),
                 preceded(whitespace, alt((tag("const"), tag("let")))),
                 preceded(whitespace, plain_identifier),
-                preceded(whitespace, tag("=")),
                 opt(preceded(whitespace, type_annotation)),
+                preceded(whitespace, tag("=")),
                 preceded(whitespace, expression),
             )),
-            |(export, keyword, name, _, type_annotation, value)| {
+            |(export, keyword, name, type_annotation, _, value)| {
                 Src {
                     src: value
                         .src
@@ -293,7 +303,20 @@ fn type_annotation<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<TypeExpress
 }
 
 fn type_expression<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<TypeExpression>> {
-    todo!()
+    alt((
+        map(tag("string"), |s: StringAndSlice<'a>| {
+            TypeExpression::StringType.with_src(s.slice)
+        }),
+        map(tag("number"), |s: StringAndSlice<'a>| {
+            TypeExpression::NumberType.with_src(s.slice)
+        }),
+        map(tag("boolean"), |s: StringAndSlice<'a>| {
+            TypeExpression::BooleanType.with_src(s.slice)
+        }),
+        map(tag("nil"), |s: StringAndSlice<'a>| {
+            TypeExpression::NilType.with_src(s.slice)
+        }),
+    ))(i)
 }
 
 fn statement<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<Statement>> {
@@ -318,20 +341,6 @@ fn atomic_expression<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<Expressio
             map(local_identifier, |x| x.map(Expression::from)),
         )),
     )(i)
-}
-
-#[test]
-fn dfslkughsdfg() {
-    let s = String::from("true");
-    let s = StringAndSlice {
-        string: &s,
-        slice: Slice {
-            start: 0,
-            end: s.len(),
-        },
-    };
-
-    println!("{:?}", atomic_expression(s));
 }
 
 fn binary_operation<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<Expression>> {
@@ -613,165 +622,55 @@ fn whitespace<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, StringAndSlice<'a>> 
     take_while(|c| c == ' ' || c == '\n' || c == '\t' || c == '\r')(i)
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-struct StringAndSlice<'a> {
-    pub string: &'a String,
-    pub slice: Slice,
+type ParseResult<'a, T> = IResult<StringAndSlice<'a>, T, RawParseError>;
+
+#[derive(Debug, Clone, PartialEq)]
+struct RawParseError {
+    module_src: String,
+    index: Option<usize>,
+    details: RawParseErrorDetails,
 }
 
-impl<'a> StringAndSlice<'a> {
-    pub fn len(&self) -> usize {
-        self.slice.end - self.slice.start
-    }
+#[derive(Debug, Clone, PartialEq)]
+enum RawParseErrorDetails {
+    Kind(nom::error::ErrorKind),
+    Char(char),
+}
 
-    pub fn spanning(&self, other: &Self) -> Self {
+impl<'a> nom::error::ParseError<StringAndSlice<'a>> for RawParseError {
+    fn from_error_kind(input: StringAndSlice<'a>, kind: nom::error::ErrorKind) -> Self {
         Self {
-            string: self.string,
-            slice: self.slice.spanning(&other.slice),
+            module_src: input.string.clone(),
+            index: Some(input.slice.start),
+            details: RawParseErrorDetails::Kind(kind),
         }
     }
 
-    pub fn slice_range(&self, start: usize, end: Option<usize>) -> Self {
+    fn append(_input: StringAndSlice<'a>, _kind: nom::error::ErrorKind, other: Self) -> Self {
+        other
+    }
+
+    fn from_char(input: StringAndSlice<'a>, ch: char) -> Self {
         Self {
-            string: self.string,
-            slice: Slice {
-                start: self.slice.start + start,
-                end: end
-                    .map(|end| self.slice.start + end)
-                    .unwrap_or(self.slice.end),
-            },
+            module_src: input.string.clone(),
+            index: Some(input.slice.start),
+            details: RawParseErrorDetails::Char(ch),
         }
     }
+}
 
-    pub fn as_str(&self) -> &str {
-        self.slice.of_str(self.string.as_str())
+impl<'a> nom::error::ContextError<StringAndSlice<'a>> for RawParseError {
+    fn add_context(_input: StringAndSlice<'a>, _ctx: &'static str, other: Self) -> Self {
+        other
     }
 }
 
-impl<'a> InputLength for StringAndSlice<'a> {
-    fn input_len(&self) -> usize {
-        self.as_str().input_len()
-    }
-}
-
-#[test]
-fn dfksjlhsdfgkh() {
-    let string = String::from("abc");
-    println!(
-        "{}",
-        StringAndSlice {
-            string: &string,
-            slice: Slice {
-                start: 1,
-                end: string.len() - 1
-            }
+impl<'a, E> nom::error::FromExternalError<StringAndSlice<'a>, E> for RawParseError {
+    fn from_external_error(input: StringAndSlice<'a>, kind: nom::error::ErrorKind, _e: E) -> Self {
+        Self {
+            module_src: input.string.clone(),
+            index: Some(input.slice.start),
+            details: RawParseErrorDetails::Kind(kind),
         }
-        .input_len()
-    );
-}
-
-impl<'a> InputTake for StringAndSlice<'a> {
-    fn take(&self, count: usize) -> Self {
-        self.slice_range(0, Some(count))
-    }
-
-    fn take_split(&self, count: usize) -> (Self, Self) {
-        (
-            self.slice_range(count, None),
-            self.slice_range(0, Some(count)),
-        )
     }
 }
-
-#[test]
-fn take_split() {
-    let s = String::from("ksjdfg");
-    let s = StringAndSlice {
-        string: &s,
-        slice: Slice {
-            start: 0,
-            end: s.len(),
-        },
-    };
-
-    let index = 1;
-    let (a, b) = s.take_split(index);
-    assert_eq!((a.as_str(), b.as_str()), s.as_str().take_split(index));
-
-    let index = 2;
-    let (a, b) = s.take_split(index);
-    assert_eq!((a.as_str(), b.as_str()), s.as_str().take_split(index));
-
-    let s = StringAndSlice {
-        string: s.string,
-        slice: Slice {
-            start: 2,
-            end: s.len() - 1,
-        },
-    };
-
-    let index = 1;
-    let (a, b) = s.take_split(index);
-    assert_eq!((a.as_str(), b.as_str()), s.as_str().take_split(index));
-
-    let index = 2;
-    let (a, b) = s.take_split(index);
-    assert_eq!((a.as_str(), b.as_str()), s.as_str().take_split(index));
-}
-
-impl<'a> InputIter for StringAndSlice<'a> {
-    type Item = char;
-    type Iter = CharIndices<'a>;
-    type IterElem = Chars<'a>;
-
-    fn iter_indices(&self) -> Self::Iter {
-        self.slice.of_str(self.string.as_str()).iter_indices()
-    }
-
-    fn iter_elements(&self) -> Self::IterElem {
-        self.slice.of_str(self.string.as_str()).iter_elements()
-    }
-
-    fn position<P>(&self, predicate: P) -> Option<usize>
-    where
-        P: Fn(Self::Item) -> bool,
-    {
-        self.as_str().position(predicate)
-    }
-
-    fn slice_index(&self, count: usize) -> Result<usize, nom::Needed> {
-        self.as_str().slice_index(count)
-    }
-}
-
-impl<'a> UnspecializedInput for StringAndSlice<'a> {}
-
-impl<'a> Offset for StringAndSlice<'a> {
-    fn offset(&self, second: &Self) -> usize {
-        second.slice.start - self.slice.start
-    }
-}
-
-impl<'a> nom::Slice<RangeFrom<usize>> for StringAndSlice<'a> {
-    fn slice(&self, range: RangeFrom<usize>) -> Self {
-        self.slice_range(range.start, None)
-    }
-}
-
-impl<'a> nom::Slice<RangeTo<usize>> for StringAndSlice<'a> {
-    fn slice(&self, range: RangeTo<usize>) -> Self {
-        self.slice_range(self.slice.start, Some(range.end))
-    }
-}
-
-impl<'a> Compare<&'a str> for StringAndSlice<'a> {
-    fn compare(&self, t: &'a str) -> nom::CompareResult {
-        self.as_str().compare(t)
-    }
-
-    fn compare_no_case(&self, t: &'a str) -> nom::CompareResult {
-        self.as_str().compare_no_case(t)
-    }
-}
-
-impl<'a> Loggable for StringAndSlice<'a> {}

@@ -1,4 +1,6 @@
-use crate::{ast::*, errors::BagelError, resolve::Resolve, typeinfer::InferTypeContext};
+use crate::{
+    ast::*, bgl_type::Type, errors::BagelError, resolve::Resolve, typeinfer::InferTypeContext,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CheckContext<'a> {
@@ -34,7 +36,9 @@ impl<'a> Check<'a> for Src<Declaration> {
                     type_annotation.check(ctx, report_error);
 
                     let value_type = value.infer_type(ctx.into());
-                    let issues = type_annotation.subsumation_issues(ctx.into(), &value_type);
+                    let issues = type_annotation
+                        .resolve(ctx.into())
+                        .subsumation_issues(&value_type);
 
                     if let Some(issues) = issues {
                         report_error(BagelError::AssignmentError {
@@ -85,12 +89,10 @@ impl<'a> Check<'a> for Src<Expression> {
                 let left_type = left.infer_type(ctx);
                 let right_type = right.infer_type(ctx);
 
-                let number_or_string = NUMBER_TYPE.union(STRING_TYPE);
+                let number_or_string = Type::NumberType.union(Type::StringType);
 
                 if op.node == BinaryOperator::Plus {
-                    if let Some(issues) =
-                        number_or_string.subsumation_issues(ctx.into(), &left_type)
-                    {
+                    if let Some(issues) = number_or_string.subsumation_issues(&left_type) {
                         report_error(BagelError::AssignmentError {
                             module_id: ctx.module.module_id.clone(),
                             src: left.src,
@@ -98,9 +100,7 @@ impl<'a> Check<'a> for Src<Expression> {
                         })
                     }
 
-                    if let Some(issues) =
-                        number_or_string.subsumation_issues(ctx.into(), &right_type)
-                    {
+                    if let Some(issues) = number_or_string.subsumation_issues(&right_type) {
                         report_error(BagelError::AssignmentError {
                             module_id: ctx.module.module_id.clone(),
                             src: right.src,
@@ -111,7 +111,7 @@ impl<'a> Check<'a> for Src<Expression> {
                     || op.node == BinaryOperator::Times
                     || op.node == BinaryOperator::Divide
                 {
-                    if let Some(issues) = NUMBER_TYPE.subsumation_issues(ctx.into(), &left_type) {
+                    if let Some(issues) = Type::NumberType.subsumation_issues(&left_type) {
                         report_error(BagelError::AssignmentError {
                             module_id: ctx.module.module_id.clone(),
                             src: left.src,
@@ -119,7 +119,7 @@ impl<'a> Check<'a> for Src<Expression> {
                         })
                     }
 
-                    if let Some(issues) = NUMBER_TYPE.subsumation_issues(ctx.into(), &right_type) {
+                    if let Some(issues) = Type::NumberType.subsumation_issues(&right_type) {
                         report_error(BagelError::AssignmentError {
                             module_id: ctx.module.module_id.clone(),
                             src: right.src,
@@ -249,7 +249,5 @@ impl<'a> Check<'a> for Src<InlineConstDeclaration> {
 }
 
 impl<'a> Check<'a> for Src<TypeExpression> {
-    fn check<F: FnMut(BagelError)>(&self, ctx: CheckContext<'a>, report_error: &mut F) {
-        todo!()
-    }
+    fn check<F: FnMut(BagelError)>(&self, ctx: CheckContext<'a>, report_error: &mut F) {}
 }

@@ -5,16 +5,13 @@ use enum_variant_type::EnumVariantType;
 
 use crate::{
     ast::{LocalIdentifier, ModuleID, Src},
+    bgl_type::SubsumationIssue,
     slice::Slice,
+    string_and_slice::StringAndSlice,
 };
 
 #[derive(Debug, Clone, PartialEq, EnumVariantType)]
 pub enum BagelError {
-    #[evt(derive(Debug, Clone, PartialEq))]
-    ModuleNotFoundError {
-        module_id: ModuleID,
-        importer_module_id: Option<ModuleID>,
-    },
     #[evt(derive(Debug, Clone, PartialEq))]
     ParseError {
         module_id: ModuleID,
@@ -23,28 +20,21 @@ pub enum BagelError {
         message: String,
     },
     #[evt(derive(Debug, Clone, PartialEq))]
+    ModuleNotFoundError {
+        module_id: ModuleID,
+        importer_module_id: Option<ModuleID>,
+    },
+    #[evt(derive(Debug, Clone, PartialEq))]
     AssignmentError {
         module_id: ModuleID,
         src: Option<Slice>,
-        issues: Vec<SubsumationIssue>,
+        issues: SubsumationIssue,
     },
     #[evt(derive(Debug, Clone, PartialEq))]
     NotFoundError {
         module_id: ModuleID,
         identifier: Src<LocalIdentifier>,
     },
-}
-
-#[derive(Clone, Debug, PartialEq, EnumVariantType)]
-pub enum SubsumationIssue {
-    Simple(String),
-    Stack(Vec<String>),
-}
-
-impl From<String> for SubsumationIssue {
-    fn from(s: String) -> Self {
-        Self::Simple(s)
-    }
 }
 
 impl BagelError {
@@ -90,25 +80,21 @@ impl BagelError {
                     None,
                 )?;
 
-                for issue in issues {
-                    match issue {
-                        SubsumationIssue::Simple(issue) => {
-                            f.write_char(' ')?;
-                            f.write_str(issue.as_str())?;
+                match issues {
+                    SubsumationIssue::Assignment(levels) => {
+                        for (index, (destination, value)) in levels.into_iter().enumerate() {
+                            for _ in 0..index + 1 {
+                                f.write_char(' ')?;
+                            }
+
+                            f.write_str("Type ")?;
+                            f.write_str(&format!("{}", value).blue().to_string())?;
+                            f.write_str(" is not assignable to type ")?;
+                            f.write_str(&format!("{}", destination).blue().to_string())?;
                             f.write_char('\n')?;
                         }
-                        SubsumationIssue::Stack(levels) => {
-                            for (index, issue) in levels.into_iter().enumerate() {
-                                for _ in 0..index + 1 {
-                                    f.write_char(' ')?;
-                                }
-
-                                f.write_str(issue.as_str())?;
-                                f.write_char('\n')?;
-                            }
-                        }
-                    };
-                }
+                    }
+                };
 
                 f.write_char('\n')?;
 
@@ -142,7 +128,6 @@ pub fn pretty_print_parse_error<W: Write>(
 
     if let Some(index) = err.index {
         f.write_char('\n')?;
-        f.write_char('\n')?;
 
         code_block_highlighted(
             f,
@@ -165,8 +150,10 @@ fn error_heading<W: Write>(
     kind: &str,
     message: Option<&str>,
 ) -> std::fmt::Result {
-    f.write_str(&module_id.as_str().cyan().to_string())?;
+    // module name
+    f.write_str(&format!("{}", module_id).cyan().to_string())?;
 
+    // line and column
     if let Some(index) = index {
         f.write_char(':')?;
         let (line, column) = line_and_column(module_src, index);
@@ -174,8 +161,13 @@ fn error_heading<W: Write>(
         f.write_char(':')?;
         f.write_str(&column.to_string().as_str().yellow().to_string())?;
     }
+
     f.write_str(" - ")?;
+
+    // error type
     f.write_str(&kind.red().to_string())?;
+
+    // details
     if let Some(message) = message {
         f.write_char(' ')?;
         f.write_str(message)?;
@@ -238,6 +230,7 @@ fn code_block_highlighted<W: Write>(f: &mut W, module_src: &str, src: Slice) -> 
         };
 
         // line number
+        f.write_char(' ')?;
         f.write_str(
             &" ".repeat(widest_line_number - &line_number.len())
                 .black()

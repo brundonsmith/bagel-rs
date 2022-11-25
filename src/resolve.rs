@@ -1,7 +1,4 @@
-use crate::{
-    ast::{Declaration, Expression, InlineConstDeclaration, Module, Src, ValueDeclaration},
-    slice::Slice,
-};
+use crate::{ast::*, slice::Slice};
 
 pub trait Resolve {
     fn resolve_symbol_within(&self, symbol: &str, slice: &Slice) -> Option<Binding>;
@@ -41,7 +38,13 @@ impl Resolve for Module {
                     name,
                     declared_type,
                     exported,
-                } => todo!(),
+                } => {
+                    if name.node.name.as_str() == symbol {
+                        return Some(Binding::TypeDeclaration(
+                            TypeDeclaration::try_from(decl.node.clone()).unwrap(),
+                        ));
+                    }
+                }
                 Declaration::FuncDeclaration {
                     name,
                     func,
@@ -231,4 +234,5 @@ impl Resolve for Src<InlineConstDeclaration> {
 pub enum Binding {
     ValueDeclaration(ValueDeclaration),
     InlineConstDeclaration(InlineConstDeclaration),
+    TypeDeclaration(TypeDeclaration),
 }

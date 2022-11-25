@@ -1,13 +1,13 @@
-use std::fmt::{Formatter, Result, Write};
+use std::fmt::{Result, Write};
 
 use crate::ast::*;
 
 pub trait Compile {
-    fn compile(&self, f: &mut std::fmt::Formatter<'_>) -> Result;
+    fn compile<W: Write>(&self, f: &mut W) -> Result;
 }
 
 impl Compile for Module {
-    fn compile(&self, f: &mut std::fmt::Formatter<'_>) -> Result {
+    fn compile<W: Write>(&self, f: &mut W) -> Result {
         for decl in &self.declarations {
             decl.compile(f)?;
         }
@@ -17,7 +17,7 @@ impl Compile for Module {
 }
 
 impl Compile for Src<Declaration> {
-    fn compile(&self, f: &mut std::fmt::Formatter<'_>) -> Result {
+    fn compile<W: Write>(&self, f: &mut W) -> Result {
         match &self.node {
             Declaration::ValueDeclaration {
                 name,
@@ -71,7 +71,7 @@ impl Compile for Src<Declaration> {
 }
 
 impl Compile for Src<Expression> {
-    fn compile(&self, f: &mut std::fmt::Formatter<'_>) -> Result {
+    fn compile<W: Write>(&self, f: &mut W) -> Result {
         match &self.node {
             Expression::NilLiteral => f.write_str("undefined")?,
             Expression::BooleanLiteral { value } => todo!(),
@@ -187,13 +187,13 @@ impl Compile for Src<Expression> {
 }
 
 impl Compile for Src<BinaryOperator> {
-    fn compile(&self, f: &mut std::fmt::Formatter<'_>) -> Result {
+    fn compile<W: Write>(&self, f: &mut W) -> Result {
         f.write_str(self.node.symbol())
     }
 }
 
 impl Compile for Src<ArrayLiteralEntry> {
-    fn compile(&self, f: &mut Formatter<'_>) -> Result {
+    fn compile<W: Write>(&self, f: &mut W) -> Result {
         match &self.node {
             ArrayLiteralEntry::Spread(spread) => {
                 f.write_str("...")?;
@@ -209,7 +209,7 @@ impl Compile for Src<ArrayLiteralEntry> {
 }
 
 impl Compile for Src<ObjectLiteralEntry> {
-    fn compile(&self, f: &mut Formatter<'_>) -> Result {
+    fn compile<W: Write>(&self, f: &mut W) -> Result {
         match &self.node {
             ObjectLiteralEntry::Variable(x) => Src {
                 src: self.src,
@@ -238,19 +238,19 @@ impl Compile for Src<ObjectLiteralEntry> {
 }
 
 impl Compile for Src<LocalIdentifier> {
-    fn compile(&self, f: &mut Formatter<'_>) -> Result {
+    fn compile<W: Write>(&self, f: &mut W) -> Result {
         f.write_str(self.node.name.as_str())
     }
 }
 
 impl Compile for Src<PlainIdentifier> {
-    fn compile(&self, f: &mut Formatter<'_>) -> Result {
+    fn compile<W: Write>(&self, f: &mut W) -> Result {
         f.write_str(self.node.name.as_str())
     }
 }
 
 impl Compile for Src<TypeExpression> {
-    fn compile(&self, f: &mut std::fmt::Formatter<'_>) -> Result {
+    fn compile<W: Write>(&self, f: &mut W) -> Result {
         match &self.node {
             TypeExpression::UnknownType { mutability } => f.write_str("unknown"),
             TypeExpression::NilType => f.write_str("null | undefined"),
@@ -297,7 +297,11 @@ impl Compile for Src<TypeExpression> {
             } => todo!(),
             TypeExpression::ReadonlyType { inner } => todo!(),
             TypeExpression::LiteralType { value } => todo!(),
-            TypeExpression::NominalType { name, inner } => todo!(),
+            TypeExpression::NominalType {
+                module_id,
+                name,
+                inner,
+            } => todo!(),
             TypeExpression::IteratorType { inner } => todo!(),
             TypeExpression::PlanType { inner } => todo!(),
             TypeExpression::ErrorType { inner } => todo!(),

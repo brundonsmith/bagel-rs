@@ -1,16 +1,16 @@
-use colored::Colorize;
 use enum_variant_type::EnumVariantType;
 
 use crate::{
     ast::{BooleanLiteral, ExactStringLiteral, Expression, Module, NumberLiteral, PlainIdentifier},
+    bgl_type::Type,
     check::CheckContext,
-    errors::SubsumationIssue,
+    resolve::{Binding, Resolve},
     typeinfer::InferTypeContext,
 };
 
-use super::Src;
+use super::{ModuleID, Src};
 
-#[derive(Clone, Debug, EnumVariantType)]
+#[derive(Clone, Debug, PartialEq, EnumVariantType)]
 pub enum TypeExpression {
     #[evt(derive(Debug, Clone, PartialEq))]
     UnionType { members: Vec<Src<TypeExpression>> },
@@ -105,6 +105,7 @@ pub enum TypeExpression {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     NominalType {
+        module_id: ModuleID,
         name: String,
         inner: Option<Box<Src<TypeExpression>>>,
     },
@@ -122,7 +123,7 @@ pub enum TypeExpression {
     ParenthesizedType { inner: Box<Src<TypeExpression>> },
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    TypeofType { expression: Expression },
+    TypeofType { expression: Src<Expression> },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     KeyofType { inner: Box<Src<TypeExpression>> },
@@ -179,69 +180,131 @@ pub const UNKNOWN_TYPE: Src<TypeExpression> = Src {
 };
 
 impl Src<TypeExpression> {
-    pub fn subsumation_issues(
-        &self,
-        ctx: SubsumationContext,
-        other: &Self,
-    ) -> Option<Vec<SubsumationIssue>> {
-        let destination = self.clone().resolve(ctx.into());
-        let value = other.clone().resolve(ctx.into());
+    pub fn resolve<'a>(&self, ctx: ResolveContext<'a>) -> Type {
+        match &self.node {
+            TypeExpression::UnionType { members } => Type::UnionType {
+                members: members.iter().map(|m| m.resolve(ctx)).collect(),
+            },
+            TypeExpression::MaybeType { inner } => inner.resolve(ctx).union(Type::NilType),
+            TypeExpression::NamedType { name } => {
+                let resolved = name
+                    .src
+                    .map(|src| ctx.module.resolve_symbol_within(&name.node.name, &src))
+                    .flatten();
 
-        if destination == value {
-            return None;
-        }
-
-        match &destination.node {
-            TypeExpression::UnionType { members } => {
-                if members.iter().any(|member| member.subsumes(ctx, &value)) {
-                    return None;
+                match resolved {
+                    Some(Binding::TypeDeclaration(binding)) => binding.declared_type.resolve(ctx),
+                    _ => Type::PoisonedType,
                 }
             }
-            _ => {}
-        };
-
-        Some(vec![format!(
-            "Type {} is not assignable to type {}",
-            value.to_string().blue(),
-            destination.to_string().blue()
-        )
-        .into()])
-    }
-
-    pub fn subsumes(&self, ctx: SubsumationContext, other: &Self) -> bool {
-        self.subsumation_issues(ctx, other).is_none()
-    }
-
-    pub fn resolve(self, ctx: ResolveContext) -> Self {
-        match self {
-            _ => self,
-        }
-    }
-
-    pub fn union(self, other: Self) -> Self {
-        Src {
-            src: None,
-            node: TypeExpression::UnionType {
-                members: vec![self, other],
+            TypeExpression::GenericParamType { name, extends } => todo!(),
+            TypeExpression::ProcType {
+                args,
+                is_pure,
+                is_async,
+                throws,
+            } => todo!(),
+            TypeExpression::FuncType {
+                args,
+                is_pure,
+                returns,
+            } => todo!(),
+            TypeExpression::GenericType { type_params, inner } => todo!(),
+            TypeExpression::BoundGenericType { type_args, generic } => todo!(),
+            TypeExpression::ObjectType {
+                entries,
+                mutability,
+            } => todo!(),
+            TypeExpression::InterfaceType {
+                entries,
+                mutability,
+            } => todo!(),
+            TypeExpression::RecordType {
+                key_type,
+                value_type,
+                mutability,
+            } => Type::RecordType {
+                key_type: Box::new(key_type.resolve(ctx)),
+                value_type: Box::new(value_type.resolve(ctx)),
+                mutability: *mutability,
             },
+            TypeExpression::ArrayType {
+                element,
+                mutability,
+            } => Type::ArrayType {
+                element: Box::new(element.resolve(ctx)),
+                mutability: *mutability,
+            },
+            TypeExpression::TupleType {
+                members,
+                mutability,
+            } => Type::TupleType {
+                members: members.iter().map(|x| x.resolve(ctx)).collect(),
+                mutability: *mutability,
+            },
+            TypeExpression::ReadonlyType { inner } => {
+                inner.resolve(ctx).with_mutability(Mutability::Readonly)
+            }
+            TypeExpression::StringType => Type::StringType,
+            TypeExpression::NumberType => Type::NumberType,
+            TypeExpression::BooleanType => Type::BooleanType,
+            TypeExpression::NilType => Type::NilType,
+            TypeExpression::LiteralType { value } => todo!(),
+            // Type::LiteralType { value: match value {
+            //     LiteralTypeValue::ExactString(s) => s.value,
+            //     LiteralTypeValue::NumberLiteral(n) => todo!(),
+            //     LiteralTypeValue::BooleanLiteral(b) => todo!(),
+            // } },
+            TypeExpression::NominalType {
+                module_id,
+                name,
+                inner,
+            } => Type::NominalType {
+                module_id: module_id.clone(),
+                name: name.clone(),
+                inner: inner.as_ref().map(|inner| Box::new(inner.resolve(ctx))),
+            },
+            TypeExpression::IteratorType { inner } => Type::IteratorType {
+                inner: Box::new(inner.resolve(ctx)),
+            },
+            TypeExpression::PlanType { inner } => Type::PlanType {
+                inner: Box::new(inner.resolve(ctx)),
+            },
+            TypeExpression::ErrorType { inner } => Type::ErrorType {
+                inner: Box::new(inner.resolve(ctx)),
+            },
+            TypeExpression::ParenthesizedType { inner } => inner.resolve(ctx),
+            TypeExpression::TypeofType { expression } => expression.infer_type(ctx.into()),
+            TypeExpression::KeyofType { inner } => todo!(),
+            TypeExpression::ValueofType { inner } => todo!(),
+            TypeExpression::ElementofType { inner } => todo!(),
+            TypeExpression::UnknownType { mutability } => Type::UnknownType {
+                mutability: *mutability,
+            },
+            TypeExpression::PoisonedType => Type::PoisonedType,
+            TypeExpression::AnyType => Type::AnyType,
+            TypeExpression::RegularExpressionType {} => todo!(),
+            TypeExpression::PropertyType {
+                subject,
+                property,
+                optional,
+            } => {
+                let subject_type = subject.resolve(ctx);
+
+                match subject_type {
+                    Type::ObjectType {
+                        entries,
+                        mutability,
+                        is_interface,
+                    } => entries
+                        .into_iter()
+                        .find(|(key, value)| *key == property.node.name)
+                        .map(|(key, value)| value.as_ref().clone())
+                        .unwrap_or(Type::PoisonedType),
+                    _ => Type::PoisonedType,
+                }
+            }
         }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct SubsumationContext<'a> {
-    pub module: &'a Module,
-}
-
-impl<'a> From<CheckContext<'a>> for SubsumationContext<'a> {
-    fn from(CheckContext { module }: CheckContext<'a>) -> Self {
-        Self { module }
-    }
-}
-
-impl<'a> From<InferTypeContext<'a>> for SubsumationContext<'a> {
-    fn from(InferTypeContext { module }: InferTypeContext<'a>) -> Self {
-        Self { module }
     }
 }
 
@@ -250,9 +313,15 @@ pub struct ResolveContext<'a> {
     pub module: &'a Module,
 }
 
-impl<'a> From<SubsumationContext<'a>> for ResolveContext<'a> {
-    fn from(SubsumationContext { module }: SubsumationContext<'a>) -> Self {
-        Self { module }
+impl<'a> From<InferTypeContext<'a>> for ResolveContext<'a> {
+    fn from(ctx: InferTypeContext<'a>) -> Self {
+        Self { module: ctx.module }
+    }
+}
+
+impl<'a> From<CheckContext<'a>> for ResolveContext<'a> {
+    fn from(ctx: CheckContext<'a>) -> Self {
+        Self { module: ctx.module }
     }
 }
 
@@ -291,211 +360,4 @@ pub enum LiteralTypeValue {
     ExactString(ExactStringLiteral),
     NumberLiteral(NumberLiteral),
     BooleanLiteral(BooleanLiteral),
-}
-
-impl PartialEq for TypeExpression {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::UnionType { members: l_members }, Self::UnionType { members: r_members }) => {
-                l_members == r_members
-            }
-            (Self::MaybeType { inner: l_inner }, Self::MaybeType { inner: r_inner }) => {
-                l_inner == r_inner
-            }
-            (Self::NamedType { name: l_name }, Self::NamedType { name: r_name }) => {
-                l_name == r_name
-            }
-            (
-                Self::GenericParamType {
-                    name: l_name,
-                    extends: l_extends,
-                },
-                Self::GenericParamType {
-                    name: r_name,
-                    extends: r_extends,
-                },
-            ) => l_name == r_name && l_extends == r_extends,
-            (
-                Self::ProcType {
-                    args: l_args,
-                    is_pure: l_is_pure,
-                    is_async: l_is_async,
-                    throws: l_throws,
-                },
-                Self::ProcType {
-                    args: r_args,
-                    is_pure: r_is_pure,
-                    is_async: r_is_async,
-                    throws: r_throws,
-                },
-            ) => {
-                l_args == r_args
-                    && l_is_pure == r_is_pure
-                    && l_is_async == r_is_async
-                    && l_throws == r_throws
-            }
-            (
-                Self::FuncType {
-                    args: l_args,
-                    is_pure: l_is_pure,
-                    returns: l_returns,
-                },
-                Self::FuncType {
-                    args: r_args,
-                    is_pure: r_is_pure,
-                    returns: r_returns,
-                },
-            ) => l_args == r_args && l_is_pure == r_is_pure && l_returns == r_returns,
-            (
-                Self::GenericType {
-                    type_params: l_type_params,
-                    inner: l_inner,
-                },
-                Self::GenericType {
-                    type_params: r_type_params,
-                    inner: r_inner,
-                },
-            ) => l_type_params == r_type_params && l_inner == r_inner,
-            (
-                Self::BoundGenericType {
-                    type_args: l_type_args,
-                    generic: l_generic,
-                },
-                Self::BoundGenericType {
-                    type_args: r_type_args,
-                    generic: r_generic,
-                },
-            ) => l_type_args == r_type_args && l_generic == r_generic,
-            (
-                Self::ObjectType {
-                    entries: l_entries,
-                    mutability: l_mutability,
-                },
-                Self::ObjectType {
-                    entries: r_entries,
-                    mutability: r_mutability,
-                },
-            ) => l_entries == r_entries && l_mutability == r_mutability,
-            (
-                Self::InterfaceType {
-                    entries: l_entries,
-                    mutability: l_mutability,
-                },
-                Self::InterfaceType {
-                    entries: r_entries,
-                    mutability: r_mutability,
-                },
-            ) => l_entries == r_entries && l_mutability == r_mutability,
-            (
-                Self::RecordType {
-                    key_type: l_key_type,
-                    value_type: l_value_type,
-                    mutability: l_mutability,
-                },
-                Self::RecordType {
-                    key_type: r_key_type,
-                    value_type: r_value_type,
-                    mutability: r_mutability,
-                },
-            ) => {
-                l_key_type == r_key_type
-                    && l_value_type == r_value_type
-                    && l_mutability == r_mutability
-            }
-            (
-                Self::ArrayType {
-                    element: l_element,
-                    mutability: l_mutability,
-                },
-                Self::ArrayType {
-                    element: r_element,
-                    mutability: r_mutability,
-                },
-            ) => l_element == r_element && l_mutability == r_mutability,
-            (
-                Self::TupleType {
-                    members: l_members,
-                    mutability: l_mutability,
-                },
-                Self::TupleType {
-                    members: r_members,
-                    mutability: r_mutability,
-                },
-            ) => l_members == r_members && l_mutability == r_mutability,
-            (Self::ReadonlyType { inner: l_inner }, Self::ReadonlyType { inner: r_inner }) => {
-                l_inner == r_inner
-            }
-            (Self::StringType, Self::StringType) => true,
-            (Self::NumberType, Self::NumberType) => true,
-            (Self::BooleanType, Self::BooleanType) => true,
-            (Self::NilType, Self::NilType) => true,
-            (Self::LiteralType { value: l_value }, Self::LiteralType { value: r_value }) => {
-                l_value == r_value
-            }
-            (
-                Self::NominalType {
-                    name: l_name,
-                    inner: l_inner,
-                },
-                Self::NominalType {
-                    name: r_name,
-                    inner: r_inner,
-                },
-            ) => l_name == r_name && l_inner == r_inner,
-            (Self::IteratorType { inner: l_inner }, Self::IteratorType { inner: r_inner }) => {
-                l_inner == r_inner
-            }
-            (Self::PlanType { inner: l_inner }, Self::PlanType { inner: r_inner }) => {
-                l_inner == r_inner
-            }
-            (Self::ErrorType { inner: l_inner }, Self::ErrorType { inner: r_inner }) => {
-                l_inner == r_inner
-            }
-            (
-                Self::ParenthesizedType { inner: l_inner },
-                Self::ParenthesizedType { inner: r_inner },
-            ) => l_inner == r_inner,
-            (
-                Self::TypeofType {
-                    expression: l_expression,
-                },
-                Self::TypeofType {
-                    expression: r_expression,
-                },
-            ) => l_expression == r_expression,
-            (Self::KeyofType { inner: l_inner }, Self::KeyofType { inner: r_inner }) => {
-                l_inner == r_inner
-            }
-            (Self::ValueofType { inner: l_inner }, Self::ValueofType { inner: r_inner }) => {
-                l_inner == r_inner
-            }
-            (Self::ElementofType { inner: l_inner }, Self::ElementofType { inner: r_inner }) => {
-                l_inner == r_inner
-            }
-            (
-                Self::UnknownType {
-                    mutability: l_mutability,
-                },
-                Self::UnknownType {
-                    mutability: r_mutability,
-                },
-            ) => l_mutability == r_mutability,
-            (Self::PoisonedType, Self::PoisonedType) => true,
-            (Self::AnyType, Self::AnyType) => true,
-            (Self::RegularExpressionType {}, Self::RegularExpressionType {}) => true,
-            (
-                Self::PropertyType {
-                    subject: l_subject,
-                    property: l_property,
-                    optional: l_optional,
-                },
-                Self::PropertyType {
-                    subject: r_subject,
-                    property: r_property,
-                    optional: r_optional,
-                },
-            ) => l_subject == r_subject && l_property == r_property && l_optional == r_optional,
-            _ => false,
-        }
-    }
 }

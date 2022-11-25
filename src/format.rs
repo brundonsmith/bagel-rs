@@ -422,7 +422,11 @@ impl<'a> Format for Src<TypeExpression> {
             TypeExpression::BooleanType => f.write_str("boolean")?,
             TypeExpression::NilType => f.write_str("nil")?,
             TypeExpression::LiteralType { value } => todo!(),
-            TypeExpression::NominalType { name, inner } => todo!(),
+            TypeExpression::NominalType {
+                module_id,
+                name,
+                inner,
+            } => todo!(),
             TypeExpression::IteratorType { inner } => todo!(),
             TypeExpression::PlanType { inner } => todo!(),
             TypeExpression::ErrorType { inner } => todo!(),
