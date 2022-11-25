@@ -97,6 +97,10 @@ pub trait Srcable: Clone + std::fmt::Debug + PartialEq {
         }
     }
 
+    fn with_opt_src(self, src: Option<Slice>) -> Src<Self> {
+        Src { src, node: self }
+    }
+
     fn no_src(self) -> Src<Self> {
         Src {
             src: None,
