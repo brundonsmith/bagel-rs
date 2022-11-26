@@ -180,41 +180,28 @@ impl Src<TypeExpression> {
             TypeExpression::RecordType {
                 key_type,
                 value_type,
-            } => todo!(),
-            // Type::RecordType {
-            //     key_type: Box::new(key_type.resolve(ctx)),
-            //     value_type: Box::new(value_type.resolve(ctx)),
-            //     mutability: *mutability,
-            // },
-            TypeExpression::ArrayType { element } => todo!(),
-            // Type::ArrayType {
-            //     element: Box::new(element.resolve(ctx)),
-            //     mutability: *mutability,
-            // },
-            TypeExpression::TupleType { members } => todo!(),
-            // Type::TupleType {
-            //     members: members.iter().map(|x| x.resolve(ctx)).collect(),
-            //     mutability: *mutability,
-            // },
+            } => Type::RecordType {
+                key_type: Box::new(key_type.resolve(ctx)),
+                value_type: Box::new(value_type.resolve(ctx)),
+                mutability: ctx.mutability,
+            },
+            TypeExpression::ArrayType { element } => Type::ArrayType {
+                element: Box::new(element.resolve(ctx)),
+                mutability: ctx.mutability,
+            },
+            TypeExpression::TupleType { members } => Type::TupleType {
+                members: members.iter().map(|x| x.resolve(ctx)).collect(),
+                mutability: ctx.mutability,
+            },
             TypeExpression::ReadonlyType { inner } => {
-                inner.resolve(ctx).with_mutability(Mutability::Readonly)
+                inner.resolve(ctx.with_mutability(Mutability::Readonly))
             }
             TypeExpression::StringType => Type::StringType,
             TypeExpression::NumberType => Type::NumberType,
             TypeExpression::BooleanType => Type::BooleanType,
             TypeExpression::NilType => Type::NilType,
             TypeExpression::LiteralType { value } => Type::LiteralType {
-                value: match value {
-                    LiteralTypeValue::ExactString(s) => {
-                        crate::model::bgl_type::LiteralTypeValue::ExactString(s.value.clone())
-                    }
-                    LiteralTypeValue::NumberLiteral(s) => {
-                        crate::model::bgl_type::LiteralTypeValue::NumberLiteral(s.value.clone())
-                    }
-                    LiteralTypeValue::BooleanLiteral(s) => {
-                        crate::model::bgl_type::LiteralTypeValue::BooleanLiteral(s.value)
-                    }
-                },
+                value: value.clone().into(),
             },
             TypeExpression::NominalType {
                 module_id,
@@ -239,10 +226,9 @@ impl Src<TypeExpression> {
             TypeExpression::KeyofType { inner } => todo!(),
             TypeExpression::ValueofType { inner } => todo!(),
             TypeExpression::ElementofType { inner } => todo!(),
-            TypeExpression::UnknownType => todo!(),
-            // Type::UnknownType {
-            //     mutability: *mutability,
-            // },
+            TypeExpression::UnknownType => Type::UnknownType {
+                mutability: ctx.mutability,
+            },
             TypeExpression::PoisonedType => Type::PoisonedType,
             TypeExpression::AnyType => Type::AnyType,
             TypeExpression::RegularExpressionType {} => todo!(),
@@ -274,6 +260,17 @@ impl Src<TypeExpression> {
 pub struct ResolveContext<'a> {
     pub modules: &'a ModulesStore,
     pub current_module: &'a Module,
+    pub mutability: Mutability,
+}
+
+impl<'a> ResolveContext<'a> {
+    pub fn with_mutability(self, mutability: Mutability) -> Self {
+        Self {
+            modules: self.modules,
+            current_module: self.current_module,
+            mutability,
+        }
+    }
 }
 
 impl<'a> From<InferTypeContext<'a>> for ResolveContext<'a> {
@@ -286,6 +283,7 @@ impl<'a> From<InferTypeContext<'a>> for ResolveContext<'a> {
         Self {
             modules,
             current_module,
+            mutability: Mutability::Mutable,
         }
     }
 }
@@ -300,6 +298,7 @@ impl<'a> From<CheckContext<'a>> for ResolveContext<'a> {
         Self {
             modules,
             current_module,
+            mutability: Mutability::Mutable,
         }
     }
 }

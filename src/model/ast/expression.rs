@@ -77,7 +77,7 @@ pub enum Expression {
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    JavascriptEscapeExpression(JavascriptEscape),
+    JavascriptEscapeExpression(String),
 
     #[evt(derive(Debug, Clone, PartialEq))]
     RangeExpression {
@@ -171,11 +171,6 @@ pub enum RegularExpressionFlag {
 pub enum AwaitOrDetach {
     Await,
     Detach,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct JavascriptEscape {
-    pub js: String,
 }
 
 #[derive(Clone, Debug, PartialEq)]

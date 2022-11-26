@@ -110,6 +110,20 @@ pub enum LiteralTypeValue {
     BooleanLiteral(bool),
 }
 
+impl From<super::ast::LiteralTypeValue> for LiteralTypeValue {
+    fn from(ast: super::ast::LiteralTypeValue) -> Self {
+        match ast {
+            super::ast::LiteralTypeValue::ExactString(s) => LiteralTypeValue::ExactString(s.value),
+            super::ast::LiteralTypeValue::NumberLiteral(s) => {
+                LiteralTypeValue::NumberLiteral(s.value)
+            }
+            super::ast::LiteralTypeValue::BooleanLiteral(b) => {
+                LiteralTypeValue::BooleanLiteral(b.value)
+            }
+        }
+    }
+}
+
 impl Type {
     pub fn subsumes(&self, other: &Self) -> bool {
         self.subsumation_issues(other).is_none()
