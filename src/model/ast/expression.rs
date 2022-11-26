@@ -98,7 +98,7 @@ pub enum Expression {
     #[evt(derive(Debug, Clone, PartialEq))]
     PropertyAccessor {
         subject: Box<Src<Expression>>,
-        property: Option<Src<PlainIdentifier>>, // TODO:  | Expression
+        property: Box<Src<IdentifierOrExpression>>,
         optional: bool,
     },
 
@@ -189,7 +189,13 @@ pub enum ArrayLiteralEntry {
 pub enum ObjectLiteralEntry {
     Variable(LocalIdentifier),
     Spread(LocalIdentifier),
-    KeyValue(PlainIdentifier, Expression),
+    KeyValue(IdentifierOrExpression, Expression),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum IdentifierOrExpression {
+    PlainIdentifier(PlainIdentifier),
+    Expression(Expression),
 }
 
 #[derive(Clone, Debug, PartialEq)]

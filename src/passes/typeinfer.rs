@@ -31,6 +31,7 @@ impl<'a> From<ResolveContext<'a>> for InferTypeContext<'a> {
         ResolveContext {
             modules,
             current_module,
+            mutability: _,
         }: ResolveContext<'a>,
     ) -> Self {
         Self {

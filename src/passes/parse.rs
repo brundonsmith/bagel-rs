@@ -549,7 +549,9 @@ fn object_literal<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<ObjectLitera
                         .into_iter()
                         .map(|(key, value)| {
                             ObjectLiteralEntry::KeyValue(
-                                PlainIdentifier(key.as_str().to_owned()),
+                                IdentifierOrExpression::PlainIdentifier(PlainIdentifier(
+                                    key.as_str().to_owned(),
+                                )),
                                 value,
                             )
                             .no_src()

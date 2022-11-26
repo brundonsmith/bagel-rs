@@ -356,6 +356,12 @@ impl Display for Src<Statement> {
     }
 }
 
+impl Format for Src<IdentifierOrExpression> {
+    fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
+        todo!()
+    }
+}
+
 impl Format for Src<Statement> {
     fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
         match &self.node {

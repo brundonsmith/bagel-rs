@@ -335,3 +335,18 @@ impl Compile for Src<TypeExpression> {
         }
     }
 }
+
+impl Compile for Src<IdentifierOrExpression> {
+    fn compile<W: Write>(&self, f: &mut W) -> Result {
+        todo!()
+        // match &self.node {
+        //     IdentifierOrExpression::PlainIdentifier(x) => f.write_str(x.0.as_str()),
+        //     IdentifierOrExpression::Expression(x) => {
+        //         f.write_char('[')?;
+        //         let expr: Src<Expression> = x.with_opt_src(self.src);
+        //         expr.compile(f)?;
+        //         f.write_char(']')
+        //     }
+        // }
+    }
+}
