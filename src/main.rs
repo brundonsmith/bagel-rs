@@ -58,7 +58,7 @@ fn main() {
                         module.check(
                             CheckContext {
                                 modules: &modules_store,
-                                current_module_id: &module.module_id,
+                                current_module: &module,
                             },
                             &mut |error: BagelError| {
                                 error.pretty_print(error_output_buf, &module.src, true);

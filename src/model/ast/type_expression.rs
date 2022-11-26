@@ -8,7 +8,7 @@ use crate::{
     ModulesStore,
 };
 
-use super::{ModuleID, Src};
+use super::{Module, ModuleID, Src};
 
 #[derive(Clone, Debug, PartialEq, EnumVariantType)]
 pub enum TypeExpression {
@@ -155,8 +155,8 @@ impl Src<TypeExpression> {
             },
             TypeExpression::MaybeType { inner } => inner.resolve(ctx).union(Type::NilType),
             TypeExpression::NamedType { name } => Type::NamedType {
-                module_id: ctx.current_module_id.clone(),
-                name: name.node.name.clone(),
+                module_id: ctx.current_module.module_id.clone(),
+                name: name.node.0.clone(),
                 index: name.src.unwrap().start,
             },
             TypeExpression::GenericParamType { name, extends } => todo!(),
@@ -260,7 +260,7 @@ impl Src<TypeExpression> {
                         is_interface,
                     } => entries
                         .into_iter()
-                        .find(|(key, value)| *key == property.node.name)
+                        .find(|(key, value)| *key == property.node.0)
                         .map(|(key, value)| value.as_ref().clone())
                         .unwrap_or(Type::PoisonedType),
                     _ => Type::PoisonedType,
@@ -273,19 +273,19 @@ impl Src<TypeExpression> {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ResolveContext<'a> {
     pub modules: &'a ModulesStore,
-    pub current_module_id: &'a ModuleID,
+    pub current_module: &'a Module,
 }
 
 impl<'a> From<InferTypeContext<'a>> for ResolveContext<'a> {
     fn from(
         InferTypeContext {
             modules,
-            current_module_id,
+            current_module,
         }: InferTypeContext<'a>,
     ) -> Self {
         Self {
             modules,
-            current_module_id,
+            current_module,
         }
     }
 }
@@ -294,12 +294,12 @@ impl<'a> From<CheckContext<'a>> for ResolveContext<'a> {
     fn from(
         CheckContext {
             modules,
-            current_module_id,
+            current_module,
         }: CheckContext<'a>,
     ) -> Self {
         Self {
             modules,
-            current_module_id,
+            current_module,
         }
     }
 }

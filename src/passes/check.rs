@@ -6,7 +6,7 @@ use crate::{
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CheckContext<'a> {
     pub modules: &'a ModulesStore,
-    pub current_module_id: &'a ModuleID,
+    pub current_module: &'a Module,
 }
 
 pub trait Check<'a> {
@@ -44,7 +44,7 @@ impl<'a> Check<'a> for Src<Declaration> {
 
                     if let Some(issues) = issues {
                         report_error(BagelError::AssignmentError {
-                            module_id: ctx.current_module_id.clone(),
+                            module_id: ctx.current_module.module_id.clone(),
                             src: value.src,
                             issues,
                         });
@@ -96,7 +96,7 @@ impl<'a> Check<'a> for Src<Expression> {
                 if op.node == BinaryOperator::Plus {
                     if let Some(issues) = number_or_string.subsumation_issues(&left_type) {
                         report_error(BagelError::AssignmentError {
-                            module_id: ctx.current_module_id.clone(),
+                            module_id: ctx.current_module.module_id.clone(),
                             src: left.src,
                             issues,
                         })
@@ -104,7 +104,7 @@ impl<'a> Check<'a> for Src<Expression> {
 
                     if let Some(issues) = number_or_string.subsumation_issues(&right_type) {
                         report_error(BagelError::AssignmentError {
-                            module_id: ctx.current_module_id.clone(),
+                            module_id: ctx.current_module.module_id.clone(),
                             src: right.src,
                             issues,
                         })
@@ -115,7 +115,7 @@ impl<'a> Check<'a> for Src<Expression> {
                 {
                     if let Some(issues) = Type::NumberType.subsumation_issues(&left_type) {
                         report_error(BagelError::AssignmentError {
-                            module_id: ctx.current_module_id.clone(),
+                            module_id: ctx.current_module.module_id.clone(),
                             src: left.src,
                             issues,
                         })
@@ -123,7 +123,7 @@ impl<'a> Check<'a> for Src<Expression> {
 
                     if let Some(issues) = Type::NumberType.subsumation_issues(&right_type) {
                         report_error(BagelError::AssignmentError {
-                            module_id: ctx.current_module_id.clone(),
+                            module_id: ctx.current_module.module_id.clone(),
                             src: right.src,
                             issues,
                         })
@@ -143,27 +143,19 @@ impl<'a> Check<'a> for Src<Expression> {
                 //     BinaryOperator::InstanceOf => todo!(),
                 // }
             }
-            Expression::Parenthesis { inner } => inner.check(ctx, report_error),
-            Expression::LocalIdentifier { name } => {
+            Expression::Parenthesis(inner) => inner.check(ctx, report_error),
+            Expression::LocalIdentifier(name) => {
                 if let Some(src) = self.src {
                     if ctx
-                        .modules
-                        .get(ctx.current_module_id)
-                        .map(|module| {
-                            module
-                                .as_ref()
-                                .ok()
-                                .map(|module| module.resolve_symbol_within(name.as_str(), &src))
-                        })
-                        .flatten()
-                        .flatten()
+                        .current_module
+                        .resolve_symbol_within(name.as_str(), &src)
                         .is_none()
                     {
                         report_error(BagelError::NotFoundError {
-                            module_id: ctx.current_module_id.clone(),
+                            module_id: ctx.current_module.module_id.clone(),
                             identifier: Src {
                                 src: Some(src),
-                                node: LocalIdentifier { name: name.clone() },
+                                node: LocalIdentifier(name.clone()),
                             },
                         })
                     }
@@ -187,26 +179,14 @@ impl<'a> Check<'a> for Src<Expression> {
             Expression::ExactStringLiteral { tag, value } => todo!(),
             Expression::ArrayLiteral { entries } => todo!(),
             Expression::ObjectLiteral { entries } => todo!(),
-            Expression::NegationOperation { inner } => todo!(),
+            Expression::NegationOperation(inner) => todo!(),
             Expression::Func {
                 type_annotation,
                 is_async,
                 is_pure,
                 body,
             } => todo!(),
-            Expression::JsFunc {
-                type_annotation,
-                is_async,
-                is_pure,
-                body,
-            } => todo!(),
             Expression::Proc {
-                type_annotation,
-                is_async,
-                is_pure,
-                body,
-            } => todo!(),
-            Expression::JsProc {
                 type_annotation,
                 is_async,
                 is_pure,
@@ -242,6 +222,10 @@ impl<'a> Check<'a> for Src<Expression> {
                 children,
             } => todo!(),
             Expression::AsCast { inner, as_type } => todo!(),
+            Expression::InstanceOf {
+                inner,
+                possible_type,
+            } => todo!(),
             Expression::ErrorExpression { inner } => todo!(),
             Expression::RegularExpression { expr, flags } => todo!(),
         };

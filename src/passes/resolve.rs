@@ -26,7 +26,7 @@ impl Resolve for Module {
                     exported: _,
                     platforms: _,
                 } => {
-                    if name.node.name.as_str() == symbol {
+                    if name.node.0.as_str() == symbol {
                         return Some(Binding::ValueDeclaration(
                             ValueDeclaration::try_from(decl.node.clone()).unwrap(),
                         ));
@@ -39,7 +39,7 @@ impl Resolve for Module {
                     declared_type,
                     exported,
                 } => {
-                    if name.node.name.as_str() == symbol {
+                    if name.node.0.as_str() == symbol {
                         return Some(Binding::TypeDeclaration(
                             TypeDeclaration::try_from(decl.node.clone()).unwrap(),
                         ));
@@ -132,13 +132,13 @@ impl Resolve for Src<Expression> {
                     return right.resolve_symbol_within(symbol, slice);
                 }
             }
-            Expression::Parenthesis { inner } => {
+            Expression::Parenthesis(inner) => {
                 if inner.contains(slice) {
                     return inner.resolve_symbol_within(symbol, slice);
                 }
             }
 
-            Expression::LocalIdentifier { name: _ } => {}
+            Expression::LocalIdentifier(_) => {}
             Expression::NilLiteral => {}
             Expression::NumberLiteral { value: _ } => {}
             Expression::InlineConstGroup {
@@ -158,26 +158,14 @@ impl Resolve for Src<Expression> {
             Expression::ExactStringLiteral { tag, value } => todo!(),
             Expression::ArrayLiteral { entries } => todo!(),
             Expression::ObjectLiteral { entries } => todo!(),
-            Expression::NegationOperation { inner } => todo!(),
+            Expression::NegationOperation(inner) => todo!(),
             Expression::Func {
                 type_annotation,
                 is_async,
                 is_pure,
                 body,
             } => todo!(),
-            Expression::JsFunc {
-                type_annotation,
-                is_async,
-                is_pure,
-                body,
-            } => todo!(),
             Expression::Proc {
-                type_annotation,
-                is_async,
-                is_pure,
-                body,
-            } => todo!(),
-            Expression::JsProc {
                 type_annotation,
                 is_async,
                 is_pure,
@@ -213,6 +201,10 @@ impl Resolve for Src<Expression> {
                 children,
             } => todo!(),
             Expression::AsCast { inner, as_type } => todo!(),
+            Expression::InstanceOf {
+                inner,
+                possible_type,
+            } => todo!(),
             Expression::ErrorExpression { inner } => todo!(),
             Expression::RegularExpression { expr, flags } => todo!(),
         };
@@ -223,7 +215,7 @@ impl Resolve for Src<Expression> {
 
 impl Resolve for Src<InlineConstDeclaration> {
     fn resolve_symbol_within(&self, symbol: &str, slice: &Slice) -> Option<Binding> {
-        if self.node.name.name.as_str() == symbol {
+        if self.node.name.0.as_str() == symbol {
             Some(Binding::InlineConstDeclaration(self.node.clone()))
         } else {
             None

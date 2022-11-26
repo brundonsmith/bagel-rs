@@ -31,7 +31,7 @@ impl Compile for Src<Declaration> {
                     f.write_str("export ")?;
                 }
                 f.write_str("const ")?;
-                f.write_str(name.node.name.as_str())?;
+                f.write_str(name.node.0.as_str())?;
                 if let Some(type_annotation) = type_annotation {
                     type_annotation.compile(f)?;
                 }
@@ -54,7 +54,7 @@ impl Compile for Src<Declaration> {
                 decorators,
             } => {
                 f.write_str("func ")?;
-                f.write_str(&name.node.name)?;
+                f.write_str(&name.node.0)?;
                 func.compile(f)
             }
             Declaration::ProcDeclaration {
@@ -118,36 +118,24 @@ impl Compile for Src<Expression> {
                 f.write_char(' ')?;
                 right.compile(f)?;
             }
-            Expression::Parenthesis { inner } => {
+            Expression::Parenthesis(inner) => {
                 f.write_char('(')?;
                 inner.compile(f)?;
                 f.write_char(')')?;
             }
-            Expression::LocalIdentifier { name } => f.write_str(name.as_str())?,
+            Expression::LocalIdentifier(name) => f.write_str(name.as_str())?,
             Expression::InlineConstGroup {
                 declarations,
                 inner,
             } => todo!(),
-            Expression::NegationOperation { inner } => todo!(),
+            Expression::NegationOperation(inner) => todo!(),
             Expression::Func {
                 type_annotation,
                 is_async,
                 is_pure,
                 body,
             } => todo!(),
-            Expression::JsFunc {
-                type_annotation,
-                is_async,
-                is_pure,
-                body,
-            } => todo!(),
             Expression::Proc {
-                type_annotation,
-                is_async,
-                is_pure,
-                body,
-            } => todo!(),
-            Expression::JsProc {
                 type_annotation,
                 is_async,
                 is_pure,
@@ -183,6 +171,10 @@ impl Compile for Src<Expression> {
                 children,
             } => todo!(),
             Expression::AsCast { inner, as_type } => todo!(),
+            Expression::InstanceOf {
+                inner,
+                possible_type,
+            } => todo!(),
             Expression::ErrorExpression { inner } => todo!(),
             Expression::RegularExpression { expr, flags } => todo!(),
         };
@@ -221,7 +213,7 @@ impl Compile for Src<Func> {
 
 impl Compile for Src<BinaryOperator> {
     fn compile<W: Write>(&self, f: &mut W) -> Result {
-        f.write_str(self.node.symbol())
+        f.write_str(self.node.into())
     }
 }
 
@@ -230,7 +222,7 @@ impl Compile for Src<ArrayLiteralEntry> {
         match &self.node {
             ArrayLiteralEntry::Spread(spread) => {
                 f.write_str("...")?;
-                f.write_str(spread.name.as_str())
+                f.write_str(spread.0.as_str())
             }
             ArrayLiteralEntry::Element(element) => Src {
                 src: self.src,
@@ -251,7 +243,7 @@ impl Compile for Src<ObjectLiteralEntry> {
             .compile(f),
             ObjectLiteralEntry::Spread(spread) => {
                 f.write_str("...")?;
-                f.write_str(spread.name.as_str())
+                f.write_str(spread.0.as_str())
             }
             ObjectLiteralEntry::KeyValue(key, value) => {
                 Src {
@@ -272,13 +264,13 @@ impl Compile for Src<ObjectLiteralEntry> {
 
 impl Compile for Src<LocalIdentifier> {
     fn compile<W: Write>(&self, f: &mut W) -> Result {
-        f.write_str(self.node.name.as_str())
+        f.write_str(self.node.0.as_str())
     }
 }
 
 impl Compile for Src<PlainIdentifier> {
     fn compile<W: Write>(&self, f: &mut W) -> Result {
-        f.write_str(self.node.name.as_str())
+        f.write_str(self.node.0.as_str())
     }
 }
 

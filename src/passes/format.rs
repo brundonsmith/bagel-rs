@@ -151,13 +151,13 @@ impl Format for Src<Expression> {
                 f.write_char(' ')?;
                 right.format(f, opts)?;
             }
-            Expression::NegationOperation { inner } => todo!(),
-            Expression::Parenthesis { inner } => {
+            Expression::NegationOperation(inner) => todo!(),
+            Expression::Parenthesis(inner) => {
                 f.write_char('(')?;
                 inner.format(f, opts)?;
                 f.write_char(')')?;
             }
-            Expression::LocalIdentifier { name } => f.write_str(name.as_str())?,
+            Expression::LocalIdentifier(name) => f.write_str(name.as_str())?,
             Expression::InlineConstGroup {
                 declarations,
                 inner,
@@ -168,19 +168,7 @@ impl Format for Src<Expression> {
                 is_pure,
                 body,
             } => todo!(),
-            Expression::JsFunc {
-                type_annotation,
-                is_async,
-                is_pure,
-                body,
-            } => todo!(),
             Expression::Proc {
-                type_annotation,
-                is_async,
-                is_pure,
-                body,
-            } => todo!(),
-            Expression::JsProc {
                 type_annotation,
                 is_async,
                 is_pure,
@@ -216,6 +204,10 @@ impl Format for Src<Expression> {
                 children,
             } => todo!(),
             Expression::AsCast { inner, as_type } => todo!(),
+            Expression::InstanceOf {
+                inner,
+                possible_type,
+            } => todo!(),
             Expression::ErrorExpression { inner } => todo!(),
             Expression::RegularExpression { expr, flags } => todo!(),
         };
@@ -240,13 +232,17 @@ impl Format for Src<Func> {
             return_type.format(f, opts)?;
         }
         f.write_str(" => ")?;
-        self.node.body.format(f, opts)
+
+        match &self.node.body {
+            FuncBody::Expression(expr) => expr.format(f, opts),
+            FuncBody::Js(_) => todo!(),
+        }
     }
 }
 
 impl Format for Src<Arg> {
     fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
-        f.write_str(&self.node.name.node.name)?;
+        f.write_str(&self.node.name.node.0)?;
 
         if let Some(type_annotation) = &self.node.type_annotation {
             if self.node.optional {
@@ -269,7 +265,7 @@ impl Display for Src<BinaryOperator> {
 
 impl Format for Src<BinaryOperator> {
     fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
-        f.write_str(self.node.symbol())
+        f.write_str(self.node.into())
     }
 }
 
@@ -284,7 +280,7 @@ impl Format for Src<ArrayLiteralEntry> {
         match &self.node {
             ArrayLiteralEntry::Spread(spread) => {
                 f.write_str("...")?;
-                f.write_str(spread.name.as_str())
+                f.write_str(spread.0.as_str())
             }
             ArrayLiteralEntry::Element(element) => Src {
                 src: self.src,
@@ -311,7 +307,7 @@ impl Format for Src<ObjectLiteralEntry> {
             .format(f, opts),
             ObjectLiteralEntry::Spread(spread) => {
                 f.write_str("...")?;
-                f.write_str(spread.name.as_str())
+                f.write_str(spread.0.as_str())
             }
             ObjectLiteralEntry::KeyValue(key, value) => {
                 Src {
@@ -338,7 +334,7 @@ impl Display for Src<LocalIdentifier> {
 
 impl Format for Src<LocalIdentifier> {
     fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
-        f.write_str(self.node.name.as_str())
+        f.write_str(self.node.0.as_str())
     }
 }
 
@@ -350,7 +346,7 @@ impl Display for Src<PlainIdentifier> {
 
 impl Format for Src<PlainIdentifier> {
     fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
-        f.write_str(self.node.name.as_str())
+        f.write_str(self.node.0.as_str())
     }
 }
 

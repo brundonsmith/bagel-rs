@@ -9,19 +9,19 @@ use crate::{
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct InferTypeContext<'a> {
     pub modules: &'a ModulesStore,
-    pub current_module_id: &'a ModuleID,
+    pub current_module: &'a Module,
 }
 
 impl<'a> From<CheckContext<'a>> for InferTypeContext<'a> {
     fn from(
         CheckContext {
             modules,
-            current_module_id,
+            current_module,
         }: CheckContext<'a>,
     ) -> Self {
         Self {
             modules,
-            current_module_id,
+            current_module,
         }
     }
 }
@@ -30,12 +30,12 @@ impl<'a> From<ResolveContext<'a>> for InferTypeContext<'a> {
     fn from(
         ResolveContext {
             modules,
-            current_module_id,
+            current_module,
         }: ResolveContext<'a>,
     ) -> Self {
         Self {
             modules,
-            current_module_id,
+            current_module,
         }
     }
 }
@@ -86,22 +86,12 @@ impl<'a> Src<Expression> {
                 BinaryOperator::Minus => Type::NumberType,
                 BinaryOperator::Times => Type::NumberType,
                 BinaryOperator::Divide => Type::NumberType,
-                BinaryOperator::InstanceOf => Type::BooleanType,
             },
-            Expression::Parenthesis { inner } => inner.infer_type(ctx),
-            Expression::LocalIdentifier { name } => {
+            Expression::Parenthesis(inner) => inner.infer_type(ctx),
+            Expression::LocalIdentifier(name) => {
                 let resolved = self
                     .src
-                    .map(|s| {
-                        ctx.modules.get(&ctx.current_module_id).map(|module| {
-                            module
-                                .as_ref()
-                                .ok()
-                                .map(|module| module.resolve_symbol_within(name.as_str(), &s))
-                        })
-                    })
-                    .flatten()
-                    .flatten()
+                    .map(|s| ctx.current_module.resolve_symbol_within(name.as_str(), &s))
                     .flatten();
 
                 match resolved {
@@ -129,26 +119,14 @@ impl<'a> Src<Expression> {
             Expression::StringLiteral { tag, segments } => todo!(),
             Expression::ArrayLiteral { entries } => todo!(),
             Expression::ObjectLiteral { entries } => todo!(),
-            Expression::NegationOperation { inner } => todo!(),
+            Expression::NegationOperation(inner) => todo!(),
             Expression::Func {
                 type_annotation,
                 is_async,
                 is_pure,
                 body,
             } => todo!(),
-            Expression::JsFunc {
-                type_annotation,
-                is_async,
-                is_pure,
-                body,
-            } => todo!(),
             Expression::Proc {
-                type_annotation,
-                is_async,
-                is_pure,
-                body,
-            } => todo!(),
-            Expression::JsProc {
                 type_annotation,
                 is_async,
                 is_pure,
@@ -184,6 +162,10 @@ impl<'a> Src<Expression> {
                 children,
             } => todo!(),
             Expression::AsCast { inner, as_type } => todo!(),
+            Expression::InstanceOf {
+                inner,
+                possible_type,
+            } => todo!(),
             Expression::ErrorExpression { inner } => todo!(),
             Expression::RegularExpression { expr, flags } => todo!(),
         }

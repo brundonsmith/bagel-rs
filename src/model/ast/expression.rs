@@ -1,4 +1,5 @@
 use enum_variant_type::EnumVariantType;
+use strum_macros::{EnumString, IntoStaticStr};
 
 use crate::model::slice::Slice;
 
@@ -45,13 +46,13 @@ pub enum Expression {
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    NegationOperation { inner: Box<Src<Expression>> },
+    NegationOperation(Box<Src<Expression>>),
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    Parenthesis { inner: Box<Src<Expression>> },
+    Parenthesis(Box<Src<Expression>>),
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    LocalIdentifier { name: String },
+    LocalIdentifier(String),
 
     #[evt(derive(Debug, Clone, PartialEq))]
     InlineConstGroup {
@@ -64,15 +65,7 @@ pub enum Expression {
         type_annotation: Src<FuncType>, // TODO:  | GenericFuncType
         is_async: bool,
         is_pure: bool,
-        body: Box<Src<Expression>>,
-    },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    JsFunc {
-        type_annotation: Src<FuncType>, // TODO:  | GenericFuncType
-        is_async: bool,
-        is_pure: bool,
-        body: String,
+        body: FuncBody,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
@@ -80,15 +73,7 @@ pub enum Expression {
         type_annotation: Src<ProcType>, // TODO:  | GenericProcType
         is_async: bool,
         is_pure: bool,
-        body: Vec<Src<Statement>>,
-    },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    JsProc {
-        type_annotation: Src<ProcType>, // TODO:  | GenericProcType
-        is_async: bool,
-        is_pure: bool,
-        body: String,
+        body: ProcBody,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
@@ -144,6 +129,12 @@ pub enum Expression {
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
+    InstanceOf {
+        inner: Box<Src<Expression>>,
+        possible_type: Box<Src<TypeExpression>>,
+    },
+
+    #[evt(derive(Debug, Clone, PartialEq))]
     ErrorExpression { inner: Box<Src<Expression>> },
 
     #[evt(derive(Debug, Clone, PartialEq))]
@@ -151,6 +142,18 @@ pub enum Expression {
         expr: String,
         flags: Vec<Src<RegularExpressionFlag>>,
     },
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum FuncBody {
+    Expression(Box<Src<Expression>>),
+    Js(String),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum ProcBody {
+    Statements(Vec<Src<Statement>>),
+    Js(String),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -201,64 +204,32 @@ pub struct InlineConstDeclaration {
     pub value: Box<Src<Expression>>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
 pub enum BinaryOperator {
+    #[strum(serialize = "??")]
     NullishCoalescing,
+    #[strum(serialize = "||")]
     Or,
+    #[strum(serialize = "&&")]
     And,
+    #[strum(serialize = "==")]
     Equals,
+    #[strum(serialize = "!=")]
     NotEquals,
+    #[strum(serialize = "<=")]
     LessEqual,
+    #[strum(serialize = ">=")]
     GreaterEqual,
+    #[strum(serialize = "<")]
     Less,
+    #[strum(serialize = ">")]
     Greater,
+    #[strum(serialize = "+")]
     Plus,
+    #[strum(serialize = "-")]
     Minus,
+    #[strum(serialize = "*")]
     Times,
+    #[strum(serialize = "/")]
     Divide,
-    InstanceOf,
-}
-
-impl BinaryOperator {
-    pub const fn symbol(self) -> &'static str {
-        match self {
-            BinaryOperator::NullishCoalescing => "??",
-            BinaryOperator::Or => "||",
-            BinaryOperator::And => "&&",
-            BinaryOperator::Equals => "==",
-            BinaryOperator::NotEquals => "!=",
-            BinaryOperator::LessEqual => "<=",
-            BinaryOperator::GreaterEqual => ">=",
-            BinaryOperator::Less => "<",
-            BinaryOperator::Greater => ">",
-            BinaryOperator::Plus => "+",
-            BinaryOperator::Minus => "-",
-            BinaryOperator::Times => "*",
-            BinaryOperator::Divide => "/",
-            BinaryOperator::InstanceOf => "instanceof",
-        }
-    }
-
-    pub fn from_symbol(symbol: &str) -> Self {
-        match symbol {
-            "??" => BinaryOperator::NullishCoalescing,
-            "||" => BinaryOperator::Or,
-            "&&" => BinaryOperator::And,
-            "==" => BinaryOperator::Equals,
-            "!=" => BinaryOperator::NotEquals,
-            "<=" => BinaryOperator::LessEqual,
-            ">=" => BinaryOperator::GreaterEqual,
-            "<" => BinaryOperator::Less,
-            ">" => BinaryOperator::Greater,
-            "+" => BinaryOperator::Plus,
-            "-" => BinaryOperator::Minus,
-            "*" => BinaryOperator::Times,
-            "/" => BinaryOperator::Divide,
-            "instanceof" => BinaryOperator::InstanceOf,
-            _ => panic!(
-                "from_symbol() called with invalid operator symbol \"{}\"",
-                symbol
-            ),
-        }
-    }
 }

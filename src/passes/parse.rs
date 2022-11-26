@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use nom::{
     branch::alt,
     bytes::complete::{escaped, tag, take_while, take_while1},
@@ -211,7 +213,7 @@ fn func_declaration<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<FuncDeclar
 
                         is_async: asyn.is_some(),
                         is_pure: pure.is_some(),
-                        body: Box::new(body),
+                        body: FuncBody::Expression(Box::new(body)),
                     }
                     .with_opt_src(src),
                     exported: export.is_some(),
@@ -292,7 +294,7 @@ fn proc_declaration<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<ProcDeclar
 
                         is_async: asyn.is_some(),
                         is_pure: pure.is_some(),
-                        body,
+                        body: ProcBody::Statements(body),
                     }
                     .with_src(src),
                     exported: export.is_some(),
@@ -420,28 +422,36 @@ fn binary_operation<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<Expression
                     2,
                     Assoc::Left,
                     map(preceded(whitespace, tag("*")), |op| {
-                        BinaryOperator::from_symbol(op.as_str()).with_src(op.slice)
+                        BinaryOperator::from_str(op.as_str())
+                            .unwrap()
+                            .with_src(op.slice)
                     }),
                 ),
                 binary_op(
                     2,
                     Assoc::Left,
                     map(preceded(whitespace, tag("/")), |op| {
-                        BinaryOperator::from_symbol(op.as_str()).with_src(op.slice)
+                        BinaryOperator::from_str(op.as_str())
+                            .unwrap()
+                            .with_src(op.slice)
                     }),
                 ),
                 binary_op(
                     3,
                     Assoc::Left,
                     map(preceded(whitespace, tag("+")), |op| {
-                        BinaryOperator::from_symbol(op.as_str()).with_src(op.slice)
+                        BinaryOperator::from_str(op.as_str())
+                            .unwrap()
+                            .with_src(op.slice)
                     }),
                 ),
                 binary_op(
                     3,
                     Assoc::Left,
                     map(preceded(whitespace, tag("-")), |op| {
-                        BinaryOperator::from_symbol(op.as_str()).with_src(op.slice)
+                        BinaryOperator::from_str(op.as_str())
+                            .unwrap()
+                            .with_src(op.slice)
                     }),
                 ),
             )),
@@ -516,10 +526,7 @@ fn parenthesis<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<Parenthesis>> {
                 )),
             ),
             |(open_paren, (inner, close_paren))| {
-                Parenthesis {
-                    inner: Box::new(inner),
-                }
-                .with_src(open_paren.slice.spanning(&close_paren.slice))
+                Parenthesis(Box::new(inner)).with_src(open_paren.slice.spanning(&close_paren.slice))
             },
         ),
     )(i)
@@ -542,9 +549,7 @@ fn object_literal<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<ObjectLitera
                         .into_iter()
                         .map(|(key, value)| {
                             ObjectLiteralEntry::KeyValue(
-                                PlainIdentifier {
-                                    name: key.as_str().to_owned(),
-                                },
+                                PlainIdentifier(key.as_str().to_owned()),
                                 value,
                             )
                             .no_src()
@@ -647,10 +652,7 @@ fn local_identifier<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<LocalIdent
     context(
         "identifier",
         map(identifier_like, |name| {
-            LocalIdentifier {
-                name: name.as_str().to_owned(),
-            }
-            .with_src(name.slice)
+            LocalIdentifier(name.as_str().to_owned()).with_src(name.slice)
         }),
     )(i)
 }
@@ -659,10 +661,7 @@ fn plain_identifier<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<PlainIdent
     context(
         "identifier",
         map(identifier_like, |name| {
-            PlainIdentifier {
-                name: name.as_str().to_owned(),
-            }
-            .with_src(name.slice)
+            PlainIdentifier(name.as_str().to_owned()).with_src(name.slice)
         }),
     )(i)
 }

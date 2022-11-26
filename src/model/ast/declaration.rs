@@ -74,6 +74,12 @@ pub enum Declaration {
     },
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum Decorator {
+    LocalIdentifier(LocalIdentifier),
+    Invocation(Invocation),
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct PlatformSet {
     pub node: bool,
@@ -89,10 +95,4 @@ impl PlatformSet {
             browser: true,
         }
     }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum Decorator {
-    LocalIdentifier(LocalIdentifier),
-    Invocation(Invocation),
 }

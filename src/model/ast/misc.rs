@@ -56,9 +56,7 @@ pub struct Module {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct PlainIdentifier {
-    pub name: String,
-}
+pub struct PlainIdentifier(pub String);
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Src<T> {
