@@ -1,22 +1,20 @@
-use std::collections::HashSet;
-
 use nom::{
     branch::alt,
     bytes::complete::{escaped, tag, take_while, take_while1},
     character::complete::{alphanumeric1, char, one_of},
     combinator::{cut, fail, map, opt},
     error::context,
-    multi::separated_list0,
+    multi::{many0, separated_list0},
     sequence::{pair, preceded, separated_pair, terminated, tuple},
     IResult,
 };
 
 use crate::{
-    ast::*,
-    errors::ParseError,
-    precedence::{binary_op, precedence, Assoc, Operation},
-    slice::Slice,
-    string_and_slice::StringAndSlice,
+    model::ast::*,
+    model::errors::ParseError,
+    model::slice::Slice,
+    model::string_and_slice::StringAndSlice,
+    passes::precedence::{binary_op, precedence, Assoc, Operation},
 };
 
 pub fn parse(module_id: ModuleID, module_src: String) -> Result<Module, ParseError> {
@@ -89,7 +87,7 @@ fn declaration<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<Declaration>> {
             map(import_declaration, |x| x.map(Declaration::from)),
             map(type_declaration, |x| x.map(Declaration::from)),
             map(func_declaration, |x| x.map(Declaration::from)),
-            // map(proc_declaration, |x| x.map(Declaration::from)),
+            map(proc_declaration, |x| x.map(Declaration::from)),
             map(value_declaration, |x| x.map(Declaration::from)),
             // map(test_expr_declaration, |x| x.map(Declaration::from)),
             // map(test_block_declaration, |x| x.map(Declaration::from)),
@@ -205,6 +203,7 @@ fn func_declaration<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<FuncDeclar
                     func: Func {
                         type_annotation: FuncType {
                             args,
+                            args_spread: None, // TODO
                             is_pure: pure.is_some(),
                             returns: return_type.map(Box::new),
                         }
@@ -216,8 +215,8 @@ fn func_declaration<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<FuncDeclar
                     }
                     .with_opt_src(src),
                     exported: export.is_some(),
-                    platforms: HashSet::new(), // TODO
-                    decorators: vec![],        // TODO
+                    platforms: PlatformSet::all(), // TODO
+                    decorators: vec![],            // TODO
                 }
                 .with_opt_src(src)
             },
@@ -225,31 +224,85 @@ fn func_declaration<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<FuncDeclar
     )(i)
 }
 
-fn args<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<Args>> {
+fn args<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Vec<Src<Arg>>> {
     map(
         separated_list0(
             preceded(whitespace, tag(",")),
             preceded(whitespace, pair(plain_identifier, opt(type_annotation))),
         ),
         |args| {
-            Args::Individual(
-                args.into_iter()
-                    .map(|(name, type_annotation)| {
-                        Arg {
-                            name,
-                            type_annotation,
-                            optional: false, // TODO
-                        }
-                    })
-                    .collect(),
-            )
-            .no_src()
+            args.into_iter()
+                .map(|(name, type_annotation)| {
+                    let src = name.src.map(|n| {
+                        n.spanning(
+                            &type_annotation
+                                .as_ref()
+                                .map(|t| t.src)
+                                .flatten()
+                                .unwrap_or(n),
+                        )
+                    });
+
+                    Arg {
+                        name,
+                        type_annotation,
+                        optional: false, // TODO
+                    }
+                    .with_opt_src(src)
+                })
+                .collect()
         },
     )(i)
 }
 
 fn proc_declaration<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<ProcDeclaration>> {
-    todo!()
+    context(
+        "proc declaration",
+        map(
+            tuple((
+                opt(tag("export")),
+                opt(preceded(whitespace, tag("pure"))),
+                opt(preceded(whitespace, tag("async"))),
+                preceded(whitespace, tag("proc")),
+                preceded(whitespace, plain_identifier),
+                preceded(whitespace, tag("(")),
+                preceded(whitespace, args),
+                preceded(whitespace, tag(")")),
+                preceded(whitespace, tag("{")),
+                many0(preceded(whitespace, statement)),
+                preceded(whitespace, tag("}")),
+            )),
+            |(export, pure, asyn, keyword, name, _, args, _, _, body, closing_brace)| {
+                let src = export
+                    .unwrap_or(pure.unwrap_or(asyn.unwrap_or(keyword)))
+                    .slice
+                    .spanning(&closing_brace.slice);
+
+                ProcDeclaration {
+                    name,
+                    proc: Proc {
+                        type_annotation: ProcType {
+                            args,
+                            args_spread: None, // TODO
+                            is_pure: pure.is_some(),
+                            is_async: asyn.is_some(),
+                            throws: None, // TODO
+                        }
+                        .no_src(),
+
+                        is_async: asyn.is_some(),
+                        is_pure: pure.is_some(),
+                        body,
+                    }
+                    .with_src(src),
+                    exported: export.is_some(),
+                    platforms: PlatformSet::all(), // TODO
+                    decorators: vec![],            // TODO
+                }
+                .with_src(src)
+            },
+        ),
+    )(i)
 }
 
 fn value_declaration<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<ValueDeclaration>> {
@@ -275,7 +328,7 @@ fn value_declaration<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<ValueDecl
                     value,
                     is_const: keyword.as_str() == "const",
                     exported: export.is_some(),
-                    platforms: HashSet::new(), // TODO
+                    platforms: PlatformSet::all(), // TODO
                 }
                 .with_opt_src(src)
             },
@@ -301,6 +354,21 @@ fn type_annotation<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<TypeExpress
 
 fn type_expression<'a>(i: StringAndSlice<'a>) -> ParseResult<'a, Src<TypeExpression>> {
     alt((
+        map(exact_string_literal, |s| {
+            s.map(|s| TypeExpression::LiteralType {
+                value: LiteralTypeValue::ExactString(s),
+            })
+        }),
+        map(number_literal, |s| {
+            s.map(|s| TypeExpression::LiteralType {
+                value: LiteralTypeValue::NumberLiteral(s),
+            })
+        }),
+        map(boolean_literal, |s| {
+            s.map(|s| TypeExpression::LiteralType {
+                value: LiteralTypeValue::BooleanLiteral(s),
+            })
+        }),
         map(tag("string"), |s: StringAndSlice<'a>| {
             TypeExpression::StringType.with_src(s.slice)
         }),

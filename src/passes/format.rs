@@ -1,4 +1,4 @@
-use crate::ast::*;
+use crate::model::ast::*;
 
 use std::fmt::{Display, Formatter, Result, Write};
 
@@ -19,13 +19,13 @@ impl FormatOptions {
     pub const DEFAULT: FormatOptions = FormatOptions {};
 }
 
-impl<'a> Display for Module {
+impl Display for Module {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         self.format(f, FormatOptions::DEFAULT)
     }
 }
 
-impl<'a> Format for Module {
+impl Format for Module {
     fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
         for decl in &self.declarations {
             decl.format(f, opts)?;
@@ -35,13 +35,13 @@ impl<'a> Format for Module {
     }
 }
 
-impl<'a> Display for Src<Declaration> {
+impl Display for Src<Declaration> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         self.format(f, FormatOptions::DEFAULT)
     }
 }
 
-impl<'a> Format for Src<Declaration> {
+impl Format for Src<Declaration> {
     fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
         match &self.node {
             Declaration::ImportAllDeclaration { name, path } => todo!(),
@@ -99,13 +99,13 @@ impl<'a> Format for Src<Declaration> {
     }
 }
 
-impl<'a> Display for Src<Expression> {
+impl Display for Src<Expression> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         self.format(f, FormatOptions::DEFAULT)
     }
 }
 
-impl<'a> Format for Src<Expression> {
+impl Format for Src<Expression> {
     fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
         match &self.node {
             Expression::NilLiteral => f.write_str("nil")?,
@@ -224,25 +224,62 @@ impl<'a> Format for Src<Expression> {
     }
 }
 
+impl Format for Src<Func> {
+    fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
+        f.write_char('(')?;
+        for arg in &self.node.type_annotation.node.args {
+            arg.format(f, opts)?;
+        }
+        if let Some(spread) = &self.node.type_annotation.node.args_spread {
+            f.write_str("...")?;
+            spread.format(f, opts)?;
+        }
+        f.write_char(')')?;
+        if let Some(return_type) = &self.node.type_annotation.node.returns {
+            f.write_str(": ")?;
+            return_type.format(f, opts)?;
+        }
+        f.write_str(" => ")?;
+        self.node.body.format(f, opts)
+    }
+}
+
+impl Format for Src<Arg> {
+    fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
+        f.write_str(&self.node.name.node.name)?;
+
+        if let Some(type_annotation) = &self.node.type_annotation {
+            if self.node.optional {
+                f.write_char('?')?;
+            }
+
+            f.write_str(": ")?;
+            type_annotation.format(f, opts)?;
+        }
+
+        Ok(())
+    }
+}
+
 impl Display for Src<BinaryOperator> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         self.format(f, FormatOptions::DEFAULT)
     }
 }
 
-impl<'a> Format for Src<BinaryOperator> {
+impl Format for Src<BinaryOperator> {
     fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
         f.write_str(self.node.symbol())
     }
 }
 
-impl<'a> Display for Src<ArrayLiteralEntry> {
+impl Display for Src<ArrayLiteralEntry> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         self.format(f, FormatOptions::DEFAULT)
     }
 }
 
-impl<'a> Format for Src<ArrayLiteralEntry> {
+impl Format for Src<ArrayLiteralEntry> {
     fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
         match &self.node {
             ArrayLiteralEntry::Spread(spread) => {
@@ -258,13 +295,13 @@ impl<'a> Format for Src<ArrayLiteralEntry> {
     }
 }
 
-impl<'a> Display for Src<ObjectLiteralEntry> {
+impl Display for Src<ObjectLiteralEntry> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         self.format(f, FormatOptions::DEFAULT)
     }
 }
 
-impl<'a> Format for Src<ObjectLiteralEntry> {
+impl Format for Src<ObjectLiteralEntry> {
     fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
         match &self.node {
             ObjectLiteralEntry::Variable(x) => Src {
@@ -293,37 +330,37 @@ impl<'a> Format for Src<ObjectLiteralEntry> {
     }
 }
 
-impl<'a> Display for Src<LocalIdentifier> {
+impl Display for Src<LocalIdentifier> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         self.format(f, FormatOptions::DEFAULT)
     }
 }
 
-impl<'a> Format for Src<LocalIdentifier> {
+impl Format for Src<LocalIdentifier> {
     fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
         f.write_str(self.node.name.as_str())
     }
 }
 
-impl<'a> Display for Src<PlainIdentifier> {
+impl Display for Src<PlainIdentifier> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         self.format(f, FormatOptions::DEFAULT)
     }
 }
 
-impl<'a> Format for Src<PlainIdentifier> {
+impl Format for Src<PlainIdentifier> {
     fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
         f.write_str(self.node.name.as_str())
     }
 }
 
-impl<'a> Display for Src<Statement> {
+impl Display for Src<Statement> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         self.format(f, FormatOptions::DEFAULT)
     }
 }
 
-impl<'a> Format for Src<Statement> {
+impl Format for Src<Statement> {
     fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
         match &self.node {
             Statement::DeclarationStatement {
@@ -361,13 +398,13 @@ impl<'a> Format for Src<Statement> {
     }
 }
 
-impl<'a> Display for Src<TypeExpression> {
+impl Display for Src<TypeExpression> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         self.format(f, FormatOptions::DEFAULT)
     }
 }
 
-impl<'a> Format for Src<TypeExpression> {
+impl Format for Src<TypeExpression> {
     fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
         match &self.node {
             TypeExpression::UnionType { members } => {
@@ -384,38 +421,27 @@ impl<'a> Format for Src<TypeExpression> {
             TypeExpression::GenericParamType { name, extends } => todo!(),
             TypeExpression::ProcType {
                 args,
+                args_spread,
                 is_pure,
                 is_async,
                 throws,
             } => todo!(),
             TypeExpression::FuncType {
                 args,
+                args_spread,
                 is_pure,
                 returns,
             } => todo!(),
             TypeExpression::GenericType { type_params, inner } => todo!(),
             TypeExpression::BoundGenericType { type_args, generic } => todo!(),
-            TypeExpression::ObjectType {
-                entries,
-                mutability,
-            } => todo!(),
-            TypeExpression::InterfaceType {
-                entries,
-                mutability,
-            } => todo!(),
+            TypeExpression::ObjectType { entries } => todo!(),
+            TypeExpression::InterfaceType { entries } => todo!(),
             TypeExpression::RecordType {
                 key_type,
                 value_type,
-                mutability,
             } => todo!(),
-            TypeExpression::ArrayType {
-                element,
-                mutability,
-            } => todo!(),
-            TypeExpression::TupleType {
-                members,
-                mutability,
-            } => todo!(),
+            TypeExpression::ArrayType { element } => todo!(),
+            TypeExpression::TupleType { members } => todo!(),
             TypeExpression::ReadonlyType { inner } => todo!(),
             TypeExpression::StringType => f.write_str("string")?,
             TypeExpression::NumberType => f.write_str("number")?,
@@ -435,7 +461,7 @@ impl<'a> Format for Src<TypeExpression> {
             TypeExpression::KeyofType { inner } => todo!(),
             TypeExpression::ValueofType { inner } => todo!(),
             TypeExpression::ElementofType { inner } => todo!(),
-            TypeExpression::UnknownType { mutability } => todo!(),
+            TypeExpression::UnknownType => todo!(),
             TypeExpression::PoisonedType => todo!(),
             TypeExpression::AnyType => todo!(),
             TypeExpression::RegularExpressionType {} => todo!(),

@@ -4,10 +4,9 @@ use colored::Colorize;
 use enum_variant_type::EnumVariantType;
 
 use crate::{
-    ast::{LocalIdentifier, ModuleID, Src},
-    bgl_type::SubsumationIssue,
-    slice::Slice,
-    string_and_slice::StringAndSlice,
+    model::ast::{LocalIdentifier, ModuleID, Src},
+    model::bgl_type::SubsumationIssue,
+    model::slice::Slice,
 };
 
 #[derive(Debug, Clone, PartialEq, EnumVariantType)]

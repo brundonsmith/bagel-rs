@@ -1,32 +1,48 @@
 use crate::{
-    ast::*,
-    bgl_type::Type,
-    check::CheckContext,
-    resolve::{Binding, Resolve},
+    model::ast::*,
+    model::bgl_type::Type,
+    passes::check::CheckContext,
+    passes::resolve::{Binding, Resolve},
+    ModulesStore,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct InferTypeContext<'a> {
-    pub module: &'a Module,
+    pub modules: &'a ModulesStore,
+    pub current_module_id: &'a ModuleID,
 }
 
 impl<'a> From<CheckContext<'a>> for InferTypeContext<'a> {
-    fn from(CheckContext { module }: CheckContext<'a>) -> Self {
-        Self { module }
+    fn from(
+        CheckContext {
+            modules,
+            current_module_id,
+        }: CheckContext<'a>,
+    ) -> Self {
+        Self {
+            modules,
+            current_module_id,
+        }
     }
 }
 
 impl<'a> From<ResolveContext<'a>> for InferTypeContext<'a> {
-    fn from(ResolveContext { module }: ResolveContext<'a>) -> Self {
-        Self { module }
+    fn from(
+        ResolveContext {
+            modules,
+            current_module_id,
+        }: ResolveContext<'a>,
+    ) -> Self {
+        Self {
+            modules,
+            current_module_id,
+        }
     }
 }
 
 impl<'a> Src<Expression> {
     pub fn infer_type(&self, ctx: InferTypeContext<'a>) -> Type {
         match &self.node {
-            Expression::NilLiteral => Type::NilType,
-            Expression::NumberLiteral { value: _ } => Type::NumberType,
             Expression::BinaryOperation { left, op, right } => match op.node {
                 BinaryOperator::NullishCoalescing => todo!(),
                 BinaryOperator::Or => todo!(),
@@ -76,7 +92,16 @@ impl<'a> Src<Expression> {
             Expression::LocalIdentifier { name } => {
                 let resolved = self
                     .src
-                    .map(|s| ctx.module.resolve_symbol_within(name.as_str(), &s))
+                    .map(|s| {
+                        ctx.modules.get(&ctx.current_module_id).map(|module| {
+                            module
+                                .as_ref()
+                                .ok()
+                                .map(|module| module.resolve_symbol_within(name.as_str(), &s))
+                        })
+                    })
+                    .flatten()
+                    .flatten()
                     .flatten();
 
                 match resolved {
@@ -91,9 +116,17 @@ impl<'a> Src<Expression> {
                 declarations: _,
                 inner,
             } => inner.infer_type(ctx),
-            Expression::BooleanLiteral { value } => todo!(),
+            Expression::NilLiteral => Type::NilType,
+            Expression::NumberLiteral { value } => Type::LiteralType {
+                value: crate::model::bgl_type::LiteralTypeValue::NumberLiteral(value.clone()),
+            },
+            Expression::BooleanLiteral { value } => Type::LiteralType {
+                value: crate::model::bgl_type::LiteralTypeValue::BooleanLiteral(*value),
+            },
+            Expression::ExactStringLiteral { value, tag: _ } => Type::LiteralType {
+                value: crate::model::bgl_type::LiteralTypeValue::ExactString(value.clone()),
+            },
             Expression::StringLiteral { tag, segments } => todo!(),
-            Expression::ExactStringLiteral { tag, value } => todo!(),
             Expression::ArrayLiteral { entries } => todo!(),
             Expression::ObjectLiteral { entries } => todo!(),
             Expression::NegationOperation { inner } => todo!(),

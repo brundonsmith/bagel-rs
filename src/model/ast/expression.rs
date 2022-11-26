@@ -1,6 +1,6 @@
 use enum_variant_type::EnumVariantType;
 
-use crate::slice::Slice;
+use crate::model::slice::Slice;
 
 use super::{FuncType, PlainIdentifier, ProcType, Src, Statement, TypeExpression};
 

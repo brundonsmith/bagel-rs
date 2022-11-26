@@ -1,21 +1,10 @@
 #![allow(dead_code)]
 
-mod ast;
-mod bgl_type;
-mod check;
 mod cli;
-mod compile;
-mod errors;
-mod format;
-mod parse;
-mod precedence;
-mod resolve;
-mod slice;
-mod typeinfer;
-mod utils;
-
-mod string_and_slice;
+mod model;
+mod passes;
 mod tests;
+mod utils;
 
 use std::{
     collections::HashMap,
@@ -23,16 +12,15 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use ast::{Declaration, Module, ModuleID};
-
 use clap::{command, Parser};
 use cli::Command;
 use glob::{glob, Paths};
 
 use crate::{
-    check::{Check, CheckContext},
-    errors::{pretty_print_parse_error, BagelError, ParseError},
-    parse::parse,
+    model::ast::{Declaration, Module, ModuleID},
+    model::errors::{pretty_print_parse_error, BagelError, ParseError},
+    passes::check::{Check, CheckContext},
+    passes::parse::parse,
 };
 
 #[derive(Parser, Debug, Clone)]
@@ -46,7 +34,7 @@ fn main() {
     let args = Args::parse();
     println!("{:?}", args);
 
-    let mut modules_store = HashMap::new();
+    let mut modules_store: ModulesStore = HashMap::new();
 
     match args.command {
         Command::New { dir } => todo!(),
@@ -68,7 +56,10 @@ fn main() {
                 match module {
                     Ok(module) => {
                         module.check(
-                            CheckContext { module: &module },
+                            CheckContext {
+                                modules: &modules_store,
+                                current_module_id: &module.module_id,
+                            },
                             &mut |error: BagelError| {
                                 error.pretty_print(error_output_buf, &module.src, true);
                             },
@@ -90,6 +81,8 @@ fn main() {
         } => todo!(),
     }
 }
+
+pub type ModulesStore = HashMap<ModuleID, Result<Module, ParseError>>;
 
 fn get_all_entrypoints(paths: Paths) -> impl Iterator<Item = PathBuf> {
     paths.filter_map(|path| {

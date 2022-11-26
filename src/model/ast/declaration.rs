@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use enum_variant_type::EnumVariantType;
 
 use super::{
@@ -33,7 +31,7 @@ pub enum Declaration {
         name: Src<PlainIdentifier>,
         func: Src<Func>, // TODO:  | JsFunc
         exported: bool,
-        platforms: HashSet<Platform>,
+        platforms: PlatformSet,
         decorators: Vec<Src<Decorator>>,
     },
 
@@ -42,7 +40,7 @@ pub enum Declaration {
         name: Src<PlainIdentifier>,
         proc: Src<Proc>, // TODO:  | JsProc
         exported: bool,
-        platforms: HashSet<Platform>,
+        platforms: PlatformSet,
         decorators: Vec<Src<Decorator>>,
     },
 
@@ -53,7 +51,7 @@ pub enum Declaration {
         value: Src<Expression>,
         is_const: bool,
         exported: bool,
-        platforms: HashSet<Platform>,
+        platforms: PlatformSet,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
@@ -77,10 +75,20 @@ pub enum Declaration {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Platform {
-    Node,
-    Deno,
-    Browser,
+pub struct PlatformSet {
+    pub node: bool,
+    pub deno: bool,
+    pub browser: bool,
+}
+
+impl PlatformSet {
+    pub fn all() -> Self {
+        PlatformSet {
+            node: true,
+            deno: true,
+            browser: true,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

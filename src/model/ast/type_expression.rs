@@ -1,11 +1,11 @@
 use enum_variant_type::EnumVariantType;
 
 use crate::{
-    ast::{BooleanLiteral, ExactStringLiteral, Expression, Module, NumberLiteral, PlainIdentifier},
-    bgl_type::Type,
-    check::CheckContext,
-    resolve::{Binding, Resolve},
-    typeinfer::InferTypeContext,
+    model::ast::{BooleanLiteral, ExactStringLiteral, Expression, NumberLiteral, PlainIdentifier},
+    model::bgl_type::Type,
+    passes::check::CheckContext,
+    passes::typeinfer::InferTypeContext,
+    ModulesStore,
 };
 
 use super::{ModuleID, Src};
@@ -29,7 +29,8 @@ pub enum TypeExpression {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ProcType {
-        args: Src<Args>,
+        args: Vec<Src<Arg>>,
+        args_spread: Option<Box<Src<TypeExpression>>>,
         is_pure: bool,
         is_async: bool,
         throws: Option<Box<Src<TypeExpression>>>,
@@ -37,7 +38,8 @@ pub enum TypeExpression {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     FuncType {
-        args: Src<Args>,
+        args: Vec<Src<Arg>>,
+        args_spread: Option<Box<Src<TypeExpression>>>,
         is_pure: bool,
         returns: Option<Box<Src<TypeExpression>>>,
     },
@@ -55,35 +57,24 @@ pub enum TypeExpression {
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    ObjectType {
-        entries: Vec<ObjectTypeEntry>,
-        mutability: Mutability,
-    },
+    ObjectType { entries: Vec<ObjectTypeEntry> },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     InterfaceType {
         entries: Vec<(Src<PlainIdentifier>, Src<TypeExpression>)>,
-        mutability: Mutability,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     RecordType {
         key_type: Box<Src<TypeExpression>>,
         value_type: Box<Src<TypeExpression>>,
-        mutability: Mutability,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    ArrayType {
-        element: Box<Src<TypeExpression>>,
-        mutability: Mutability,
-    },
+    ArrayType { element: Box<Src<TypeExpression>> },
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    TupleType {
-        members: Vec<Src<TypeExpression>>,
-        mutability: Mutability,
-    },
+    TupleType { members: Vec<Src<TypeExpression>> },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ReadonlyType { inner: Box<Src<TypeExpression>> },
@@ -135,7 +126,7 @@ pub enum TypeExpression {
     ElementofType { inner: Box<Src<TypeExpression>> },
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    UnknownType { mutability: Mutability },
+    UnknownType,
 
     #[evt(derive(Debug, Clone, PartialEq))]
     PoisonedType,
@@ -156,29 +147,6 @@ pub enum TypeExpression {
     },
 }
 
-pub const NIL_TYPE: Src<TypeExpression> = Src {
-    src: None,
-    node: TypeExpression::NilType,
-};
-pub const BOOLEAN_TYPE: Src<TypeExpression> = Src {
-    src: None,
-    node: TypeExpression::BooleanType,
-};
-pub const NUMBER_TYPE: Src<TypeExpression> = Src {
-    src: None,
-    node: TypeExpression::NumberType,
-};
-pub const STRING_TYPE: Src<TypeExpression> = Src {
-    src: None,
-    node: TypeExpression::StringType,
-};
-pub const UNKNOWN_TYPE: Src<TypeExpression> = Src {
-    src: None,
-    node: TypeExpression::UnknownType {
-        mutability: Mutability::Mutable,
-    },
-};
-
 impl Src<TypeExpression> {
     pub fn resolve<'a>(&self, ctx: ResolveContext<'a>) -> Type {
         match &self.node {
@@ -186,62 +154,48 @@ impl Src<TypeExpression> {
                 members: members.iter().map(|m| m.resolve(ctx)).collect(),
             },
             TypeExpression::MaybeType { inner } => inner.resolve(ctx).union(Type::NilType),
-            TypeExpression::NamedType { name } => {
-                let resolved = name
-                    .src
-                    .map(|src| ctx.module.resolve_symbol_within(&name.node.name, &src))
-                    .flatten();
-
-                match resolved {
-                    Some(Binding::TypeDeclaration(binding)) => binding.declared_type.resolve(ctx),
-                    _ => Type::PoisonedType,
-                }
-            }
+            TypeExpression::NamedType { name } => Type::NamedType {
+                module_id: ctx.current_module_id.clone(),
+                name: name.node.name.clone(),
+                index: name.src.unwrap().start,
+            },
             TypeExpression::GenericParamType { name, extends } => todo!(),
             TypeExpression::ProcType {
                 args,
+                args_spread,
                 is_pure,
                 is_async,
                 throws,
             } => todo!(),
             TypeExpression::FuncType {
                 args,
+                args_spread,
                 is_pure,
                 returns,
             } => todo!(),
             TypeExpression::GenericType { type_params, inner } => todo!(),
             TypeExpression::BoundGenericType { type_args, generic } => todo!(),
-            TypeExpression::ObjectType {
-                entries,
-                mutability,
-            } => todo!(),
-            TypeExpression::InterfaceType {
-                entries,
-                mutability,
-            } => todo!(),
+            TypeExpression::ObjectType { entries } => todo!(),
+            TypeExpression::InterfaceType { entries } => todo!(),
             TypeExpression::RecordType {
                 key_type,
                 value_type,
-                mutability,
-            } => Type::RecordType {
-                key_type: Box::new(key_type.resolve(ctx)),
-                value_type: Box::new(value_type.resolve(ctx)),
-                mutability: *mutability,
-            },
-            TypeExpression::ArrayType {
-                element,
-                mutability,
-            } => Type::ArrayType {
-                element: Box::new(element.resolve(ctx)),
-                mutability: *mutability,
-            },
-            TypeExpression::TupleType {
-                members,
-                mutability,
-            } => Type::TupleType {
-                members: members.iter().map(|x| x.resolve(ctx)).collect(),
-                mutability: *mutability,
-            },
+            } => todo!(),
+            // Type::RecordType {
+            //     key_type: Box::new(key_type.resolve(ctx)),
+            //     value_type: Box::new(value_type.resolve(ctx)),
+            //     mutability: *mutability,
+            // },
+            TypeExpression::ArrayType { element } => todo!(),
+            // Type::ArrayType {
+            //     element: Box::new(element.resolve(ctx)),
+            //     mutability: *mutability,
+            // },
+            TypeExpression::TupleType { members } => todo!(),
+            // Type::TupleType {
+            //     members: members.iter().map(|x| x.resolve(ctx)).collect(),
+            //     mutability: *mutability,
+            // },
             TypeExpression::ReadonlyType { inner } => {
                 inner.resolve(ctx).with_mutability(Mutability::Readonly)
             }
@@ -249,12 +203,19 @@ impl Src<TypeExpression> {
             TypeExpression::NumberType => Type::NumberType,
             TypeExpression::BooleanType => Type::BooleanType,
             TypeExpression::NilType => Type::NilType,
-            TypeExpression::LiteralType { value } => todo!(),
-            // Type::LiteralType { value: match value {
-            //     LiteralTypeValue::ExactString(s) => s.value,
-            //     LiteralTypeValue::NumberLiteral(n) => todo!(),
-            //     LiteralTypeValue::BooleanLiteral(b) => todo!(),
-            // } },
+            TypeExpression::LiteralType { value } => Type::LiteralType {
+                value: match value {
+                    LiteralTypeValue::ExactString(s) => {
+                        crate::model::bgl_type::LiteralTypeValue::ExactString(s.value.clone())
+                    }
+                    LiteralTypeValue::NumberLiteral(s) => {
+                        crate::model::bgl_type::LiteralTypeValue::NumberLiteral(s.value.clone())
+                    }
+                    LiteralTypeValue::BooleanLiteral(s) => {
+                        crate::model::bgl_type::LiteralTypeValue::BooleanLiteral(s.value)
+                    }
+                },
+            },
             TypeExpression::NominalType {
                 module_id,
                 name,
@@ -278,9 +239,10 @@ impl Src<TypeExpression> {
             TypeExpression::KeyofType { inner } => todo!(),
             TypeExpression::ValueofType { inner } => todo!(),
             TypeExpression::ElementofType { inner } => todo!(),
-            TypeExpression::UnknownType { mutability } => Type::UnknownType {
-                mutability: *mutability,
-            },
+            TypeExpression::UnknownType => todo!(),
+            // Type::UnknownType {
+            //     mutability: *mutability,
+            // },
             TypeExpression::PoisonedType => Type::PoisonedType,
             TypeExpression::AnyType => Type::AnyType,
             TypeExpression::RegularExpressionType {} => todo!(),
@@ -310,18 +272,35 @@ impl Src<TypeExpression> {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ResolveContext<'a> {
-    pub module: &'a Module,
+    pub modules: &'a ModulesStore,
+    pub current_module_id: &'a ModuleID,
 }
 
 impl<'a> From<InferTypeContext<'a>> for ResolveContext<'a> {
-    fn from(ctx: InferTypeContext<'a>) -> Self {
-        Self { module: ctx.module }
+    fn from(
+        InferTypeContext {
+            modules,
+            current_module_id,
+        }: InferTypeContext<'a>,
+    ) -> Self {
+        Self {
+            modules,
+            current_module_id,
+        }
     }
 }
 
 impl<'a> From<CheckContext<'a>> for ResolveContext<'a> {
-    fn from(ctx: CheckContext<'a>) -> Self {
-        Self { module: ctx.module }
+    fn from(
+        CheckContext {
+            modules,
+            current_module_id,
+        }: CheckContext<'a>,
+    ) -> Self {
+        Self {
+            modules,
+            current_module_id,
+        }
     }
 }
 
@@ -333,13 +312,15 @@ pub enum Mutability {
     Literal,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum Args {
-    Individual(Vec<Arg>),
-    Spread {
-        name: Option<Src<PlainIdentifier>>,
-        type_annotation: Box<Src<TypeExpression>>,
-    },
+impl Mutability {
+    pub fn is_mutable(&self) -> bool {
+        match self {
+            Mutability::Constant => false,
+            Mutability::Readonly => false,
+            Mutability::Mutable => true,
+            Mutability::Literal => true,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]

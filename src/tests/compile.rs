@@ -1,4 +1,4 @@
-use crate::{ast::ModuleID, compile::Compile, parse};
+use crate::{model::ast::ModuleID, passes::compile::Compile, passes::parse::parse};
 
 #[test]
 fn Simple_func_declaration() {

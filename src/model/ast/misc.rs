@@ -3,7 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::slice::Slice;
+use crate::model::slice::Slice;
 
 use super::Declaration;
 

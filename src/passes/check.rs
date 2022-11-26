@@ -1,10 +1,12 @@
 use crate::{
-    ast::*, bgl_type::Type, errors::BagelError, resolve::Resolve, typeinfer::InferTypeContext,
+    model::ast::*, model::bgl_type::Type, model::errors::BagelError, passes::resolve::Resolve,
+    passes::typeinfer::InferTypeContext, ModulesStore,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CheckContext<'a> {
-    pub module: &'a Module,
+    pub modules: &'a ModulesStore,
+    pub current_module_id: &'a ModuleID,
 }
 
 pub trait Check<'a> {
@@ -42,7 +44,7 @@ impl<'a> Check<'a> for Src<Declaration> {
 
                     if let Some(issues) = issues {
                         report_error(BagelError::AssignmentError {
-                            module_id: ctx.module.module_id.clone(),
+                            module_id: ctx.current_module_id.clone(),
                             src: value.src,
                             issues,
                         });
@@ -94,7 +96,7 @@ impl<'a> Check<'a> for Src<Expression> {
                 if op.node == BinaryOperator::Plus {
                     if let Some(issues) = number_or_string.subsumation_issues(&left_type) {
                         report_error(BagelError::AssignmentError {
-                            module_id: ctx.module.module_id.clone(),
+                            module_id: ctx.current_module_id.clone(),
                             src: left.src,
                             issues,
                         })
@@ -102,7 +104,7 @@ impl<'a> Check<'a> for Src<Expression> {
 
                     if let Some(issues) = number_or_string.subsumation_issues(&right_type) {
                         report_error(BagelError::AssignmentError {
-                            module_id: ctx.module.module_id.clone(),
+                            module_id: ctx.current_module_id.clone(),
                             src: right.src,
                             issues,
                         })
@@ -113,7 +115,7 @@ impl<'a> Check<'a> for Src<Expression> {
                 {
                     if let Some(issues) = Type::NumberType.subsumation_issues(&left_type) {
                         report_error(BagelError::AssignmentError {
-                            module_id: ctx.module.module_id.clone(),
+                            module_id: ctx.current_module_id.clone(),
                             src: left.src,
                             issues,
                         })
@@ -121,7 +123,7 @@ impl<'a> Check<'a> for Src<Expression> {
 
                     if let Some(issues) = Type::NumberType.subsumation_issues(&right_type) {
                         report_error(BagelError::AssignmentError {
-                            module_id: ctx.module.module_id.clone(),
+                            module_id: ctx.current_module_id.clone(),
                             src: right.src,
                             issues,
                         })
@@ -145,12 +147,20 @@ impl<'a> Check<'a> for Src<Expression> {
             Expression::LocalIdentifier { name } => {
                 if let Some(src) = self.src {
                     if ctx
-                        .module
-                        .resolve_symbol_within(name.as_str(), &src)
+                        .modules
+                        .get(ctx.current_module_id)
+                        .map(|module| {
+                            module
+                                .as_ref()
+                                .ok()
+                                .map(|module| module.resolve_symbol_within(name.as_str(), &src))
+                        })
+                        .flatten()
+                        .flatten()
                         .is_none()
                     {
                         report_error(BagelError::NotFoundError {
-                            module_id: ctx.module.module_id.clone(),
+                            module_id: ctx.current_module_id.clone(),
                             identifier: Src {
                                 src: Some(src),
                                 node: LocalIdentifier { name: name.clone() },
@@ -248,6 +258,72 @@ impl<'a> Check<'a> for Src<InlineConstDeclaration> {
     }
 }
 
+impl<'a, T: Check<'a>> Check<'a> for Src<T> {
+    fn check<F: FnMut(BagelError)>(&self, ctx: CheckContext<'a>, report_error: &mut F) {
+        self.node.check(ctx, report_error)
+    }
+}
+
 impl<'a> Check<'a> for Src<TypeExpression> {
-    fn check<F: FnMut(BagelError)>(&self, ctx: CheckContext<'a>, report_error: &mut F) {}
+    fn check<F: FnMut(BagelError)>(&self, ctx: CheckContext<'a>, report_error: &mut F) {
+        match &self.node {
+            TypeExpression::UnionType { members } => todo!(),
+            TypeExpression::MaybeType { inner } => todo!(),
+            TypeExpression::NamedType { name } => todo!(),
+            TypeExpression::GenericParamType { name, extends } => todo!(),
+            TypeExpression::ProcType {
+                args,
+                args_spread,
+                is_pure,
+                is_async,
+                throws,
+            } => todo!(),
+            TypeExpression::FuncType {
+                args,
+                args_spread,
+                is_pure,
+                returns,
+            } => todo!(),
+            TypeExpression::GenericType { type_params, inner } => todo!(),
+            TypeExpression::BoundGenericType { type_args, generic } => todo!(),
+            TypeExpression::ObjectType { entries } => todo!(),
+            TypeExpression::InterfaceType { entries } => todo!(),
+            TypeExpression::RecordType {
+                key_type,
+                value_type,
+            } => todo!(),
+            TypeExpression::ArrayType { element } => todo!(),
+            TypeExpression::TupleType { members } => todo!(),
+            TypeExpression::ReadonlyType { inner } => todo!(),
+            TypeExpression::StringType => todo!(),
+            TypeExpression::NumberType => todo!(),
+            TypeExpression::BooleanType => todo!(),
+            TypeExpression::NilType => todo!(),
+            TypeExpression::NominalType {
+                module_id,
+                name,
+                inner,
+            } => todo!(),
+            TypeExpression::IteratorType { inner } => todo!(),
+            TypeExpression::PlanType { inner } => todo!(),
+            TypeExpression::ErrorType { inner } => todo!(),
+            TypeExpression::ParenthesizedType { inner } => todo!(),
+            TypeExpression::TypeofType { expression } => todo!(),
+            TypeExpression::KeyofType { inner } => todo!(),
+            TypeExpression::ValueofType { inner } => todo!(),
+            TypeExpression::ElementofType { inner } => todo!(),
+            TypeExpression::UnknownType => todo!(),
+            TypeExpression::PoisonedType => todo!(),
+            TypeExpression::AnyType => todo!(),
+            TypeExpression::RegularExpressionType {} => todo!(),
+            TypeExpression::PropertyType {
+                subject,
+                property,
+                optional,
+            } => todo!(),
+
+            // intentionally have nothing to check
+            TypeExpression::LiteralType { value } => {}
+        }
+    }
 }

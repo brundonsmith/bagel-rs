@@ -5,7 +5,8 @@ use std::{
 
 use nom::{Compare, InputIter, InputLength, InputTake, Offset, UnspecializedInput};
 
-use crate::{slice::Slice, utils::Loggable};
+use crate::model::slice::Slice;
+use crate::utils::Loggable;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct StringAndSlice<'a> {

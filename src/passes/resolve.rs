@@ -1,4 +1,4 @@
-use crate::{ast::*, slice::Slice};
+use crate::{model::ast::*, model::slice::Slice};
 
 pub trait Resolve {
     fn resolve_symbol_within(&self, symbol: &str, slice: &Slice) -> Option<Binding>;

@@ -1,6 +1,6 @@
 use std::fmt::{Result, Write};
 
-use crate::ast::*;
+use crate::model::ast::*;
 
 pub trait Compile {
     fn compile<W: Write>(&self, f: &mut W) -> Result;
@@ -27,6 +27,9 @@ impl Compile for Src<Declaration> {
                 exported,
                 platforms,
             } => {
+                if *exported {
+                    f.write_str("export ")?;
+                }
                 f.write_str("const ")?;
                 f.write_str(name.node.name.as_str())?;
                 if let Some(type_annotation) = type_annotation {
@@ -34,9 +37,7 @@ impl Compile for Src<Declaration> {
                 }
                 f.write_str(" = ")?;
                 value.compile(f)?;
-                f.write_str(";")?;
-
-                Ok(())
+                f.write_str(";")
             }
             Declaration::ImportAllDeclaration { name, path } => todo!(),
             Declaration::ImportDeclaration { imports, path } => todo!(),
@@ -51,7 +52,11 @@ impl Compile for Src<Declaration> {
                 exported,
                 platforms,
                 decorators,
-            } => todo!(),
+            } => {
+                f.write_str("func ")?;
+                f.write_str(&name.node.name)?;
+                func.compile(f)
+            }
             Declaration::ProcDeclaration {
                 name,
                 proc,
@@ -186,6 +191,34 @@ impl Compile for Src<Expression> {
     }
 }
 
+pub const INT: &str = "___";
+pub const INT_FN: &str = "___fn_";
+
+impl Compile for Src<Func> {
+    fn compile<W: Write>(&self, f: &mut W) -> Result {
+        todo!()
+        // f.write_str("function ")?;
+
+        // // TODO: name?
+
+        // f.write_char('(')?;
+        // for arg in self.node.type_annotation.node.args {
+        //     arg.format(f, opts)?;
+        // }
+        // if let Some(spread) = self.node.type_annotation.node.args_spread {
+        //     f.write_str("...")?;
+        //     spread.format(f, opts)?;
+        // }
+        // f.write_char(')')?;
+        // if let Some(return_type) = self.node.type_annotation.node.returns {
+        //     f.write_str(": ")?;
+        //     return_type.format(f, opts)?;
+        // }
+        // f.write_str(" => ")?;
+        // self.node.body.format(f, opts)
+    }
+}
+
 impl Compile for Src<BinaryOperator> {
     fn compile<W: Write>(&self, f: &mut W) -> Result {
         f.write_str(self.node.symbol())
@@ -252,7 +285,7 @@ impl Compile for Src<PlainIdentifier> {
 impl Compile for Src<TypeExpression> {
     fn compile<W: Write>(&self, f: &mut W) -> Result {
         match &self.node {
-            TypeExpression::UnknownType { mutability } => f.write_str("unknown"),
+            TypeExpression::UnknownType => f.write_str("unknown"),
             TypeExpression::NilType => f.write_str("null | undefined"),
             TypeExpression::BooleanType => f.write_str("boolean"),
             TypeExpression::NumberType => f.write_str("number"),
@@ -263,38 +296,27 @@ impl Compile for Src<TypeExpression> {
             TypeExpression::GenericParamType { name, extends } => todo!(),
             TypeExpression::ProcType {
                 args,
+                args_spread,
                 is_pure,
                 is_async,
                 throws,
             } => todo!(),
             TypeExpression::FuncType {
                 args,
+                args_spread,
                 is_pure,
                 returns,
             } => todo!(),
             TypeExpression::GenericType { type_params, inner } => todo!(),
             TypeExpression::BoundGenericType { type_args, generic } => todo!(),
-            TypeExpression::ObjectType {
-                entries,
-                mutability,
-            } => todo!(),
-            TypeExpression::InterfaceType {
-                entries,
-                mutability,
-            } => todo!(),
+            TypeExpression::ObjectType { entries } => todo!(),
+            TypeExpression::InterfaceType { entries } => todo!(),
             TypeExpression::RecordType {
                 key_type,
                 value_type,
-                mutability,
             } => todo!(),
-            TypeExpression::ArrayType {
-                element,
-                mutability,
-            } => todo!(),
-            TypeExpression::TupleType {
-                members,
-                mutability,
-            } => todo!(),
+            TypeExpression::ArrayType { element } => todo!(),
+            TypeExpression::TupleType { members } => todo!(),
             TypeExpression::ReadonlyType { inner } => todo!(),
             TypeExpression::LiteralType { value } => todo!(),
             TypeExpression::NominalType {

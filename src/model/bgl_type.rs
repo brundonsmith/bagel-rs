@@ -1,8 +1,8 @@
-use std::fmt::Display;
+use std::fmt::{Display, Write};
 
 use enum_variant_type::EnumVariantType;
 
-use crate::ast::{ModuleID, Mutability};
+use crate::model::ast::{ModuleID, Mutability};
 
 #[derive(Clone, Debug, PartialEq, EnumVariantType)]
 pub enum Type {
@@ -57,6 +57,12 @@ pub enum Type {
 
     LiteralType {
         value: LiteralTypeValue,
+    },
+
+    NamedType {
+        module_id: ModuleID,
+        name: String,
+        index: usize,
     },
 
     NominalType {
@@ -170,6 +176,16 @@ impl Type {
             _ => {}
         };
 
+        //     let resolved = name
+        //     .src
+        //     .map(|src| ctx.module.resolve_symbol_within(&name.node.name, &src))
+        //     .flatten();
+
+        // match resolved {
+        //     Some(Binding::TypeDeclaration(binding)) => binding.declared_type.resolve(ctx),
+        //     _ => Type::PoisonedType,
+        // }
+
         Some(SubsumationIssue::Assignment(vec![(
             destination.clone(),
             value.clone(),
@@ -225,7 +241,17 @@ impl Type {
 impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Type::UnionType { members } => todo!(),
+            Type::UnionType { members } => {
+                for (index, member) in members.iter().enumerate() {
+                    if index > 0 {
+                        f.write_str(" | ")?;
+                    }
+
+                    f.write_fmt(format_args!("{}", member))?;
+                }
+
+                Ok(())
+            }
             Type::ProcType {
                 args,
                 args_spread,
@@ -248,32 +274,76 @@ impl Display for Type {
                 key_type,
                 value_type,
                 mutability,
-            } => todo!(),
+            } => {
+                if !mutability.is_mutable() {
+                    f.write_str("readonly ")?;
+                }
+
+                f.write_fmt(format_args!("{{[{}]: {}}}", key_type, value_type))
+            }
             Type::ArrayType {
                 element,
                 mutability,
-            } => todo!(),
+            } => {
+                if !mutability.is_mutable() {
+                    f.write_str("readonly ")?;
+                }
+
+                f.write_fmt(format_args!("{}[]", element))
+            }
             Type::TupleType {
                 members,
                 mutability,
-            } => todo!(),
+            } => {
+                if !mutability.is_mutable() {
+                    f.write_str("readonly ")?;
+                }
+
+                f.write_char('[')?;
+                for (index, member) in members.iter().enumerate() {
+                    if index > 0 {
+                        f.write_str(", ")?;
+                    }
+
+                    f.write_fmt(format_args!("{}", member))?;
+                }
+                f.write_char(']')
+            }
             Type::StringType => f.write_str("string"),
             Type::NumberType => f.write_str("number"),
             Type::BooleanType => f.write_str("boolean"),
             Type::NilType => f.write_str("nil"),
-            Type::LiteralType { value } => todo!(),
+            Type::LiteralType { value } => match value {
+                LiteralTypeValue::ExactString(s) => f.write_fmt(format_args!("'{}'", s)),
+                LiteralTypeValue::NumberLiteral(s) => f.write_str(s),
+                LiteralTypeValue::BooleanLiteral(s) => {
+                    f.write_str(if *s { "true" } else { "false" })
+                }
+            },
+            Type::NamedType {
+                module_id,
+                name,
+                index,
+            } => f.write_str(name),
             Type::NominalType {
                 module_id,
                 name,
                 inner,
             } => f.write_str(name),
-            Type::IteratorType { inner } => todo!(),
-            Type::PlanType { inner } => todo!(),
-            Type::ErrorType { inner } => todo!(),
-            Type::UnknownType { mutability } => todo!(),
-            Type::PoisonedType => todo!(),
-            Type::AnyType => todo!(),
-            Type::RegularExpressionType {} => todo!(),
+            Type::IteratorType { inner } => f.write_fmt(format_args!("Iterator<{}>", inner)),
+            Type::PlanType { inner } => f.write_fmt(format_args!("Plan<{}>", inner)),
+            Type::ErrorType { inner } => f.write_fmt(format_args!("Error<{}>", inner)),
+            Type::UnknownType { mutability } => f.write_fmt(format_args!(
+                "{}unknown",
+                if mutability.is_mutable() {
+                    ""
+                } else {
+                    "readonly "
+                }
+            )),
+            Type::PoisonedType => f.write_str("unknown"),
+            Type::AnyType => f.write_str("any"),
+            Type::RegularExpressionType {} => f.write_str("RegExp"),
         }
     }
 }
