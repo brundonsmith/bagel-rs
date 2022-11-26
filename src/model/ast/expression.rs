@@ -14,18 +14,18 @@ pub enum Expression {
     BooleanLiteral { value: bool },
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    NumberLiteral { value: String },
+    NumberLiteral { value: Slice },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     StringLiteral {
-        tag: Option<Src<PlainIdentifier>>,
+        tag: Option<PlainIdentifier>,
         segments: Vec<Src<StringLiteralSegment>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ExactStringLiteral {
-        tag: Option<Src<PlainIdentifier>>,
-        value: String,
+        tag: Option<PlainIdentifier>,
+        value: Slice,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
@@ -52,7 +52,7 @@ pub enum Expression {
     Parenthesis(Box<Src<Expression>>),
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    LocalIdentifier(String),
+    LocalIdentifier(Slice),
 
     #[evt(derive(Debug, Clone, PartialEq))]
     InlineConstGroup {
@@ -117,7 +117,7 @@ pub enum Expression {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ElementTag {
-        tag_name: Src<PlainIdentifier>,
+        tag_name: PlainIdentifier,
         attributes: Vec<Src<ObjectLiteralEntry>>,
         children: Vec<Src<Expression>>,
     },
@@ -189,13 +189,13 @@ pub enum ArrayLiteralEntry {
 pub enum ObjectLiteralEntry {
     Variable(LocalIdentifier),
     Spread(LocalIdentifier),
-    KeyValue(IdentifierOrExpression, Expression),
+    KeyAndValue(IdentifierOrExpression, Src<Expression>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum IdentifierOrExpression {
     PlainIdentifier(PlainIdentifier),
-    Expression(Expression),
+    Expression(Src<Expression>),
 }
 
 #[derive(Clone, Debug, PartialEq)]

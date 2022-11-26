@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use crate::{model::ast::ModuleID, passes::compile::Compile, passes::parse::parse};
 
 #[test]
@@ -766,7 +768,7 @@ fn Comment_test_block() {
 fn test_compile(bgl: &str, js: &str) {
     let parsed = parse(
         ModuleID::from("/foo/bar.bgl".to_owned()),
-        bgl.to_owned() + " ",
+        Rc::new(bgl.to_owned() + " "),
     )
     .unwrap();
 

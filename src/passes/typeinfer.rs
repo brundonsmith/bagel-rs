@@ -90,10 +90,9 @@ impl<'a> Src<Expression> {
             },
             Expression::Parenthesis(inner) => inner.infer_type(ctx),
             Expression::LocalIdentifier(name) => {
-                let resolved = self
-                    .src
-                    .map(|s| ctx.current_module.resolve_symbol_within(name.as_str(), &s))
-                    .flatten();
+                let resolved = ctx
+                    .current_module
+                    .resolve_symbol_within(name.as_str(), &self.src);
 
                 match resolved {
                     Some(Binding::ValueDeclaration(binding)) => binding

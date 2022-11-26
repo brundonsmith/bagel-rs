@@ -1,6 +1,7 @@
 use std::{
     fmt::Display,
     path::{Path, PathBuf},
+    rc::Rc,
 };
 
 use crate::model::slice::Slice;
@@ -9,15 +10,15 @@ use super::Declaration;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum ModuleID {
-    Local(PathBuf),
-    Remote(String),
+    Local(Rc<PathBuf>),
+    Remote(Rc<String>),
 }
 
 impl ModuleID {
     pub fn load(&self) -> Option<String> {
         match self {
-            ModuleID::Local(path) => std::fs::read_to_string(path).ok(),
-            ModuleID::Remote(url) => reqwest::blocking::get(url)
+            ModuleID::Local(path) => std::fs::read_to_string(path.as_ref()).ok(),
+            ModuleID::Remote(url) => reqwest::blocking::get(url.as_ref())
                 .ok()
                 .map(|res| res.text().ok())
                 .flatten(),
@@ -38,45 +39,39 @@ impl TryFrom<&Path> for ModuleID {
     type Error = std::io::Error;
 
     fn try_from(p: &Path) -> Result<ModuleID, std::io::Error> {
-        Ok(ModuleID::Local(p.canonicalize()?))
+        Ok(ModuleID::Local(Rc::new(p.canonicalize()?)))
     }
 }
 
 impl From<String> for ModuleID {
     fn from(s: String) -> Self {
-        Self::Remote(s)
+        Self::Remote(Rc::new(s))
     }
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Module {
     pub module_id: ModuleID,
-    pub src: String,
+    pub src: Rc<String>,
     pub declarations: Vec<Src<Declaration>>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct PlainIdentifier(pub String);
+pub struct PlainIdentifier(pub Slice);
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Src<T> {
-    pub src: Option<Slice>,
+    pub src: Slice,
     pub node: T,
 }
 
 impl<T: Clone + std::fmt::Debug + PartialEq> Src<T> {
     pub fn contains(&self, other: &Slice) -> bool {
-        self.src.map(|s| s.contains(other)).unwrap_or(false)
+        self.src.contains(other)
     }
 
-    pub fn spanning<O>(&self, other: &Src<O>) -> Option<Slice> {
-        self.src
-            .map(|left_src| {
-                other
-                    .src
-                    .map(move |right_src| left_src.spanning(&right_src))
-            })
-            .flatten()
+    pub fn spanning<O>(&self, other: &Src<O>) -> Slice {
+        self.src.clone().spanning(&other.src)
     }
 
     pub fn map<O, F: Fn(T) -> O>(self, f: F) -> Src<O> {
@@ -89,21 +84,7 @@ impl<T: Clone + std::fmt::Debug + PartialEq> Src<T> {
 
 pub trait Srcable: Clone + std::fmt::Debug + PartialEq {
     fn with_src(self, src: Slice) -> Src<Self> {
-        Src {
-            src: Some(src),
-            node: self,
-        }
-    }
-
-    fn with_opt_src(self, src: Option<Slice>) -> Src<Self> {
         Src { src, node: self }
-    }
-
-    fn no_src(self) -> Src<Self> {
-        Src {
-            src: None,
-            node: self,
-        }
     }
 }
 

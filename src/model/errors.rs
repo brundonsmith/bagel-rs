@@ -4,7 +4,7 @@ use colored::Colorize;
 use enum_variant_type::EnumVariantType;
 
 use crate::{
-    model::ast::{LocalIdentifier, ModuleID, Src},
+    model::ast::{LocalIdentifier, ModuleID},
     model::bgl_type::SubsumationIssue,
     model::slice::Slice,
 };
@@ -14,8 +14,7 @@ pub enum BagelError {
     #[evt(derive(Debug, Clone, PartialEq))]
     ParseError {
         module_id: ModuleID,
-        module_src: String,
-        index: Option<usize>,
+        src: Slice,
         message: String,
     },
     #[evt(derive(Debug, Clone, PartialEq))]
@@ -26,13 +25,13 @@ pub enum BagelError {
     #[evt(derive(Debug, Clone, PartialEq))]
     AssignmentError {
         module_id: ModuleID,
-        src: Option<Slice>,
+        src: Slice,
         issues: SubsumationIssue,
     },
     #[evt(derive(Debug, Clone, PartialEq))]
     NotFoundError {
         module_id: ModuleID,
-        identifier: Src<LocalIdentifier>,
+        identifier: LocalIdentifier,
     },
 }
 
@@ -49,16 +48,14 @@ impl BagelError {
                 importer_module_id,
             } => todo!(),
             BagelError::ParseError {
-                module_src,
-                index,
+                src,
                 module_id,
                 message,
             } => {
                 pretty_print_parse_error(
                     &ParseError {
                         module_id,
-                        module_src,
-                        index,
+                        src,
                         message,
                     },
                     f,
@@ -70,14 +67,7 @@ impl BagelError {
                 src,
                 issues,
             } => {
-                error_heading(
-                    f,
-                    &module_src,
-                    &module_id,
-                    src.map(|s| s.start),
-                    "assignment error",
-                    None,
-                )?;
+                error_heading(f, &module_id, &src, "assignment error", None)?;
 
                 match issues {
                     SubsumationIssue::Assignment(levels) => {
@@ -97,9 +87,7 @@ impl BagelError {
 
                 f.write_char('\n')?;
 
-                if let Some(src) = src {
-                    code_block_highlighted(f, module_src, src)?;
-                }
+                code_block_highlighted(f, &src)?;
             }
             BagelError::NotFoundError {
                 module_id,
@@ -118,34 +106,23 @@ pub fn pretty_print_parse_error<W: Write>(
 ) -> std::fmt::Result {
     error_heading(
         f,
-        &err.module_src,
         &err.module_id,
-        err.index,
+        &err.src,
         "parse error",
         Some(err.message.as_str()),
     )?;
 
-    if let Some(index) = err.index {
-        f.write_char('\n')?;
+    f.write_char('\n')?;
 
-        code_block_highlighted(
-            f,
-            &err.module_src,
-            Slice {
-                start: index,
-                end: err.module_src.len(),
-            },
-        )?;
-    }
+    code_block_highlighted(f, &err.src)?;
 
     Ok(())
 }
 
 fn error_heading<W: Write>(
     f: &mut W,
-    module_src: &str,
     module_id: &ModuleID,
-    index: Option<usize>,
+    src: &Slice,
     kind: &str,
     message: Option<&str>,
 ) -> std::fmt::Result {
@@ -153,13 +130,11 @@ fn error_heading<W: Write>(
     f.write_str(&format!("{}", module_id).cyan().to_string())?;
 
     // line and column
-    if let Some(index) = index {
-        f.write_char(':')?;
-        let (line, column) = line_and_column(module_src, index);
-        f.write_str(&line.to_string().as_str().yellow().to_string())?;
-        f.write_char(':')?;
-        f.write_str(&column.to_string().as_str().yellow().to_string())?;
-    }
+    f.write_char(':')?;
+    let (line, column) = line_and_column(src);
+    f.write_str(&line.to_string().as_str().yellow().to_string())?;
+    f.write_char(':')?;
+    f.write_str(&column.to_string().as_str().yellow().to_string())?;
 
     f.write_str(" - ")?;
 
@@ -177,25 +152,28 @@ fn error_heading<W: Write>(
     Ok(())
 }
 
-fn code_block_highlighted<W: Write>(f: &mut W, module_src: &str, src: Slice) -> std::fmt::Result {
-    let mut highlighted = String::with_capacity(module_src.len());
-    highlighted += &module_src[0..src.start];
-    highlighted += module_src[src.start..src.end].red().to_string().as_str();
-    highlighted += &module_src[src.end..];
+fn code_block_highlighted<W: Write>(f: &mut W, highlighted_slice: &Slice) -> std::fmt::Result {
+    let mut highlighted = String::with_capacity(highlighted_slice.full_string.len());
+    highlighted += &highlighted_slice.full_string[0..highlighted_slice.start];
+    highlighted += highlighted_slice.full_string[highlighted_slice.start..highlighted_slice.end]
+        .red()
+        .to_string()
+        .as_str();
+    highlighted += &highlighted_slice.full_string[highlighted_slice.end..];
 
     let mut lines_and_starts = vec![];
     let mut next_line_start = 0;
     let mut first_error_line = 0;
     let mut last_error_line = 0;
-    for (line_index, line) in module_src.lines().enumerate() {
+    for (line_index, line) in highlighted_slice.full_string.lines().enumerate() {
         let len = line.len();
         lines_and_starts.push(((line_index + 1).to_string(), next_line_start, line));
 
-        if src.start > next_line_start {
+        if highlighted_slice.start > next_line_start {
             first_error_line = line_index;
         }
 
-        if src.end > next_line_start {
+        if highlighted_slice.end > next_line_start {
             last_error_line = line_index;
         }
 
@@ -224,6 +202,7 @@ fn code_block_highlighted<W: Write>(f: &mut W, module_src: &str, src: Slice) -> 
         .take(last_displayed_line + 1 - first_displayed_line)
     {
         let line_slice = Slice {
+            full_string: highlighted_slice.full_string.clone(),
             start: line_start_index,
             end: line_start_index + line.len(),
         };
@@ -239,16 +218,16 @@ fn code_block_highlighted<W: Write>(f: &mut W, module_src: &str, src: Slice) -> 
         f.write_str(&line_number.black().on_white().to_string())?;
         f.write_str("  ")?;
 
-        if line_slice.end < src.start || line_slice.start > src.end {
+        if line_slice.end < highlighted_slice.start || line_slice.start > highlighted_slice.end {
             f.write_str(line)?;
-        } else if src.contains(&line_slice) {
+        } else if highlighted_slice.contains(&line_slice) {
             f.write_str(line.red().to_string().as_str())?;
-        } else if line_slice.start < src.start {
-            let src_start = src.start - line_slice.start;
+        } else if line_slice.start < highlighted_slice.start {
+            let src_start = highlighted_slice.start - line_slice.start;
             f.write_str(&line[0..src_start])?;
             f.write_str(&line[src_start..].red().to_string().as_str())?;
         } else {
-            let src_end = src.end - line_slice.start;
+            let src_end = highlighted_slice.end - line_slice.start;
             f.write_str(&line[0..src_end].red().to_string().as_str())?;
             f.write_str(&line[src_end..])?;
         }
@@ -259,11 +238,11 @@ fn code_block_highlighted<W: Write>(f: &mut W, module_src: &str, src: Slice) -> 
     Ok(())
 }
 
-fn line_and_column(s: &str, index: usize) -> (usize, usize) {
+fn line_and_column(slice: &Slice) -> (usize, usize) {
     let mut line = 1;
     let mut column = 1;
 
-    for ch in s.chars().take(index) {
+    for ch in slice.full_string.chars().take(slice.start) {
         if ch == '\n' {
             line += 1;
             column = 1;

@@ -4,6 +4,8 @@ use enum_variant_type::EnumVariantType;
 
 use crate::model::ast::{ModuleID, Mutability};
 
+use super::slice::Slice;
+
 #[derive(Clone, Debug, PartialEq, EnumVariantType)]
 pub enum Type {
     UnionType {
@@ -61,8 +63,7 @@ pub enum Type {
 
     NamedType {
         module_id: ModuleID,
-        name: String,
-        index: usize,
+        name: Slice,
     },
 
     NominalType {
@@ -105,8 +106,8 @@ pub struct Arg {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum LiteralTypeValue {
-    ExactString(String),
-    NumberLiteral(String),
+    ExactString(Slice),
+    NumberLiteral(Slice),
     BooleanLiteral(bool),
 }
 
@@ -328,17 +329,13 @@ impl Display for Type {
             Type::BooleanType => f.write_str("boolean"),
             Type::NilType => f.write_str("nil"),
             Type::LiteralType { value } => match value {
-                LiteralTypeValue::ExactString(s) => f.write_fmt(format_args!("'{}'", s)),
-                LiteralTypeValue::NumberLiteral(s) => f.write_str(s),
+                LiteralTypeValue::ExactString(s) => f.write_fmt(format_args!("'{}'", s.as_str())),
+                LiteralTypeValue::NumberLiteral(s) => f.write_str(s.as_str()),
                 LiteralTypeValue::BooleanLiteral(s) => {
                     f.write_str(if *s { "true" } else { "false" })
                 }
             },
-            Type::NamedType {
-                module_id,
-                name,
-                index,
-            } => f.write_str(name),
+            Type::NamedType { module_id, name } => f.write_str(name.as_str()),
             Type::NominalType {
                 module_id,
                 name,

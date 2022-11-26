@@ -9,26 +9,26 @@ use super::{
 pub enum Declaration {
     #[evt(derive(Debug, Clone, PartialEq))]
     ImportAllDeclaration {
-        name: Src<PlainIdentifier>,
+        name: PlainIdentifier,
         path: Src<ExactStringLiteral>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ImportDeclaration {
-        imports: Vec<(Src<PlainIdentifier>, Option<Src<PlainIdentifier>>)>,
+        imports: Vec<(PlainIdentifier, Option<PlainIdentifier>)>,
         path: Src<ExactStringLiteral>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     TypeDeclaration {
-        name: Src<PlainIdentifier>,
+        name: PlainIdentifier,
         declared_type: Src<TypeExpression>,
         exported: bool,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     FuncDeclaration {
-        name: Src<PlainIdentifier>,
+        name: PlainIdentifier,
         func: Src<Func>, // TODO:  | JsFunc
         exported: bool,
         platforms: PlatformSet,
@@ -37,7 +37,7 @@ pub enum Declaration {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ProcDeclaration {
-        name: Src<PlainIdentifier>,
+        name: PlainIdentifier,
         proc: Src<Proc>, // TODO:  | JsProc
         exported: bool,
         platforms: PlatformSet,
@@ -46,7 +46,7 @@ pub enum Declaration {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ValueDeclaration {
-        name: Src<PlainIdentifier>,
+        name: PlainIdentifier,
         type_annotation: Option<Src<TypeExpression>>,
         value: Src<Expression>,
         is_const: bool,

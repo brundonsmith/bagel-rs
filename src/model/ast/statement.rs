@@ -20,7 +20,7 @@ pub enum Statement {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ForLoop {
-        item_identifier: Src<PlainIdentifier>,
+        item_identifier: PlainIdentifier,
         iterator: Src<Expression>,
         body: Vec<Src<Statement>>,
     },
@@ -33,7 +33,7 @@ pub enum Statement {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     Assignment {
-        target: Src<LocalIdentifier>, // TODO  | PropertyAccessor
+        target: LocalIdentifier, // TODO  | PropertyAccessor
         value: Src<Expression>,
         operator: Option<BinaryOperator>,
     },
@@ -41,7 +41,7 @@ pub enum Statement {
     #[evt(derive(Debug, Clone, PartialEq))]
     TryCatch {
         try_block: Vec<Src<Statement>>,
-        error_identifier: Src<PlainIdentifier>,
+        error_identifier: PlainIdentifier,
         catch_block: Vec<Src<Statement>>,
     },
 

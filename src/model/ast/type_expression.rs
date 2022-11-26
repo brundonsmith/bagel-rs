@@ -19,11 +19,11 @@ pub enum TypeExpression {
     MaybeType { inner: Box<Src<TypeExpression>> },
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    NamedType { name: Src<PlainIdentifier> },
+    NamedType { name: PlainIdentifier },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     GenericParamType {
-        name: Src<PlainIdentifier>,
+        name: PlainIdentifier,
         extends: Option<Box<Src<TypeExpression>>>,
     },
 
@@ -46,7 +46,7 @@ pub enum TypeExpression {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     GenericType {
-        type_params: Vec<(Src<PlainIdentifier>, Option<Src<TypeExpression>>)>,
+        type_params: Vec<(PlainIdentifier, Option<Src<TypeExpression>>)>,
         inner: Box<Src<TypeExpression>>,
     },
 
@@ -61,7 +61,7 @@ pub enum TypeExpression {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     InterfaceType {
-        entries: Vec<(Src<PlainIdentifier>, Src<TypeExpression>)>,
+        entries: Vec<(PlainIdentifier, Src<TypeExpression>)>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
@@ -142,7 +142,7 @@ pub enum TypeExpression {
     #[evt(derive(Debug, Clone, PartialEq))]
     PropertyType {
         subject: Box<Src<TypeExpression>>,
-        property: Src<PlainIdentifier>, // TODO:  | TypeExpression
+        property: PlainIdentifier, // TODO:  | TypeExpression
         optional: bool,
     },
 }
@@ -156,8 +156,7 @@ impl Src<TypeExpression> {
             TypeExpression::MaybeType { inner } => inner.resolve(ctx).union(Type::NilType),
             TypeExpression::NamedType { name } => Type::NamedType {
                 module_id: ctx.current_module.module_id.clone(),
-                name: name.node.0.clone(),
-                index: name.src.unwrap().start,
+                name: name.0.clone(),
             },
             TypeExpression::GenericParamType { name, extends } => todo!(),
             TypeExpression::ProcType {
@@ -246,7 +245,7 @@ impl Src<TypeExpression> {
                         is_interface,
                     } => entries
                         .into_iter()
-                        .find(|(key, value)| *key == property.node.0)
+                        .find(|(key, value)| key == property.0.as_str())
                         .map(|(key, value)| value.as_ref().clone())
                         .unwrap_or(Type::PoisonedType),
                     _ => Type::PoisonedType,
@@ -324,7 +323,7 @@ impl Mutability {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Arg {
-    pub name: Src<PlainIdentifier>,
+    pub name: PlainIdentifier,
     pub type_annotation: Option<Src<TypeExpression>>,
     pub optional: bool,
 }
@@ -332,7 +331,7 @@ pub struct Arg {
 #[derive(Clone, Debug, PartialEq)]
 pub enum ObjectTypeEntry {
     Spread(NamedType),
-    KeyValue(Src<PlainIdentifier>, Box<Src<TypeExpression>>),
+    KeyValue(PlainIdentifier, Box<Src<TypeExpression>>),
 }
 
 #[derive(Clone, Debug, PartialEq)]

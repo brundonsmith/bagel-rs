@@ -31,7 +31,7 @@ impl Compile for Src<Declaration> {
                     f.write_str("export ")?;
                 }
                 f.write_str("const ")?;
-                f.write_str(name.node.0.as_str())?;
+                f.write_str(name.0.as_str())?;
                 if let Some(type_annotation) = type_annotation {
                     type_annotation.compile(f)?;
                 }
@@ -54,7 +54,7 @@ impl Compile for Src<Declaration> {
                 decorators,
             } => {
                 f.write_str("func ")?;
-                f.write_str(&name.node.0)?;
+                f.write_str(&name.0.as_str())?;
                 func.compile(f)
             }
             Declaration::ProcDeclaration {
@@ -225,7 +225,7 @@ impl Compile for Src<ArrayLiteralEntry> {
                 f.write_str(spread.0.as_str())
             }
             ArrayLiteralEntry::Element(element) => Src {
-                src: self.src,
+                src: self.src.clone(),
                 node: element.clone(),
             }
             .compile(f),
@@ -236,41 +236,29 @@ impl Compile for Src<ArrayLiteralEntry> {
 impl Compile for Src<ObjectLiteralEntry> {
     fn compile<W: Write>(&self, f: &mut W) -> Result {
         match &self.node {
-            ObjectLiteralEntry::Variable(x) => Src {
-                src: self.src,
-                node: x.clone(),
-            }
-            .compile(f),
+            ObjectLiteralEntry::Variable(x) => x.compile(f),
             ObjectLiteralEntry::Spread(spread) => {
                 f.write_str("...")?;
                 f.write_str(spread.0.as_str())
             }
-            ObjectLiteralEntry::KeyValue(key, value) => {
-                Src {
-                    src: self.src,
-                    node: key.clone(),
-                }
-                .compile(f)?;
+            ObjectLiteralEntry::KeyAndValue(key, value) => {
+                key.compile(f)?;
                 f.write_str(": ")?;
-                Src {
-                    src: self.src,
-                    node: value.clone(),
-                }
-                .compile(f)
+                value.compile(f)
             }
         }
     }
 }
 
-impl Compile for Src<LocalIdentifier> {
+impl Compile for LocalIdentifier {
     fn compile<W: Write>(&self, f: &mut W) -> Result {
-        f.write_str(self.node.0.as_str())
+        f.write_str(self.0.as_str())
     }
 }
 
-impl Compile for Src<PlainIdentifier> {
+impl Compile for PlainIdentifier {
     fn compile<W: Write>(&self, f: &mut W) -> Result {
-        f.write_str(self.node.0.as_str())
+        f.write_str(self.0.as_str())
     }
 }
 
@@ -336,7 +324,7 @@ impl Compile for Src<TypeExpression> {
     }
 }
 
-impl Compile for Src<IdentifierOrExpression> {
+impl Compile for IdentifierOrExpression {
     fn compile<W: Write>(&self, f: &mut W) -> Result {
         todo!()
         // match &self.node {

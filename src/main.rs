@@ -10,6 +10,7 @@ use std::{
     collections::HashMap,
     ffi::OsStr,
     path::{Path, PathBuf},
+    rc::Rc,
 };
 
 use clap::{command, Parser};
@@ -105,7 +106,7 @@ fn load_module_and_dependencies(
     if let Some(mut bgl) = module_id.load() {
         bgl.push('\n'); // https://github.com/Geal/nom/issues/1573
 
-        let parsed = parse(module_id.clone(), bgl); // TODO
+        let parsed = parse(module_id.clone(), Rc::new(bgl));
         modules_store.insert(module_id.clone(), parsed);
 
         if let Some(Ok(parsed)) = modules_store.get(&module_id) {
@@ -114,9 +115,9 @@ fn load_module_and_dependencies(
                 .iter()
                 .filter_map(|decl| {
                     if let Declaration::ImportAllDeclaration { name: _, path } = &decl.node {
-                        Some(path.node.value.clone())
+                        Some(path.node.value.as_str().to_owned())
                     } else if let Declaration::ImportDeclaration { imports: _, path } = &decl.node {
-                        Some(path.node.value.clone())
+                        Some(path.node.value.as_str().to_owned())
                     } else {
                         None
                     }

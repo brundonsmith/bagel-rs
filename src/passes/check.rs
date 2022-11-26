@@ -45,7 +45,7 @@ impl<'a> Check<'a> for Src<Declaration> {
                     if let Some(issues) = issues {
                         report_error(BagelError::AssignmentError {
                             module_id: ctx.current_module.module_id.clone(),
-                            src: value.src,
+                            src: value.src.clone(),
                             issues,
                         });
                     }
@@ -97,7 +97,7 @@ impl<'a> Check<'a> for Src<Expression> {
                     if let Some(issues) = number_or_string.subsumation_issues(&left_type) {
                         report_error(BagelError::AssignmentError {
                             module_id: ctx.current_module.module_id.clone(),
-                            src: left.src,
+                            src: left.src.clone(),
                             issues,
                         })
                     }
@@ -105,7 +105,7 @@ impl<'a> Check<'a> for Src<Expression> {
                     if let Some(issues) = number_or_string.subsumation_issues(&right_type) {
                         report_error(BagelError::AssignmentError {
                             module_id: ctx.current_module.module_id.clone(),
-                            src: right.src,
+                            src: right.src.clone(),
                             issues,
                         })
                     }
@@ -116,7 +116,7 @@ impl<'a> Check<'a> for Src<Expression> {
                     if let Some(issues) = Type::NumberType.subsumation_issues(&left_type) {
                         report_error(BagelError::AssignmentError {
                             module_id: ctx.current_module.module_id.clone(),
-                            src: left.src,
+                            src: left.src.clone(),
                             issues,
                         })
                     }
@@ -124,7 +124,7 @@ impl<'a> Check<'a> for Src<Expression> {
                     if let Some(issues) = Type::NumberType.subsumation_issues(&right_type) {
                         report_error(BagelError::AssignmentError {
                             module_id: ctx.current_module.module_id.clone(),
-                            src: right.src,
+                            src: right.src.clone(),
                             issues,
                         })
                     }
@@ -145,20 +145,15 @@ impl<'a> Check<'a> for Src<Expression> {
             }
             Expression::Parenthesis(inner) => inner.check(ctx, report_error),
             Expression::LocalIdentifier(name) => {
-                if let Some(src) = self.src {
-                    if ctx
-                        .current_module
-                        .resolve_symbol_within(name.as_str(), &src)
-                        .is_none()
-                    {
-                        report_error(BagelError::NotFoundError {
-                            module_id: ctx.current_module.module_id.clone(),
-                            identifier: Src {
-                                src: Some(src),
-                                node: LocalIdentifier(name.clone()),
-                            },
-                        })
-                    }
+                if ctx
+                    .current_module
+                    .resolve_symbol_within(name.as_str(), &self.src)
+                    .is_none()
+                {
+                    report_error(BagelError::NotFoundError {
+                        module_id: ctx.current_module.module_id.clone(),
+                        identifier: LocalIdentifier(name.clone()),
+                    })
                 }
             }
             Expression::InlineConstGroup {

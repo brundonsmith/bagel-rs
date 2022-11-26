@@ -242,7 +242,7 @@ impl Format for Src<Func> {
 
 impl Format for Src<Arg> {
     fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
-        f.write_str(&self.node.name.node.0)?;
+        f.write_str(&self.node.name.0.as_str())?;
 
         if let Some(type_annotation) = &self.node.type_annotation {
             if self.node.optional {
@@ -283,7 +283,7 @@ impl Format for Src<ArrayLiteralEntry> {
                 f.write_str(spread.0.as_str())
             }
             ArrayLiteralEntry::Element(element) => Src {
-                src: self.src,
+                src: self.src.clone(),
                 node: element.clone(),
             }
             .format(f, opts),
@@ -300,53 +300,41 @@ impl Display for Src<ObjectLiteralEntry> {
 impl Format for Src<ObjectLiteralEntry> {
     fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
         match &self.node {
-            ObjectLiteralEntry::Variable(x) => Src {
-                src: self.src,
-                node: x.clone(),
-            }
-            .format(f, opts),
+            ObjectLiteralEntry::Variable(x) => x.format(f, opts),
             ObjectLiteralEntry::Spread(spread) => {
                 f.write_str("...")?;
                 f.write_str(spread.0.as_str())
             }
-            ObjectLiteralEntry::KeyValue(key, value) => {
-                Src {
-                    src: self.src,
-                    node: key.clone(),
-                }
-                .format(f, opts)?;
+            ObjectLiteralEntry::KeyAndValue(key, value) => {
+                key.format(f, opts)?;
                 f.write_str(": ")?;
-                Src {
-                    src: self.src,
-                    node: value.clone(),
-                }
-                .format(f, opts)
+                value.format(f, opts)
             }
         }
     }
 }
 
-impl Display for Src<LocalIdentifier> {
+impl Display for LocalIdentifier {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         self.format(f, FormatOptions::DEFAULT)
     }
 }
 
-impl Format for Src<LocalIdentifier> {
+impl Format for LocalIdentifier {
     fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
-        f.write_str(self.node.0.as_str())
+        f.write_str(self.0.as_str())
     }
 }
 
-impl Display for Src<PlainIdentifier> {
+impl Display for PlainIdentifier {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         self.format(f, FormatOptions::DEFAULT)
     }
 }
 
-impl Format for Src<PlainIdentifier> {
+impl Format for PlainIdentifier {
     fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
-        f.write_str(self.node.0.as_str())
+        f.write_str(self.0.as_str())
     }
 }
 
@@ -356,7 +344,7 @@ impl Display for Src<Statement> {
     }
 }
 
-impl Format for Src<IdentifierOrExpression> {
+impl Format for IdentifierOrExpression {
     fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
         todo!()
     }

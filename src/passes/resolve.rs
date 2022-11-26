@@ -26,7 +26,7 @@ impl Resolve for Module {
                     exported: _,
                     platforms: _,
                 } => {
-                    if name.node.0.as_str() == symbol {
+                    if name.0.as_str() == symbol {
                         return Some(Binding::ValueDeclaration(
                             ValueDeclaration::try_from(decl.node.clone()).unwrap(),
                         ));
@@ -39,7 +39,7 @@ impl Resolve for Module {
                     declared_type,
                     exported,
                 } => {
-                    if name.node.0.as_str() == symbol {
+                    if name.0.as_str() == symbol {
                         return Some(Binding::TypeDeclaration(
                             TypeDeclaration::try_from(decl.node.clone()).unwrap(),
                         ));
