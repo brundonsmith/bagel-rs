@@ -18,7 +18,7 @@ use std::{
 use clap::{command, Parser};
 use cli::Command;
 use colored::Colorize;
-use glob::{glob, Paths};
+use glob::glob;
 
 use crate::{
     model::ast::{Declaration, Module, ModuleID},
@@ -152,10 +152,10 @@ proc main() {
 ";
 
 fn s_or_none(n: usize) -> &'static str {
-    if n > 1 {
-        "s"
-    } else {
+    if n == 1 {
         ""
+    } else {
+        "s"
     }
 }
 

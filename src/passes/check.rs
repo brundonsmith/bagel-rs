@@ -246,8 +246,6 @@ impl<'a, T: Check<'a>> Check<'a> for Src<T> {
 impl<'a> Check<'a> for Src<TypeExpression> {
     fn check<F: FnMut(BagelError)>(&self, ctx: CheckContext<'a>, report_error: &mut F) {
         match &self.node {
-            TypeExpression::UnionType { members } => todo!(),
-            TypeExpression::MaybeType { inner } => todo!(),
             TypeExpression::NamedType { name } => todo!(),
             TypeExpression::GenericParamType { name, extends } => todo!(),
             TypeExpression::ProcType {
@@ -274,9 +272,6 @@ impl<'a> Check<'a> for Src<TypeExpression> {
             TypeExpression::ArrayType { element } => todo!(),
             TypeExpression::TupleType { members } => todo!(),
             TypeExpression::ReadonlyType { inner } => todo!(),
-            TypeExpression::StringType => todo!(),
-            TypeExpression::NumberType => todo!(),
-            TypeExpression::BooleanType => todo!(),
             TypeExpression::NominalType {
                 module_id,
                 name,
@@ -290,9 +285,6 @@ impl<'a> Check<'a> for Src<TypeExpression> {
             TypeExpression::KeyofType { inner } => todo!(),
             TypeExpression::ValueofType { inner } => todo!(),
             TypeExpression::ElementofType { inner } => todo!(),
-            TypeExpression::UnknownType => todo!(),
-            TypeExpression::PoisonedType => todo!(),
-            TypeExpression::AnyType => todo!(),
             TypeExpression::RegularExpressionType {} => todo!(),
             TypeExpression::PropertyType {
                 subject,
@@ -302,7 +294,15 @@ impl<'a> Check<'a> for Src<TypeExpression> {
 
             // intentionally have nothing to check
             TypeExpression::LiteralType { value } => {}
+            TypeExpression::StringType => {}
+            TypeExpression::NumberType => {}
+            TypeExpression::BooleanType => {}
             TypeExpression::NilType => {}
+            TypeExpression::UnionType { members } => {}
+            TypeExpression::MaybeType { inner } => {}
+            TypeExpression::UnknownType => {}
+            TypeExpression::PoisonedType => {}
+            TypeExpression::AnyType => {}
         }
     }
 }

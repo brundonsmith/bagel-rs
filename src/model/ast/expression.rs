@@ -176,7 +176,7 @@ pub enum AwaitOrDetach {
 #[derive(Clone, Debug, PartialEq)]
 pub enum StringLiteralSegment {
     String(Slice),
-    Expression(Expression),
+    Expression(Src<Expression>),
 }
 
 #[derive(Clone, Debug, PartialEq)]

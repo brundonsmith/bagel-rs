@@ -116,8 +116,11 @@ impl<'a> Src<Expression> {
             Expression::ExactStringLiteral { value, tag: _ } => Type::LiteralType {
                 value: crate::model::bgl_type::LiteralTypeValue::ExactString(value.clone()),
             },
-            Expression::StringLiteral { tag, segments } => todo!(),
-            Expression::ArrayLiteral { entries } => todo!(),
+            Expression::StringLiteral { tag, segments } => Type::StringType,
+            Expression::ArrayLiteral { entries } => Type::TupleType {
+                members: todo!(),
+                mutability: Mutability::Literal,
+            },
             Expression::ObjectLiteral { entries } => todo!(),
             Expression::NegationOperation(inner) => todo!(),
             Expression::Func {
@@ -150,7 +153,14 @@ impl<'a> Src<Expression> {
             Expression::IfElseExpression {
                 cases,
                 default_case,
-            } => todo!(),
+            } => Type::UnionType {
+                members: cases
+                    .iter()
+                    .map(|case| &case.1)
+                    .chain(default_case.iter().map(|c| c.as_ref()))
+                    .map(|expr| expr.infer_type(ctx))
+                    .collect(),
+            },
             Expression::SwitchExpression {
                 value,
                 cases,
@@ -161,11 +171,11 @@ impl<'a> Src<Expression> {
                 attributes,
                 children,
             } => todo!(),
-            Expression::AsCast { inner, as_type } => todo!(),
+            Expression::AsCast { inner: _, as_type } => as_type.resolve(ctx.into()),
             Expression::InstanceOf {
-                inner,
-                possible_type,
-            } => todo!(),
+                inner: _,
+                possible_type: _,
+            } => Type::BooleanType,
             Expression::ErrorExpression { inner } => todo!(),
             Expression::RegularExpression { expr, flags } => todo!(),
         }
