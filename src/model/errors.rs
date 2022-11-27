@@ -36,12 +36,7 @@ pub enum BagelError {
 }
 
 impl BagelError {
-    pub fn pretty_print<W: Write>(
-        self,
-        f: &mut W,
-        module_src: &str,
-        color: bool,
-    ) -> std::fmt::Result {
+    pub fn pretty_print<W: Write>(&self, f: &mut W, color: bool) -> std::fmt::Result {
         match self {
             BagelError::ModuleNotFoundError {
                 module_id,
@@ -52,15 +47,11 @@ impl BagelError {
                 module_id,
                 message,
             } => {
-                pretty_print_parse_error(
-                    &ParseError {
-                        module_id,
-                        src,
-                        message,
-                    },
-                    f,
-                    color,
-                )?;
+                error_heading(f, &module_id, &src, "parse error", Some(message.as_str()))?;
+
+                f.write_char('\n')?;
+
+                code_block_highlighted(f, &src)?;
             }
             BagelError::AssignmentError {
                 module_id,
@@ -97,26 +88,6 @@ impl BagelError {
 
         Ok(())
     }
-}
-
-pub fn pretty_print_parse_error<W: Write>(
-    err: &ParseError,
-    f: &mut W,
-    color: bool,
-) -> std::fmt::Result {
-    error_heading(
-        f,
-        &err.module_id,
-        &err.src,
-        "parse error",
-        Some(err.message.as_str()),
-    )?;
-
-    f.write_char('\n')?;
-
-    code_block_highlighted(f, &err.src)?;
-
-    Ok(())
 }
 
 fn error_heading<W: Write>(

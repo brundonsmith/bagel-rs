@@ -9,17 +9,20 @@ mod utils;
 use std::{
     collections::HashMap,
     ffi::OsStr,
+    ops::Add,
     path::{Path, PathBuf},
+    process::ExitCode,
     rc::Rc,
 };
 
 use clap::{command, Parser};
 use cli::Command;
+use colored::Colorize;
 use glob::{glob, Paths};
 
 use crate::{
     model::ast::{Declaration, Module, ModuleID},
-    model::errors::{pretty_print_parse_error, BagelError, ParseError},
+    model::errors::{BagelError, ParseError},
     passes::check::{Check, CheckContext},
     passes::parse::parse,
 };
@@ -31,61 +34,136 @@ struct Args {
     command: Command,
 }
 
-fn main() {
+fn main() -> ExitCode {
     let args = Args::parse();
-    println!("{:?}", args);
-
-    let mut modules_store: ModulesStore = HashMap::new();
 
     match args.command {
-        Command::New { dir } => todo!(),
-        Command::Init => todo!(),
-        Command::Build { target, watch } => todo!(),
-        Command::Run { target, node, deno } => todo!(),
-        Command::Transpile { target, watch } => todo!(),
+        Command::New { dir } => {
+            let project_path = std::env::current_dir().unwrap().join(dir);
+            let index_path = project_path.clone().join("index.bgl");
+
+            if project_path.exists() {
+                let failed = "Failed".red().to_string();
+                println!(
+                    "{}      Cannot create project directory {} because it already exists",
+                    failed,
+                    project_path.to_string_lossy()
+                );
+                return ExitCode::FAILURE;
+            } else {
+                std::fs::create_dir_all(project_path.clone()).unwrap();
+                std::fs::write(index_path, DEFAULT_INDEX_BGL).unwrap();
+                let created = "Created".green().to_string();
+                println!(
+                    "{}     new Bagel project {}",
+                    created,
+                    project_path.to_string_lossy()
+                );
+            }
+        }
+        Command::Init => {
+            let index_path = std::env::current_dir().unwrap().join("index.bgl");
+
+            if index_path.exists() {
+                let failed = "Failed".red().to_string();
+                println!(
+                    "{}      Can't initialize Bagel project here because one already exists",
+                    failed
+                );
+                return ExitCode::FAILURE;
+            } else {
+                std::fs::write(index_path, DEFAULT_INDEX_BGL).unwrap();
+                let initialized = "Initialized".green().to_string();
+                println!("{} Bagel project in current directory", initialized);
+            }
+        }
+        Command::Build { target, watch } => {
+            let modules_store = load_and_parse(get_all_entrypoints(target));
+            let errors = gather_errors(&modules_store);
+            print_errors(&errors);
+
+            if errors.values().any(|errors| errors.len() > 0) {
+                return ExitCode::FAILURE;
+            }
+
+            // if no errors,
+            //  transpile
+            //  then bundle
+        }
+        Command::Run { target, node, deno } => {
+            let modules_store = load_and_parse(get_all_entrypoints(target));
+            let errors = gather_errors(&modules_store);
+            print_errors(&errors);
+
+            if errors.values().any(|errors| errors.len() > 0) {
+                return ExitCode::FAILURE;
+            }
+
+            // if no errors,
+            //  transpile
+            //  then bundle
+            //  then run
+        }
+        Command::Transpile { target, watch } => {
+            let modules_store = load_and_parse(get_all_entrypoints(target));
+            let errors = gather_errors(&modules_store);
+            print_errors(&errors);
+
+            if errors.values().any(|errors| errors.len() > 0) {
+                return ExitCode::FAILURE;
+            }
+
+            // if no errors,
+            //  transpile
+        }
         Command::Check { target, watch } => {
-            let entrypoints = get_all_entrypoints(glob(target.as_str()).unwrap());
+            let modules_store = load_and_parse(get_all_entrypoints(target));
+            let errors = gather_errors(&modules_store);
+            print_errors(&errors);
 
-            for path in entrypoints {
-                let module_id = ModuleID::try_from(path.as_path()).unwrap();
-                load_module_and_dependencies(&mut modules_store, module_id);
+            if errors.values().any(|errors| errors.len() > 0) {
+                return ExitCode::FAILURE;
             }
-
-            let mut error_output_buf = String::new();
-            let error_output_buf = &mut error_output_buf;
-            for module in modules_store.values() {
-                match module {
-                    Ok(module) => {
-                        module.check(
-                            CheckContext {
-                                modules: &modules_store,
-                                current_module: &module,
-                            },
-                            &mut |error: BagelError| {
-                                error.pretty_print(error_output_buf, &module.src, true);
-                            },
-                        );
-                    }
-                    Err(error) => {
-                        pretty_print_parse_error(error, error_output_buf, true);
-                    }
-                }
-            }
-
-            // write buffer to console
-            println!("{}", error_output_buf);
         }
         Command::Test {
             target,
             test_filter,
             watch,
         } => todo!(),
+        Command::Clean { target } => todo!(),
+    };
+
+    ExitCode::SUCCESS
+}
+
+const DEFAULT_INDEX_BGL: &'static str = "
+export const config: BagelConfig = {
+
+    // Remove entries from this list to enable different platform-specific APIs
+    platforms: ['node', 'deno', 'browser'],
+
+    // You can override individual rules here, or leave empty for the default linter behavior
+    lintRules: { },
+}
+
+proc main() {
+
+}
+";
+
+fn s_or_none(n: usize) -> &'static str {
+    if n > 1 {
+        "s"
+    } else {
+        ""
     }
 }
 
 pub type ModulesStore = HashMap<ModuleID, Result<Module, ParseError>>;
 
-fn get_all_entrypoints(paths: Paths) -> impl Iterator<Item = PathBuf> {
+fn get_all_entrypoints(target: String) -> impl Iterator<Item = PathBuf> {
+    let paths = glob(target.as_str()).unwrap();
+
     paths.filter_map(|path| {
         let path = path.unwrap();
 
@@ -97,6 +175,85 @@ fn get_all_entrypoints(paths: Paths) -> impl Iterator<Item = PathBuf> {
             None
         }
     })
+}
+
+fn load_and_parse<I: Iterator<Item = PathBuf>>(entrypoints: I) -> ModulesStore {
+    let mut modules_store: ModulesStore = HashMap::new();
+
+    for path in entrypoints {
+        let module_id = ModuleID::try_from(path.as_path()).unwrap();
+        load_module_and_dependencies(&mut modules_store, module_id);
+    }
+
+    modules_store
+}
+
+fn gather_errors(modules_store: &ModulesStore) -> HashMap<ModuleID, Vec<BagelError>> {
+    let mut errors = HashMap::new();
+
+    for (module_id, module) in modules_store {
+        let mut module_errors = Vec::new();
+
+        match module {
+            Ok(module) => {
+                module.check(
+                    CheckContext {
+                        modules: &modules_store,
+                        current_module: &module,
+                    },
+                    &mut |error: BagelError| {
+                        module_errors.push(error);
+                    },
+                );
+            }
+            Err(error) => {
+                module_errors.push(BagelError::from(error.clone()));
+            }
+        }
+
+        errors.insert(module_id.clone(), module_errors);
+    }
+
+    errors
+}
+
+fn print_errors(errors: &HashMap<ModuleID, Vec<BagelError>>) {
+    let modules_checked = errors.len();
+    let modules_with_errors = errors.values().filter(|errors| errors.len() > 0).count();
+    let total_errors = errors.values().map(|errors| errors.len()).fold(0, Add::add);
+
+    if errors.len() > 0 {
+        let mut error_output_buf = String::new();
+        let error_output_buf_ref = &mut error_output_buf;
+
+        for (module_id, errors) in errors {
+            for error in errors {
+                error.pretty_print(error_output_buf_ref, true);
+                error_output_buf_ref.push('\n');
+                error_output_buf_ref.push('\n');
+            }
+        }
+
+        print!("{}", error_output_buf);
+
+        println!(
+            "Found {} problem{} across {} module{} ({} module{} checked)",
+            total_errors,
+            s_or_none(total_errors),
+            modules_with_errors,
+            s_or_none(modules_with_errors),
+            modules_checked,
+            s_or_none(modules_checked)
+        );
+    } else {
+        let checked = "Checked".green().to_string();
+        println!(
+            "{}     {} module{} and found no problems",
+            checked,
+            modules_checked,
+            s_or_none(modules_checked)
+        );
+    }
 }
 
 fn load_module_and_dependencies(

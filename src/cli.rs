@@ -67,6 +67,12 @@ pub enum Command {
         #[arg(long)]
         watch: bool,
     },
+
+    Clean {
+        /// File or project directory
+        #[arg()]
+        target: String,
+    },
     // /// Reformat Bagel code
     // Format {
     //     /// File or project directory
@@ -96,6 +102,7 @@ impl Command {
                 test_filter,
                 watch,
             } => todo!(),
+            Command::Clean { target } => todo!(),
         }
     }
 }

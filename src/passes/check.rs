@@ -277,7 +277,6 @@ impl<'a> Check<'a> for Src<TypeExpression> {
             TypeExpression::StringType => todo!(),
             TypeExpression::NumberType => todo!(),
             TypeExpression::BooleanType => todo!(),
-            TypeExpression::NilType => todo!(),
             TypeExpression::NominalType {
                 module_id,
                 name,
@@ -303,6 +302,7 @@ impl<'a> Check<'a> for Src<TypeExpression> {
 
             // intentionally have nothing to check
             TypeExpression::LiteralType { value } => {}
+            TypeExpression::NilType => {}
         }
     }
 }
