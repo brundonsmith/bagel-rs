@@ -5,18 +5,13 @@ use nom::{
     bytes::complete::{escaped, tag, take_while, take_while1},
     character::complete::{alphanumeric1, char, one_of},
     combinator::{complete, cut, fail, map, opt},
-    error::context,
+    error::{context, ErrorKind},
     multi::{many0, separated_list0},
     sequence::{pair, preceded, separated_pair, terminated, tuple},
     IResult,
 };
 
-use crate::{
-    model::ast::*,
-    model::errors::ParseError,
-    model::slice::Slice,
-    passes::precedence::{binary_op, precedence, Assoc, Operation},
-};
+use crate::{model::ast::*, model::errors::ParseError, model::slice::Slice};
 
 pub fn parse(module_id: ModuleID, module_src: Rc<String>) -> Result<Module, ParseError> {
     let bgl = Slice::new(module_src.clone());
@@ -63,6 +58,8 @@ pub fn parse(module_id: ModuleID, module_src: Rc<String>) -> Result<Module, Pars
         },
     }
 }
+
+// --- Declaration
 
 fn declaration<'a>(i: Slice) -> ParseResult<'a, Src<Declaration>> {
     preceded(
@@ -172,7 +169,7 @@ fn func_declaration<'a>(i: Slice) -> ParseResult<'a, Src<FuncDeclaration>> {
                 preceded(whitespace, tag(")")),
                 preceded(whitespace, opt(type_annotation)),
                 preceded(whitespace, tag("=>")),
-                preceded(whitespace, expression),
+                preceded(whitespace, expression(0)),
             )),
             |(export, pure, asyn, keyword, name, open_paren, args, _, return_type, _, body)| {
                 let exported = export.is_some();
@@ -298,7 +295,7 @@ fn value_declaration<'a>(i: Slice) -> ParseResult<'a, Src<ValueDeclaration>> {
                 preceded(whitespace, plain_identifier),
                 opt(preceded(whitespace, type_annotation)),
                 preceded(whitespace, tag("=")),
-                preceded(whitespace, expression),
+                preceded(whitespace, expression(0)),
             )),
             |(export, keyword, name, type_annotation, _, value)| {
                 let exported = export.is_some();
@@ -335,6 +332,8 @@ fn type_annotation<'a>(i: Slice) -> ParseResult<'a, Src<TypeExpression>> {
     preceded(tag(":"), preceded(whitespace, type_expression))(i)
 }
 
+// --- TypeExpression ---
+
 fn type_expression<'a>(i: Slice) -> ParseResult<'a, Src<TypeExpression>> {
     alt((
         map(exact_string_literal, |s| {
@@ -365,128 +364,213 @@ fn type_expression<'a>(i: Slice) -> ParseResult<'a, Src<TypeExpression>> {
     ))(i)
 }
 
+// --- Statement ---
+
 fn statement<'a>(i: Slice) -> ParseResult<'a, Src<Statement>> {
     todo!()
 }
 
-fn expression<'a>(i: Slice) -> ParseResult<'a, Src<Expression>> {
-    preceded(whitespace, alt((binary_operation, atomic_expression)))(i)
-}
+// --- Expression ---
 
-fn atomic_expression<'a>(i: Slice) -> ParseResult<'a, Src<Expression>> {
-    preceded(
-        whitespace,
-        alt((
-            map(parenthesis, |x| x.map(Expression::from)),
-            map(object_literal, |x| x.map(Expression::from)),
-            map(array_literal, |x| x.map(Expression::from)),
-            map(exact_string_literal, |x| x.map(Expression::from)),
-            map(number_literal, |x| x.map(Expression::from)),
-            map(boolean_literal, |x| x.map(Expression::from)),
-            map(nil_literal, |x| x.map(Expression::from)),
-            map(local_identifier, |x| {
+fn expression<'a>(level: usize) -> impl Fn(Slice) -> ParseResult<'a, Src<Expression>> {
+    move |i: Slice| -> ParseResult<'a, Src<Expression>> {
+        if level <= 0 {
+            // debug, javascriptEscape, elementTag
+        }
+
+        if level <= 1 {
+            // func, proc
+        }
+
+        if level <= 2 {
+            let res = binary_operator_1(2, "??")(i.clone());
+
+            if res.is_ok() {
+                return res;
+            }
+        }
+
+        if level <= 3 {
+            let res = binary_operator_1(3, "||")(i.clone());
+
+            if res.is_ok() {
+                return res;
+            }
+        }
+
+        if level <= 4 {
+            let res = binary_operator_1(4, "&&")(i.clone());
+
+            if res.is_ok() {
+                return res;
+            }
+        }
+
+        if level <= 5 {
+            let res = binary_operator_2(5, "==", "!=")(i.clone());
+
+            if res.is_ok() {
+                return res;
+            }
+        }
+
+        if level <= 6 {
+            let res = binary_operator_4(6, "<=", ">=", "<", ">")(i.clone());
+
+            if res.is_ok() {
+                return res;
+            }
+        }
+
+        if level <= 7 {
+            let res = binary_operator_2(7, "+", "-")(i.clone());
+
+            if res.is_ok() {
+                return res;
+            }
+        }
+
+        if level <= 8 {
+            let res = binary_operator_2(8, "*", "/")(i.clone());
+
+            if res.is_ok() {
+                return res;
+            }
+        }
+
+        // asCast, instanceOf
+
+        // negationOperator
+
+        // indexer
+
+        // error
+
+        // invocationAccessorChain
+
+        // range
+
+        if level <= 15 {
+            let res = map(parenthesis, |x| x.map(Expression::from))(i.clone());
+            if res.is_ok() {
+                return res;
+            }
+        }
+
+        if level <= 16 {
+            // ifElseExpression, switchExpression, inlineConstGroup, booleanLiteral, nilLiteral, objectLiteral, arrayLiteral,
+            //         stringLiteral, numberLiteral
+            let res = alt((
+                map(object_literal, |x| x.map(Expression::from)),
+                map(array_literal, |x| x.map(Expression::from)),
+                map(exact_string_literal, |x| x.map(Expression::from)),
+                map(number_literal, |x| x.map(Expression::from)),
+                map(boolean_literal, |x| x.map(Expression::from)),
+                map(nil_literal, |x| x.map(Expression::from)),
+            ))(i.clone());
+
+            if res.is_ok() {
+                return res;
+            }
+        }
+
+        if level <= 17 {
+            // localIdentifier, regExp
+            let res = alt((map(local_identifier, |x| {
                 Expression::from(x.clone()).with_src(x.0)
-            }),
-        )),
-    )(i)
+            }),))(i.clone());
+
+            if res.is_ok() {
+                return res;
+            }
+        }
+
+        Err(nom::Err::Error(RawParseError {
+            src: i,
+            details: RawParseErrorDetails::Kind(ErrorKind::Fail),
+        }))
+    }
 }
 
-fn binary_operation<'a>(i: Slice) -> ParseResult<'a, Src<Expression>> {
-    context(
-        "binary operation",
-        precedence(
-            fail,
-            // unary_op(1, tag("-")),
-            fail,
-            alt((
-                binary_op(
-                    2,
-                    Assoc::Left,
-                    map(preceded(whitespace, tag("*")), |op| {
-                        BinaryOperator::from_str(op.as_str()).unwrap().with_src(op)
-                    }),
-                ),
-                binary_op(
-                    2,
-                    Assoc::Left,
-                    map(preceded(whitespace, tag("/")), |op| {
-                        BinaryOperator::from_str(op.as_str()).unwrap().with_src(op)
-                    }),
-                ),
-                binary_op(
-                    3,
-                    Assoc::Left,
-                    map(preceded(whitespace, tag("+")), |op| {
-                        BinaryOperator::from_str(op.as_str()).unwrap().with_src(op)
-                    }),
-                ),
-                binary_op(
-                    3,
-                    Assoc::Left,
-                    map(preceded(whitespace, tag("-")), |op| {
-                        BinaryOperator::from_str(op.as_str()).unwrap().with_src(op)
-                    }),
-                ),
+fn binary_operator_1<'a>(
+    level: usize,
+    a: &'static str,
+) -> impl Fn(Slice) -> ParseResult<'a, Src<Expression>> {
+    move |i: Slice| -> ParseResult<'a, Src<Expression>> {
+        map(
+            tuple((
+                expression(level + 1),
+                preceded(whitespace, tag(a)),
+                preceded(whitespace, expression(level + 1)),
             )),
-            atomic_expression,
-            |op: Operation<
-                Src<BinaryOperator>,
-                Src<BinaryOperator>,
-                Src<BinaryOperator>,
-                Src<Expression>,
-            >| {
-                match op {
-                    // Operation::Prefix("-", o) => Ok(-o),
-                    Operation::Binary(left, op, right) => {
-                        let src = left.spanning(&right);
+            |(left, op, right)| {
+                let src = left.src.clone().spanning(&right.src);
 
-                        Ok(Expression::BinaryOperation {
-                            left: Box::new(left),
-                            op,
-                            right: Box::new(right),
-                        }
-                        .with_src(src))
-                    }
-                    // Operation::Binary(lhs, "*", rhs) => Ok(lhs * rhs),
-                    // Operation::Binary(lhs, "/", rhs) => Ok(lhs / rhs),
-                    // Operation::Binary(lhs, "+", rhs) => Ok(lhs + rhs),
-                    // Operation::Binary(lhs, "-", rhs) => Ok(lhs - rhs),
-                    _ => Err("Invalid combination"),
+                Expression::BinaryOperation {
+                    left: Box::new(left),
+                    op: BinaryOperator::from_str(op.as_str()).unwrap().with_src(op),
+                    right: Box::new(right),
                 }
+                .with_src(src)
             },
-        ),
-    )(i)
+        )(i.clone())
+    }
 }
 
-/// fn parser(i: &str) -> IResult<&str, i64> {
-///   precedence(
-///     unary_op(1, tag("-")),
-///     fail,
-///     alt((
-///       binary_op(2, Assoc::Left, tag("*")),
-///       binary_op(2, Assoc::Left, tag("/")),
-///       binary_op(3, Assoc::Left, tag("+")),
-///       binary_op(3, Assoc::Left, tag("-")),
-///     )),
-///     alt((
-///       map_res(digit1, |s: &str| s.parse::<i64>()),
-///       delimited(tag("("), parser, tag(")")),
-///     )),
-///     |op: Operation<&str, &str, &str, i64>| {
-///       use nom_7_precedence::Operation::*;
-///       match op {
-///         Prefix("-", o) => Ok(-o),
-///         Binary(lhs, "*", rhs) => Ok(lhs * rhs),
-///         Binary(lhs, "/", rhs) => Ok(lhs / rhs),
-///         Binary(lhs, "+", rhs) => Ok(lhs + rhs),
-///         Binary(lhs, "-", rhs) => Ok(lhs - rhs),
-///         _ => Err("Invalid combination"),
-///       }
-///     }
-///   )(i)
-/// }
+fn binary_operator_2<'a>(
+    level: usize,
+    a: &'static str,
+    b: &'static str,
+) -> impl Fn(Slice) -> ParseResult<'a, Src<Expression>> {
+    move |i: Slice| -> ParseResult<'a, Src<Expression>> {
+        map(
+            tuple((
+                expression(level + 1),
+                preceded(whitespace, alt((tag(a), tag(b)))),
+                preceded(whitespace, expression(level + 1)),
+            )),
+            |(left, op, right)| {
+                let src = left.src.clone().spanning(&right.src);
 
-// + ContextError<Slice>
+                Expression::BinaryOperation {
+                    left: Box::new(left),
+                    op: BinaryOperator::from_str(op.as_str()).unwrap().with_src(op),
+                    right: Box::new(right),
+                }
+                .with_src(src)
+            },
+        )(i.clone())
+    }
+}
+
+fn binary_operator_4<'a>(
+    level: usize,
+    a: &'static str,
+    b: &'static str,
+    c: &'static str,
+    d: &'static str,
+) -> impl Fn(Slice) -> ParseResult<'a, Src<Expression>> {
+    move |i: Slice| -> ParseResult<'a, Src<Expression>> {
+        map(
+            tuple((
+                expression(level + 1),
+                preceded(whitespace, alt((tag(a), tag(b), tag(c), tag(d)))),
+                preceded(whitespace, expression(level + 1)),
+            )),
+            |(left, op, right)| {
+                let src = left.src.clone().spanning(&right.src);
+
+                Expression::BinaryOperation {
+                    left: Box::new(left),
+                    op: BinaryOperator::from_str(op.as_str()).unwrap().with_src(op),
+                    right: Box::new(right),
+                }
+                .with_src(src)
+            },
+        )(i.clone())
+    }
+}
+
 fn parenthesis<'a>(i: Slice) -> ParseResult<'a, Src<Parenthesis>> {
     context(
         "parenthesized expression",
@@ -494,7 +578,7 @@ fn parenthesis<'a>(i: Slice) -> ParseResult<'a, Src<Parenthesis>> {
             pair(
                 tag("("),
                 cut(pair(
-                    preceded(whitespace, expression),
+                    preceded(whitespace, expression(16)),
                     preceded(whitespace, tag(")")),
                 )),
             ),
@@ -541,7 +625,7 @@ fn key_value<'a>(i: Slice) -> ParseResult<'a, (Slice, Src<Expression>)> {
     separated_pair(
         preceded(whitespace, identifier_like),
         cut(preceded(whitespace, char(':'))),
-        preceded(whitespace, expression),
+        preceded(whitespace, expression(0)),
     )(i)
 }
 
@@ -552,7 +636,7 @@ fn array_literal<'a>(i: Slice) -> ParseResult<'a, Src<ArrayLiteral>> {
             pair(
                 tag("["),
                 cut(pair(
-                    separated_list0(preceded(whitespace, char(',')), expression),
+                    separated_list0(preceded(whitespace, char(',')), expression(0)),
                     preceded(whitespace, tag("]")),
                 )),
             ),
@@ -635,7 +719,8 @@ fn plain_identifier<'a>(i: Slice) -> ParseResult<'a, PlainIdentifier> {
     )(i)
 }
 
-// utils
+// --- Util parsers ---
+
 fn identifier_like<'a>(i: Slice) -> ParseResult<'a, Slice> {
     take_while(|ch: char| ch.is_alphanumeric() || ch == '_' || ch == '$')(i)
 }
@@ -647,6 +732,8 @@ fn numeric<'a>(i: Slice) -> ParseResult<'a, Slice> {
 fn whitespace<'a>(i: Slice) -> ParseResult<'a, Slice> {
     take_while(|c| c == ' ' || c == '\n' || c == '\t' || c == '\r')(i)
 }
+
+// --- Util types ---
 
 type ParseResult<'a, T> = IResult<Slice, T, RawParseError>;
 

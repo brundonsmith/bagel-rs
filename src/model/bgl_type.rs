@@ -145,6 +145,30 @@ impl Type {
                 }
             }
             (
+                Type::StringType,
+                Type::LiteralType {
+                    value: LiteralTypeValue::ExactString(_),
+                },
+            ) => {
+                return None;
+            }
+            (
+                Type::NumberType,
+                Type::LiteralType {
+                    value: LiteralTypeValue::NumberLiteral(_),
+                },
+            ) => {
+                return None;
+            }
+            (
+                Type::BooleanType,
+                Type::LiteralType {
+                    value: LiteralTypeValue::BooleanLiteral(_),
+                },
+            ) => {
+                return None;
+            }
+            (
                 Type::ProcType {
                     args: args_1,
                     args_spread: args_spread_1,
