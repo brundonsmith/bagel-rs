@@ -71,8 +71,8 @@ fn declaration(i: Slice) -> ParseResult<Src<Declaration>> {
             map(func_declaration, |x| x.map(Declaration::from)),
             map(proc_declaration, |x| x.map(Declaration::from)),
             map(value_declaration, |x| x.map(Declaration::from)),
-            // map(test_expr_declaration, |x| x.map(Declaration::from)),
-            // map(test_block_declaration, |x| x.map(Declaration::from)),
+            map(test_expr_declaration, |x| x.map(Declaration::from)),
+            map(test_block_declaration, |x| x.map(Declaration::from)),
             // map(test_type_declaration, |x| x.map(Declaration::from)),
         )),
     )(i)
@@ -317,11 +317,36 @@ fn value_declaration(i: Slice) -> ParseResult<Src<ValueDeclaration>> {
 }
 
 fn test_expr_declaration(i: Slice) -> ParseResult<Src<TestExprDeclaration>> {
-    todo!()
+    map(
+        tuple((
+            tag("test"),
+            preceded(whitespace, tag("expr")),
+            preceded(whitespace, exact_string_literal),
+            preceded(whitespace, tag("=>")),
+            preceded(whitespace, expression(0)),
+        )),
+        |(start, _, name, _, expr)| {
+            let src = start.spanning(&expr.src);
+
+            TestExprDeclaration { name, expr }.with_src(src)
+        },
+    )(i)
 }
 
 fn test_block_declaration(i: Slice) -> ParseResult<Src<TestBlockDeclaration>> {
-    todo!()
+    map(
+        tuple((
+            tag("test"),
+            preceded(whitespace, tag("block")),
+            preceded(whitespace, exact_string_literal),
+            preceded(whitespace, tag("{")),
+            many0(preceded(whitespace, statement)),
+            preceded(whitespace, tag("}")),
+        )),
+        |(start, _, name, _, block, end)| {
+            TestBlockDeclaration { name, block }.with_src(start.spanning(&end))
+        },
+    )(i)
 }
 
 fn test_type_declaration(i: Slice) -> ParseResult<Src<TestTypeDeclaration>> {
@@ -367,6 +392,158 @@ fn type_expression(i: Slice) -> ParseResult<Src<TypeExpression>> {
 // --- Statement ---
 
 fn statement(i: Slice) -> ParseResult<Src<Statement>> {
+    preceded(
+        whitespace,
+        alt((
+            // map(declaration_statement, |x| x.map(Statement::from)),
+            map(if_else_statement, |x| x.map(Statement::from)),
+            map(for_loop, |x| x.map(Statement::from)),
+            map(while_loop, |x| x.map(Statement::from)),
+            // map(assignment, |x| x.map(Statement::from)),
+            // map(try_catch, |x| x.map(Statement::from)),
+            map(throw_statement, |x| x.map(Statement::from)),
+            map(autorun, |x| x.map(Statement::from)),
+            // map(invocation_statement, |x| x.map(Statement::from)),
+        )),
+    )(i)
+}
+
+fn declaration_statement(i: Slice) -> ParseResult<Src<DeclarationStatement>> {
+    todo!()
+}
+
+fn if_else_statement(i: Slice) -> ParseResult<Src<IfElseStatement>> {
+    map(
+        tuple((
+            separated_list1(preceded(whitespace, tag("else")), if_else_statement_case),
+            opt(preceded(
+                whitespace,
+                tuple((
+                    tag("else"),
+                    preceded(whitespace, tag("{")),
+                    many0(preceded(whitespace, statement)),
+                    preceded(whitespace, tag("}")),
+                )),
+            )),
+        )),
+        |(cases, default_case)| {
+            let src = cases[0].src.clone().spanning(
+                &default_case
+                    .as_ref()
+                    .map(|(start, _, _, end)| start.clone().spanning(end))
+                    .unwrap_or_else(|| cases[cases.len() - 1].src.clone()),
+            );
+
+            IfElseStatement {
+                cases: cases.into_iter().map(|case| case.node).collect(),
+                default_case: default_case.map(|(_, _, statements, _)| statements),
+            }
+            .with_src(src)
+        },
+    )(i)
+}
+
+fn if_else_statement_case(i: Slice) -> ParseResult<Src<(Src<Expression>, Vec<Src<Statement>>)>> {
+    map(
+        tuple((
+            tag("if"),
+            preceded(whitespace, expression(0)),
+            preceded(whitespace, tag("{")),
+            many0(preceded(whitespace, statement)),
+            preceded(whitespace, tag("}")),
+        )),
+        |(start, condition, _, outcome, end)| (condition, outcome).with_src(start.spanning(&end)),
+    )(i)
+}
+
+fn for_loop(i: Slice) -> ParseResult<Src<ForLoop>> {
+    map(
+        tuple((
+            tag("for"),
+            preceded(whitespace, plain_identifier),
+            preceded(whitespace, tag("in")),
+            preceded(whitespace, expression(0)),
+            preceded(whitespace, tag("{")),
+            many0(preceded(whitespace, statement)),
+            preceded(whitespace, tag("}")),
+        )),
+        |(start, item_identifier, _, iterator, _, body, end)| {
+            ForLoop {
+                item_identifier,
+                iterator,
+                body,
+            }
+            .with_src(start.spanning(&end))
+        },
+    )(i)
+}
+
+fn while_loop(i: Slice) -> ParseResult<Src<WhileLoop>> {
+    map(
+        tuple((
+            tag("while"),
+            preceded(whitespace, expression(0)),
+            preceded(whitespace, tag("{")),
+            many0(preceded(whitespace, statement)),
+            preceded(whitespace, tag("}")),
+        )),
+        |(start, condition, _, body, end)| {
+            WhileLoop { condition, body }.with_src(start.spanning(&end))
+        },
+    )(i)
+}
+
+fn assignment(i: Slice) -> ParseResult<Src<Assignment>> {
+    todo!()
+}
+
+fn try_catch(i: Slice) -> ParseResult<Src<TryCatch>> {
+    todo!()
+}
+
+fn throw_statement(i: Slice) -> ParseResult<Src<ThrowStatement>> {
+    map(
+        tuple((
+            tag("throw"),
+            preceded(whitespace, expression(0)),
+            preceded(whitespace, tag(";")),
+        )),
+        |(start, error_expression, end)| {
+            ThrowStatement { error_expression }.with_src(start.spanning(&end))
+        },
+    )(i)
+}
+
+fn autorun(i: Slice) -> ParseResult<Src<Autorun>> {
+    map(
+        tuple((
+            tag("autorun"),
+            preceded(whitespace, tag("{")),
+            many0(preceded(whitespace, statement)),
+            preceded(whitespace, tag("}")),
+            preceded(
+                whitespace,
+                alt((
+                    map(tag("forever"), |_| None),
+                    map(
+                        tuple((
+                            tag("until"),
+                            preceded(whitespace, tag("=>")),
+                            preceded(whitespace, expression(0)),
+                        )),
+                        |(_, _, until)| Some(until),
+                    ),
+                )),
+            ),
+            preceded(whitespace, tag(";")),
+        )),
+        |(start, _, effect, _, until, end)| {
+            Autorun { effect, until }.with_src(start.spanning(&end))
+        },
+    )(i)
+}
+
+fn invocation_statement(i: Slice) -> ParseResult<Src<InvocationStatement>> {
     todo!()
 }
 
@@ -661,7 +838,7 @@ fn switch_expression(i: Slice) -> ParseResult<Src<SwitchExpression>> {
 fn if_else_expression(i: Slice) -> ParseResult<Src<IfElseExpression>> {
     map(
         tuple((
-            separated_list1(preceded(whitespace, tag("else")), if_else_case),
+            separated_list1(preceded(whitespace, tag("else")), if_else_expression_case),
             opt(preceded(
                 whitespace,
                 tuple((
@@ -689,7 +866,7 @@ fn if_else_expression(i: Slice) -> ParseResult<Src<IfElseExpression>> {
     )(i)
 }
 
-fn if_else_case(i: Slice) -> ParseResult<Src<(Src<Expression>, Src<Expression>)>> {
+fn if_else_expression_case(i: Slice) -> ParseResult<Src<(Src<Expression>, Src<Expression>)>> {
     map(
         tuple((
             tag("if"),

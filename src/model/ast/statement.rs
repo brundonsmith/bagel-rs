@@ -1,12 +1,15 @@
 use enum_variant_type::EnumVariantType;
 
-use super::{BinaryOperator, Expression, Invocation, LocalIdentifier, PlainIdentifier, Src};
+use super::{
+    BinaryOperator, Expression, Invocation, LocalIdentifier, PlainIdentifier, PropertyAccessor,
+    Src, TypeExpression,
+};
 
 #[derive(Clone, Debug, PartialEq, EnumVariantType)]
 pub enum Statement {
     #[evt(derive(Debug, Clone, PartialEq))]
     DeclarationStatement {
-        destination: (), // TODO  NameAndType | Destructure
+        destination: Src<Destination>,
         value: Src<Expression>,
         awaited: bool,
         is_const: bool,
@@ -15,7 +18,7 @@ pub enum Statement {
     #[evt(derive(Debug, Clone, PartialEq))]
     IfElseStatement {
         cases: Vec<(Src<Expression>, Vec<Src<Statement>>)>,
-        default_case: Vec<Src<Statement>>,
+        default_case: Option<Vec<Src<Statement>>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
@@ -33,7 +36,7 @@ pub enum Statement {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     Assignment {
-        target: LocalIdentifier, // TODO  | PropertyAccessor
+        target: AssignmentTarget,
         value: Src<Expression>,
         operator: Option<BinaryOperator>,
     },
@@ -56,4 +59,20 @@ pub enum Statement {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     InvocationStatement(Invocation),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum AssignmentTarget {
+    LocalIdentifier(LocalIdentifier),
+    PropertyAccessor(Src<PropertyAccessor>),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Destination {
+    NameAndType(PlainIdentifier, Option<Src<TypeExpression>>),
+    Destructure {
+        properties: Vec<PlainIdentifier>,
+        spread: Option<PlainIdentifier>,
+        is_object: bool, // false -> is_array
+    },
 }

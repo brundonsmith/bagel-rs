@@ -63,7 +63,7 @@ pub enum Declaration {
     #[evt(derive(Debug, Clone, PartialEq))]
     TestBlockDeclaration {
         name: Src<ExactStringLiteral>,
-        block: Vec<Statement>,
+        block: Vec<Src<Statement>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
