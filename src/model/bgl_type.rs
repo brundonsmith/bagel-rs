@@ -28,7 +28,7 @@ pub enum Type {
     },
 
     ObjectType {
-        entries: Vec<(String, Box<Type>)>,
+        entries: Vec<(Slice, Box<Type>)>,
         mutability: Mutability,
         is_interface: bool,
     },
@@ -68,7 +68,7 @@ pub enum Type {
 
     NominalType {
         module_id: ModuleID,
-        name: String,
+        name: Slice,
         inner: Option<Box<Type>>,
     },
 
@@ -364,7 +364,7 @@ impl Display for Type {
                 module_id,
                 name,
                 inner,
-            } => f.write_str(name),
+            } => f.write_str(name.as_str()),
             Type::IteratorType { inner } => f.write_fmt(format_args!("Iterator<{}>", inner)),
             Type::PlanType { inner } => f.write_fmt(format_args!("Plan<{}>", inner)),
             Type::ErrorType { inner } => f.write_fmt(format_args!("Error<{}>", inner)),

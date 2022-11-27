@@ -2,7 +2,7 @@ use enum_variant_type::EnumVariantType;
 
 use crate::{
     model::ast::{BooleanLiteral, ExactStringLiteral, Expression, NumberLiteral, PlainIdentifier},
-    model::bgl_type::Type,
+    model::{bgl_type::Type, slice::Slice},
     passes::check::CheckContext,
     passes::typeinfer::InferTypeContext,
     ModulesStore,
@@ -97,7 +97,7 @@ pub enum TypeExpression {
     #[evt(derive(Debug, Clone, PartialEq))]
     NominalType {
         module_id: ModuleID,
-        name: String,
+        name: Slice,
         inner: Option<Box<Src<TypeExpression>>>,
     },
 
@@ -150,14 +150,6 @@ pub enum TypeExpression {
 impl Src<TypeExpression> {
     pub fn resolve<'a>(&self, ctx: ResolveContext<'a>) -> Type {
         match &self.node {
-            TypeExpression::UnionType { members } => Type::UnionType {
-                members: members.iter().map(|m| m.resolve(ctx)).collect(),
-            },
-            TypeExpression::MaybeType { inner } => inner.resolve(ctx).union(Type::NilType),
-            TypeExpression::NamedType { name } => Type::NamedType {
-                module_id: ctx.current_module.module_id.clone(),
-                name: name.0.clone(),
-            },
             TypeExpression::GenericParamType { name, extends } => todo!(),
             TypeExpression::ProcType {
                 args,
@@ -176,6 +168,47 @@ impl Src<TypeExpression> {
             TypeExpression::BoundGenericType { type_args, generic } => todo!(),
             TypeExpression::ObjectType { entries } => todo!(),
             TypeExpression::InterfaceType { entries } => todo!(),
+            TypeExpression::KeyofType { inner } => match inner.resolve(ctx) {
+                Type::RecordType {
+                    key_type,
+                    value_type,
+                    mutability,
+                } => key_type.as_ref().clone(),
+                Type::ObjectType {
+                    entries,
+                    mutability,
+                    is_interface,
+                } => Type::UnionType {
+                    members: entries
+                        .into_iter()
+                        .map(|(key, _)| Type::LiteralType {
+                            value: crate::model::bgl_type::LiteralTypeValue::ExactString(key),
+                        })
+                        .collect(),
+                },
+                _ => Type::PoisonedType,
+            },
+            TypeExpression::ValueofType { inner } => todo!(),
+            TypeExpression::ElementofType { inner } => match inner.resolve(ctx) {
+                Type::ArrayType {
+                    element,
+                    mutability: _,
+                } => element.as_ref().clone(),
+                Type::TupleType {
+                    members,
+                    mutability: _,
+                } => Type::UnionType { members },
+                _ => Type::PoisonedType,
+            },
+            TypeExpression::UnionType { members } => Type::UnionType {
+                members: members.iter().map(|m| m.resolve(ctx)).collect(),
+            },
+            TypeExpression::MaybeType { inner } => inner.resolve(ctx).union(Type::NilType),
+            TypeExpression::NamedType { name } => Type::NamedType {
+                module_id: ctx.current_module.module_id.clone(),
+                name: name.0.clone(),
+            },
+            TypeExpression::RegularExpressionType {} => Type::RegularExpressionType {},
             TypeExpression::RecordType {
                 key_type,
                 value_type,
@@ -222,30 +255,26 @@ impl Src<TypeExpression> {
             },
             TypeExpression::ParenthesizedType { inner } => inner.resolve(ctx),
             TypeExpression::TypeofType { expression } => expression.infer_type(ctx.into()),
-            TypeExpression::KeyofType { inner } => todo!(),
-            TypeExpression::ValueofType { inner } => todo!(),
-            TypeExpression::ElementofType { inner } => todo!(),
             TypeExpression::UnknownType => Type::UnknownType {
                 mutability: ctx.mutability,
             },
             TypeExpression::PoisonedType => Type::PoisonedType,
             TypeExpression::AnyType => Type::AnyType,
-            TypeExpression::RegularExpressionType {} => todo!(),
             TypeExpression::PropertyType {
                 subject,
                 property,
-                optional,
+                optional: _,
             } => {
                 let subject_type = subject.resolve(ctx);
 
                 match subject_type {
                     Type::ObjectType {
                         entries,
-                        mutability,
-                        is_interface,
+                        mutability: _,
+                        is_interface: _,
                     } => entries
                         .into_iter()
-                        .find(|(key, value)| key == property.0.as_str())
+                        .find(|(key, value)| key.as_str() == property.0.as_str())
                         .map(|(key, value)| value.as_ref().clone())
                         .unwrap_or(Type::PoisonedType),
                     _ => Type::PoisonedType,
