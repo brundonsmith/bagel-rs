@@ -138,7 +138,7 @@ fn type_declaration(i: Slice) -> ParseResult<Src<TypeDeclaration>> {
                 preceded(whitespace, tag("type")),
                 preceded(whitespace, plain_identifier),
                 preceded(whitespace, tag("=")),
-                preceded(whitespace, type_expression),
+                preceded(whitespace, type_expression(0)),
             )),
             |(export, keyword, name, _, declared_type)| {
                 let exported = export.is_some();
@@ -355,39 +355,137 @@ fn test_type_declaration(i: Slice) -> ParseResult<Src<TestTypeDeclaration>> {
 }
 
 fn type_annotation(i: Slice) -> ParseResult<Src<TypeExpression>> {
-    preceded(tag(":"), preceded(whitespace, type_expression))(i)
+    preceded(tag(":"), preceded(whitespace, type_expression(0)))(i)
 }
 
 // --- TypeExpression ---
 
-fn type_expression(i: Slice) -> ParseResult<Src<TypeExpression>> {
-    alt((
-        map(exact_string_literal, |s| {
-            s.map(|s| TypeExpression::LiteralType {
-                value: LiteralTypeValue::ExactString(s),
+macro_rules! type_expr_level {
+    ($level:expr, $this_level:expr, $i:expr, $a:expr) => {
+        $this_level += 1;
+        if $level <= $this_level {
+            let res = map($a, |x| x.map(TypeExpression::from))($i.clone());
+
+            if res.is_ok() {
+                return res;
+            }
+        }
+    };
+}
+
+fn type_expression(l: usize) -> impl Fn(Slice) -> ParseResult<Src<TypeExpression>> {
+    move |i: Slice| -> ParseResult<Src<TypeExpression>> {
+        let mut tl = 0;
+
+        // typeofType, keyofValueofElementofType, readonlyType
+
+        // generic type
+
+        // union type
+
+        type_expr_level!(
+            l,
+            tl,
+            i,
+            map(
+                tuple((type_expression(tl + 1), tag("?"))),
+                |(inner, end)| {
+                    let src = inner.src.clone().spanning(&end);
+
+                    TypeExpression::MaybeType {
+                        inner: inner.boxed(),
+                    }
+                    .with_src(src)
+                }
+            )
+        );
+
+        // boundGenericType
+
+        type_expr_level!(
+            l,
+            tl,
+            i,
+            map(
+                tuple((type_expression(tl + 1), tag("[]"))),
+                |(element, end)| {
+                    let src = element.src.clone().spanning(&end);
+
+                    TypeExpression::ArrayType {
+                        element: element.boxed(),
+                    }
+                    .with_src(src)
+                }
+            )
+        );
+
+        type_expr_level!(
+            l,
+            tl,
+            i,
+            alt((
+                // funcType, procType,
+                //         recordType, interfaceType, objectType,
+                //         tupleType
+                map(
+                    tuple((
+                        tag("("),
+                        preceded(whitespace, type_expression(tl + 1)),
+                        preceded(whitespace, tag(")"))
+                    )),
+                    |(open, inner, close)| {
+                        TypeExpression::ParenthesizedType {
+                            inner: inner.boxed(),
+                        }
+                        .with_src(open.spanning(&close))
+                    }
+                ),
+                map(exact_string_literal, |s| {
+                    s.map(|s| TypeExpression::LiteralType {
+                        value: LiteralTypeValue::ExactString(s),
+                    })
+                }),
+                map(number_literal, |s| {
+                    s.map(|s| TypeExpression::LiteralType {
+                        value: LiteralTypeValue::NumberLiteral(s),
+                    })
+                }),
+                map(boolean_literal, |s| {
+                    s.map(|s| TypeExpression::LiteralType {
+                        value: LiteralTypeValue::BooleanLiteral(s),
+                    })
+                }),
+                map(tag("string"), |s: Slice| {
+                    TypeExpression::StringType.with_src(s)
+                }),
+                map(tag("number"), |s: Slice| {
+                    TypeExpression::NumberType.with_src(s)
+                }),
+                map(tag("boolean"), |s: Slice| {
+                    TypeExpression::BooleanType.with_src(s)
+                }),
+                map(tag("unknown"), |s: Slice| TypeExpression::UnknownType
+                    .with_src(s)),
+                map(tag("nil"), |s: Slice| TypeExpression::NilType.with_src(s)),
+            ))
+        );
+
+        type_expr_level!(
+            l,
+            tl,
+            i,
+            map(plain_identifier, |name| {
+                let src = name.0.clone();
+
+                TypeExpression::NamedType { name }.with_src(src)
             })
-        }),
-        map(number_literal, |s| {
-            s.map(|s| TypeExpression::LiteralType {
-                value: LiteralTypeValue::NumberLiteral(s),
-            })
-        }),
-        map(boolean_literal, |s| {
-            s.map(|s| TypeExpression::LiteralType {
-                value: LiteralTypeValue::BooleanLiteral(s),
-            })
-        }),
-        map(tag("string"), |s: Slice| {
-            TypeExpression::StringType.with_src(s)
-        }),
-        map(tag("number"), |s: Slice| {
-            TypeExpression::NumberType.with_src(s)
-        }),
-        map(tag("boolean"), |s: Slice| {
-            TypeExpression::BooleanType.with_src(s)
-        }),
-        map(tag("nil"), |s: Slice| TypeExpression::NilType.with_src(s)),
-    ))(i)
+        );
+
+        Err(nom::Err::Error(RawParseError {
+            src: i,
+            details: RawParseErrorDetails::Kind(ErrorKind::Fail),
+        }))
+    }
 }
 
 // --- Statement ---
@@ -740,7 +838,7 @@ fn instance_of(level: usize) -> impl Parser<Slice, Src<InstanceOf>, RawParseErro
             tuple((
                 expression(level + 1),
                 preceded(whitespace, tag("instanceof")),
-                type_expression,
+                type_expression(0),
             )),
             |(inner, _, possible_type)| {
                 let src = inner.src.clone().spanning(&possible_type.src);
@@ -761,7 +859,7 @@ fn as_cast(level: usize) -> impl Parser<Slice, Src<AsCast>, RawParseError> {
             tuple((
                 expression(level + 1),
                 preceded(whitespace, tag("as")),
-                type_expression,
+                type_expression(0),
             )),
             |(inner, _, as_type)| {
                 let src = inner.src.clone().spanning(&as_type.src);
