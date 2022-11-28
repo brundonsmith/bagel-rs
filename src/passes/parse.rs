@@ -1,14 +1,15 @@
 use std::{rc::Rc, str::FromStr};
 
+use lazy_static::lazy_static;
 use nom::{
     branch::alt,
     bytes::complete::{escaped, tag, take_while, take_while1},
     character::complete::{alphanumeric1, char, one_of},
-    combinator::{complete, cut, fail, map, opt},
+    combinator::{complete, cut, map, opt},
     error::{context, ErrorKind},
-    multi::{many0, many1, separated_list0, separated_list1},
+    multi::{many0, separated_list0, separated_list1},
     sequence::{pair, preceded, separated_pair, terminated, tuple},
-    IResult,
+    IResult, Parser,
 };
 
 use crate::{model::ast::*, model::errors::ParseError, model::slice::Slice};
@@ -192,7 +193,7 @@ fn func_declaration(i: Slice) -> ParseResult<Src<FuncDeclaration>> {
 
                         is_async,
                         is_pure,
-                        body: FuncBody::Expression(Box::new(body)),
+                        body: FuncBody::Expression(body.boxed()),
                     }
                     .with_src(src.clone()),
                     exported,
@@ -549,125 +550,73 @@ fn invocation_statement(i: Slice) -> ParseResult<Src<InvocationStatement>> {
 
 // --- Expression ---
 
-fn expression(level: usize) -> impl Fn(Slice) -> ParseResult<Src<Expression>> {
-    move |i: Slice| -> ParseResult<Src<Expression>> {
-        if level <= 0 {
-            // debug, javascriptEscape, elementTag
-        }
+macro_rules! expr_level {
+    ($level:expr, $this_level:expr, $i:expr, $a:expr) => {
+        $this_level += 1;
+        if $level <= $this_level {
+            let res = map($a, |x| x.map(Expression::from))($i.clone());
 
-        if level <= 1 {
-            let res = alt((
+            if res.is_ok() {
+                return res;
+            }
+        }
+    };
+}
+
+fn expression(l: usize) -> impl Fn(Slice) -> ParseResult<Src<Expression>> {
+    move |i: Slice| -> ParseResult<Src<Expression>> {
+        let mut tl = 0;
+
+        // expr_level!(level, this_level, i, ); // debug, javascriptEscape, elementTag
+        expr_level!(
+            l,
+            tl,
+            i,
+            alt((
                 map(func, |x| x.map(Expression::from)),
                 // map(proc, |x| x.map(Expression::from)),
-            ))(i.clone());
-
-            if res.is_ok() {
-                return res;
-            }
-        }
-
-        if level <= 2 {
-            let res = binary_operator_1(2, "??")(i.clone());
-
-            if res.is_ok() {
-                return res;
-            }
-        }
-
-        if level <= 3 {
-            let res = binary_operator_1(3, "||")(i.clone());
-
-            if res.is_ok() {
-                return res;
-            }
-        }
-
-        if level <= 4 {
-            let res = binary_operator_1(4, "&&")(i.clone());
-
-            if res.is_ok() {
-                return res;
-            }
-        }
-
-        if level <= 5 {
-            let res = binary_operator_2(5, "==", "!=")(i.clone());
-
-            if res.is_ok() {
-                return res;
-            }
-        }
-
-        if level <= 6 {
-            let res = binary_operator_4(6, "<=", ">=", "<", ">")(i.clone());
-
-            if res.is_ok() {
-                return res;
-            }
-        }
-
-        if level <= 7 {
-            let res = binary_operator_2(7, "+", "-")(i.clone());
-
-            if res.is_ok() {
-                return res;
-            }
-        }
-
-        if level <= 8 {
-            let res = binary_operator_2(8, "*", "/")(i.clone());
-
-            if res.is_ok() {
-                return res;
-            }
-        }
-
-        if level <= 9 {
-            let res = alt((
-                map(as_cast, |x| x.map(Expression::from)),
-                map(instance_of, |x| x.map(Expression::from)),
-            ))(i.clone());
-
-            if res.is_ok() {
-                return res;
-            }
-        }
-
-        if level <= 10 {
-            let res = map(negation_operation, |n| n.map(Expression::from))(i.clone());
-
-            if res.is_ok() {
-                return res;
-            }
-        }
+            ))
+        );
+        expr_level!(l, tl, i, binary_operator_1(tl, "??"));
+        expr_level!(l, tl, i, binary_operator_1(tl, "||"));
+        expr_level!(l, tl, i, binary_operator_1(tl, "&&"));
+        expr_level!(l, tl, i, binary_operator_2(tl, "==", "!="));
+        expr_level!(l, tl, i, binary_operator_4(tl, "<=", ">=", "<", ">"));
+        expr_level!(l, tl, i, binary_operator_2(tl, "+", "-"));
+        expr_level!(l, tl, i, binary_operator_2(tl, "*", "/"));
+        expr_level!(
+            l,
+            tl,
+            i,
+            alt((
+                map(as_cast(tl), |x| x.map(Expression::from)),
+                map(instance_of(tl), |x| x.map(Expression::from)),
+            ))
+        );
+        expr_level!(l, tl, i, negation_operation(tl));
 
         // indexer
 
-        // if level <= 12 {
-        //     let res = map(error_expression, |x| x.map(Expression::from))(i.clone());
+        // expr_level!(l, tl, i, error_expression);
+
+        // invocationAccessorChain
+
+        expr_level!(l, tl, i, range_expression);
+
+        // this_level += 1;
+        // if level <= this_level {
+        //     let res = (i.clone());
         //     if res.is_ok() {
         //         return res;
         //     }
         // }
 
-        // invocationAccessorChain
-
-        if level <= 14 {
-            let res = map(range_expression, |x| x.map(Expression::from))(i.clone());
-            if res.is_ok() {
-                return res;
-            }
-        }
-
-        if level <= 15 {
-            let res = map(parenthesis, |x| x.map(Expression::from))(i.clone());
-            if res.is_ok() {
-                return res;
-            }
-        }
-
-        if level <= 16 {
-            let res = alt((
+        expr_level!(l, tl, i, parenthesis(tl));
+        expr_level!(
+            l,
+            tl,
+            i,
+            alt((
                 map(if_else_expression, |x| x.map(Expression::from)),
                 // map(switch_expression, |x| x.map(Expression::from)),
                 // map(inline_const_group, |x| x.map(Expression::from)),
@@ -677,23 +626,19 @@ fn expression(level: usize) -> impl Fn(Slice) -> ParseResult<Src<Expression>> {
                 map(number_literal, |x| x.map(Expression::from)),
                 map(boolean_literal, |x| x.map(Expression::from)),
                 map(nil_literal, |x| x.map(Expression::from)),
-            ))(i.clone());
-
-            if res.is_ok() {
-                return res;
-            }
-        }
-
-        if level <= 17 {
-            // localIdentifier, regExp
-            let res = alt((map(local_identifier, |x| {
-                Expression::from(x.clone()).with_src(x.0)
-            }),))(i.clone());
-
-            if res.is_ok() {
-                return res;
-            }
-        }
+            ))
+        );
+        expr_level!(
+            l,
+            tl,
+            i,
+            alt((
+                map(local_identifier, |x| {
+                    Expression::from(x.clone()).with_src(x.0)
+                }),
+                // localIdentifier, regExp
+            ))
+        );
 
         Err(nom::Err::Error(RawParseError {
             src: i,
@@ -717,9 +662,9 @@ fn binary_operator_1(
                 let src = left.src.clone().spanning(&right.src);
 
                 Expression::BinaryOperation {
-                    left: Box::new(left),
+                    left: left.boxed(),
                     op: BinaryOperator::from_str(op.as_str()).unwrap().with_src(op),
-                    right: Box::new(right),
+                    right: right.boxed(),
                 }
                 .with_src(src)
             },
@@ -743,9 +688,9 @@ fn binary_operator_2(
                 let src = left.src.clone().spanning(&right.src);
 
                 Expression::BinaryOperation {
-                    left: Box::new(left),
+                    left: left.boxed(),
                     op: BinaryOperator::from_str(op.as_str()).unwrap().with_src(op),
-                    right: Box::new(right),
+                    right: right.boxed(),
                 }
                 .with_src(src)
             },
@@ -771,9 +716,9 @@ fn binary_operator_4(
                 let src = left.src.clone().spanning(&right.src);
 
                 Expression::BinaryOperation {
-                    left: Box::new(left),
+                    left: left.boxed(),
                     op: BinaryOperator::from_str(op.as_str()).unwrap().with_src(op),
-                    right: Box::new(right),
+                    right: right.boxed(),
                 }
                 .with_src(src)
             },
@@ -789,42 +734,46 @@ fn error_expression(i: Slice) -> ParseResult<Src<ErrorExpression>> {
     todo!()
 }
 
-fn instance_of(i: Slice) -> ParseResult<Src<InstanceOf>> {
-    map(
-        tuple((
-            expression(10),
-            preceded(whitespace, tag("instanceof")),
-            type_expression,
-        )),
-        |(inner, _, possible_type)| {
-            let src = inner.src.clone().spanning(&possible_type.src);
+fn instance_of(level: usize) -> impl Parser<Slice, Src<InstanceOf>, RawParseError> {
+    move |i: Slice| -> ParseResult<Src<InstanceOf>> {
+        map(
+            tuple((
+                expression(level + 1),
+                preceded(whitespace, tag("instanceof")),
+                type_expression,
+            )),
+            |(inner, _, possible_type)| {
+                let src = inner.src.clone().spanning(&possible_type.src);
 
-            InstanceOf {
-                inner: Box::new(inner),
-                possible_type: Box::new(possible_type),
-            }
-            .with_src(src)
-        },
-    )(i)
+                InstanceOf {
+                    inner: inner.boxed(),
+                    possible_type: possible_type.boxed(),
+                }
+                .with_src(src)
+            },
+        )(i)
+    }
 }
 
-fn as_cast(i: Slice) -> ParseResult<Src<AsCast>> {
-    map(
-        tuple((
-            expression(10),
-            preceded(whitespace, tag("as")),
-            type_expression,
-        )),
-        |(inner, _, as_type)| {
-            let src = inner.src.clone().spanning(&as_type.src);
+fn as_cast(level: usize) -> impl Parser<Slice, Src<AsCast>, RawParseError> {
+    move |i: Slice| -> ParseResult<Src<AsCast>> {
+        map(
+            tuple((
+                expression(level + 1),
+                preceded(whitespace, tag("as")),
+                type_expression,
+            )),
+            |(inner, _, as_type)| {
+                let src = inner.src.clone().spanning(&as_type.src);
 
-            AsCast {
-                inner: Box::new(inner),
-                as_type: Box::new(as_type),
-            }
-            .with_src(src)
-        },
-    )(i)
+                AsCast {
+                    inner: inner.boxed(),
+                    as_type: as_type.boxed(),
+                }
+                .with_src(src)
+            },
+        )(i)
+    }
 }
 
 fn element_tag(i: Slice) -> ParseResult<Src<ElementTag>> {
@@ -859,7 +808,7 @@ fn if_else_expression(i: Slice) -> ParseResult<Src<IfElseExpression>> {
 
             IfElseExpression {
                 cases: cases.into_iter().map(|case| case.node).collect(),
-                default_case: default_case.map(|(_, _, expr, _)| Box::new(expr)),
+                default_case: default_case.map(|(_, _, expr, _)| expr.boxed()),
             }
             .with_src(src)
         },
@@ -886,8 +835,8 @@ fn range_expression(i: Slice) -> ParseResult<Src<RangeExpression>> {
             let src = start.src.clone().spanning(&end.src);
 
             RangeExpression {
-                start: Box::new(start.map(|n| Expression::from(n))),
-                end: Box::new(end.map(|n| Expression::from(n))),
+                start: start.map(|n| Expression::from(n)).boxed(),
+                end: end.map(|n| Expression::from(n)).boxed(),
             }
             .with_src(src)
         },
@@ -932,7 +881,7 @@ fn func(i: Slice) -> ParseResult<Src<Func>> {
 
                 is_async,
                 is_pure,
-                body: FuncBody::Expression(Box::new(body)),
+                body: FuncBody::Expression(body.boxed()),
             }
             .with_src(src.clone())
         },
@@ -943,33 +892,37 @@ fn inline_const_group(i: Slice) -> ParseResult<Src<InlineConstGroup>> {
     todo!()
 }
 
-fn negation_operation(i: Slice) -> ParseResult<Src<NegationOperation>> {
-    map(
-        tuple((tag("!"), preceded(whitespace, expression(10)))),
-        |(start, expr)| {
-            let src = start.spanning(&expr.src);
+fn negation_operation(level: usize) -> impl Parser<Slice, Src<NegationOperation>, RawParseError> {
+    move |i: Slice| -> ParseResult<Src<NegationOperation>> {
+        map(
+            tuple((tag("!"), preceded(whitespace, expression(level + 1)))),
+            |(start, expr)| {
+                let src = start.spanning(&expr.src);
 
-            NegationOperation(Box::new(expr)).with_src(src)
-        },
-    )(i)
+                NegationOperation(expr.boxed()).with_src(src)
+            },
+        )(i)
+    }
 }
 
-fn parenthesis(i: Slice) -> ParseResult<Src<Parenthesis>> {
-    context(
-        "parenthesized expression",
-        map(
-            pair(
-                tag("("),
-                cut(pair(
-                    preceded(whitespace, expression(16)),
-                    preceded(whitespace, tag(")")),
-                )),
+fn parenthesis(level: usize) -> impl Parser<Slice, Src<Parenthesis>, RawParseError> {
+    move |i: Slice| -> ParseResult<Src<Parenthesis>> {
+        context(
+            "parenthesized expression",
+            map(
+                pair(
+                    tag("("),
+                    cut(pair(
+                        preceded(whitespace, expression(level + 1)),
+                        preceded(whitespace, tag(")")),
+                    )),
+                ),
+                |(open_paren, (inner, close_paren))| {
+                    Parenthesis(inner.boxed()).with_src(open_paren.spanning(&close_paren))
+                },
             ),
-            |(open_paren, (inner, close_paren))| {
-                Parenthesis(Box::new(inner)).with_src(open_paren.spanning(&close_paren))
-            },
-        ),
-    )(i)
+        )(i)
+    }
 }
 
 fn object_literal(i: Slice) -> ParseResult<Src<ObjectLiteral>> {
@@ -1203,3 +1156,11 @@ impl<E> nom::error::FromExternalError<Slice, E> for RawParseError {
         }
     }
 }
+
+trait Boxable: Sized {
+    fn boxed(self) -> Box<Self> {
+        self.boxed()
+    }
+}
+
+impl<T: Sized> Boxable for T {}

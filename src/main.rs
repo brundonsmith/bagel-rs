@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+#![macro_use]
 
 mod cli;
 mod model;
