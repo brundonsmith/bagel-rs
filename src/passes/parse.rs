@@ -1257,7 +1257,7 @@ impl<E> nom::error::FromExternalError<Slice, E> for RawParseError {
 
 trait Boxable: Sized {
     fn boxed(self) -> Box<Self> {
-        self.boxed()
+        Box::new(self)
     }
 }
 
