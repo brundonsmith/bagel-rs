@@ -74,6 +74,55 @@ pub enum Declaration {
     },
 }
 
+impl Declaration {
+    pub fn get_type_and_value(&self) -> Option<(Src<Expression>, Option<Src<TypeExpression>>)> {
+        match self {
+            Declaration::FuncDeclaration {
+                name: _,
+                func,
+                exported: _,
+                platforms: _,
+                decorators: _,
+            } => Some((
+                func.clone().map(Expression::from),
+                Some(func.node.type_annotation.clone().map(TypeExpression::from)),
+            )),
+            Declaration::ProcDeclaration {
+                name: _,
+                proc,
+                exported: _,
+                platforms: _,
+                decorators: _,
+            } => Some((
+                proc.clone().map(Expression::from),
+                Some(proc.node.type_annotation.clone().map(TypeExpression::from)),
+            )),
+            Declaration::ValueDeclaration {
+                name: _,
+                type_annotation,
+                value,
+                is_const: _,
+                exported: _,
+                platforms: _,
+            } => Some((value.clone(), type_annotation.clone())),
+            _ => None,
+        }
+    }
+
+    pub fn get_declared_type(&self) -> Option<&Src<TypeExpression>> {
+        if let Declaration::TypeDeclaration {
+            name: _,
+            declared_type,
+            exported: _,
+        } = self
+        {
+            Some(declared_type)
+        } else {
+            None
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Decorator {
     LocalIdentifier(LocalIdentifier),

@@ -147,7 +147,7 @@ impl<'a> Check<'a> for Src<Expression> {
             Expression::LocalIdentifier(name) => {
                 if ctx
                     .current_module
-                    .resolve_symbol_within(name.as_str(), &self.src)
+                    .resolve_symbol(name.as_str(), &self.src)
                     .is_none()
                 {
                     report_error(BagelError::NotFoundError {

@@ -1,17 +1,19 @@
 use crate::{model::ast::*, model::slice::Slice};
 
 pub trait Resolve {
-    fn resolve_symbol_within(&self, symbol: &str, slice: &Slice) -> Option<Binding>;
+    fn resolve_symbol(&self, symbol: &str, at: &Slice) -> Option<Binding>;
 }
 
 impl Resolve for Module {
-    fn resolve_symbol_within(&self, symbol: &str, slice: &Slice) -> Option<Binding> {
-        // look inside nested contexts
+    fn resolve_symbol(&self, symbol: &str, at: &Slice) -> Option<Binding> {
+        // find the declaration that this index is within, and see if anything lower resolves
         for decl in &self.declarations {
-            let inner = decl.resolve_symbol_within(symbol, &slice);
+            if decl.src.contains(&at) {
+                let inner = decl.resolve_symbol(symbol, &at);
 
-            if inner.is_some() {
-                return inner;
+                if inner.is_some() {
+                    return inner;
+                }
             }
         }
 
@@ -27,38 +29,42 @@ impl Resolve for Module {
                     platforms: _,
                 } => {
                     if name.0.as_str() == symbol {
-                        return Some(Binding::ValueDeclaration(
-                            ValueDeclaration::try_from(decl.node.clone()).unwrap(),
-                        ));
+                        return Some(Binding::Declaration(decl));
                     }
                 }
                 Declaration::ImportAllDeclaration { name, path } => todo!(),
                 Declaration::ImportDeclaration { imports, path } => todo!(),
                 Declaration::TypeDeclaration {
                     name,
-                    declared_type,
-                    exported,
+                    declared_type: _,
+                    exported: _,
                 } => {
                     if name.0.as_str() == symbol {
-                        return Some(Binding::TypeDeclaration(
-                            TypeDeclaration::try_from(decl.node.clone()).unwrap(),
-                        ));
+                        return Some(Binding::Declaration(decl));
                     }
                 }
                 Declaration::FuncDeclaration {
                     name,
-                    func,
-                    exported,
-                    platforms,
-                    decorators,
-                } => todo!(),
+                    func: _,
+                    exported: _,
+                    platforms: _,
+                    decorators: _,
+                } => {
+                    if name.0.as_str() == symbol {
+                        return Some(Binding::Declaration(decl));
+                    }
+                }
                 Declaration::ProcDeclaration {
                     name,
-                    proc,
-                    exported,
-                    platforms,
-                    decorators,
-                } => todo!(),
+                    proc: _,
+                    exported: _,
+                    platforms: _,
+                    decorators: _,
+                } => {
+                    if name.0.as_str() == symbol {
+                        return Some(Binding::Declaration(decl));
+                    }
+                }
                 Declaration::TestExprDeclaration { name, expr } => todo!(),
                 Declaration::TestBlockDeclaration { name, block } => todo!(),
                 Declaration::TestTypeDeclaration {
@@ -74,7 +80,7 @@ impl Resolve for Module {
 }
 
 impl Resolve for Src<Declaration> {
-    fn resolve_symbol_within(&self, symbol: &str, slice: &Slice) -> Option<Binding> {
+    fn resolve_symbol(&self, symbol: &str, at: &Slice) -> Option<Binding> {
         match &self.node {
             Declaration::ValueDeclaration {
                 name: _,
@@ -84,8 +90,8 @@ impl Resolve for Src<Declaration> {
                 exported: _,
                 platforms: _,
             } => {
-                if value.contains(&slice) {
-                    return value.resolve_symbol_within(symbol, &slice);
+                if value.contains(&at) {
+                    return value.resolve_symbol(symbol, &at);
                 }
             }
             Declaration::ImportAllDeclaration { name, path } => todo!(),
@@ -123,18 +129,18 @@ impl Resolve for Src<Declaration> {
 }
 
 impl Resolve for Src<Expression> {
-    fn resolve_symbol_within(&self, symbol: &str, slice: &Slice) -> Option<Binding> {
+    fn resolve_symbol(&self, symbol: &str, at: &Slice) -> Option<Binding> {
         match &self.node {
             Expression::BinaryOperation { left, op: _, right } => {
-                if left.contains(slice) {
-                    return left.resolve_symbol_within(symbol, slice);
-                } else if right.contains(slice) {
-                    return right.resolve_symbol_within(symbol, slice);
+                if left.contains(at) {
+                    return left.resolve_symbol(symbol, at);
+                } else if right.contains(at) {
+                    return right.resolve_symbol(symbol, at);
                 }
             }
             Expression::Parenthesis(inner) => {
-                if inner.contains(slice) {
-                    return inner.resolve_symbol_within(symbol, slice);
+                if inner.contains(at) {
+                    return inner.resolve_symbol(symbol, at);
                 }
             }
 
@@ -146,7 +152,7 @@ impl Resolve for Src<Expression> {
                 inner: _,
             } => {
                 for decl in declarations {
-                    let inner = decl.resolve_symbol_within(symbol, slice);
+                    let inner = decl.resolve_symbol(symbol, at);
 
                     if inner.is_some() {
                         return inner;
@@ -214,17 +220,16 @@ impl Resolve for Src<Expression> {
 }
 
 impl Resolve for Src<InlineConstDeclaration> {
-    fn resolve_symbol_within(&self, symbol: &str, slice: &Slice) -> Option<Binding> {
+    fn resolve_symbol(&self, symbol: &str, at: &Slice) -> Option<Binding> {
         if self.node.name.0.as_str() == symbol {
-            Some(Binding::InlineConstDeclaration(self.node.clone()))
+            Some(Binding::InlineConstDeclaration(self))
         } else {
             None
         }
     }
 }
 
-pub enum Binding {
-    ValueDeclaration(ValueDeclaration),
-    InlineConstDeclaration(InlineConstDeclaration),
-    TypeDeclaration(TypeDeclaration),
+pub enum Binding<'a> {
+    Declaration(&'a Src<Declaration>),
+    InlineConstDeclaration(&'a Src<InlineConstDeclaration>),
 }

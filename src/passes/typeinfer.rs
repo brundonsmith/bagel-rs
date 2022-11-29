@@ -90,17 +90,17 @@ impl<'a> Src<Expression> {
             },
             Expression::Parenthesis(inner) => inner.infer_type(ctx),
             Expression::LocalIdentifier(name) => {
-                let resolved = ctx
-                    .current_module
-                    .resolve_symbol_within(name.as_str(), &self.src);
+                let resolved = ctx.current_module.resolve_symbol(name.as_str(), &self.src);
 
-                match resolved {
-                    Some(Binding::ValueDeclaration(binding)) => binding
-                        .type_annotation
-                        .map(|x| x.resolve(ctx.into()))
-                        .unwrap_or_else(move || binding.value.infer_type(ctx)),
-                    _ => Type::PoisonedType,
+                if let Some(Binding::Declaration(binding)) = resolved {
+                    if let Some((value, type_annotation)) = binding.node.get_type_and_value() {
+                        return type_annotation
+                            .map(|x| x.resolve(ctx.into()))
+                            .unwrap_or(value.infer_type(ctx));
+                    }
                 }
+
+                Type::PoisonedType
             }
             Expression::InlineConstGroup {
                 declarations: _,
