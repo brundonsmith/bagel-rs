@@ -1,6 +1,6 @@
 use std::fmt::{Result, Write};
 
-use crate::model::ast::*;
+use crate::model::{ast::*, slice::Slice};
 
 pub trait Compile {
     fn compile<W: Write>(&self, f: &mut W) -> Result;
@@ -19,26 +19,6 @@ impl Compile for Module {
 impl Compile for Src<Declaration> {
     fn compile<W: Write>(&self, f: &mut W) -> Result {
         match &self.node {
-            Declaration::ValueDeclaration {
-                name,
-                type_annotation,
-                value,
-                is_const,
-                exported,
-                platforms,
-            } => {
-                if *exported {
-                    f.write_str("export ")?;
-                }
-                f.write_str("const ")?;
-                f.write_str(name.0.as_str())?;
-                if let Some(type_annotation) = type_annotation {
-                    type_annotation.compile(f)?;
-                }
-                f.write_str(" = ")?;
-                value.compile(f)?;
-                f.write_str(";")
-            }
             Declaration::ImportAllDeclaration { name, path } => todo!(),
             Declaration::ImportDeclaration { imports, path } => todo!(),
             Declaration::TypeDeclaration {
@@ -46,24 +26,73 @@ impl Compile for Src<Declaration> {
                 declared_type,
                 exported,
             } => todo!(),
+            Declaration::ValueDeclaration {
+                name,
+                type_annotation,
+                value,
+                is_const,
+                exported,
+                platforms: _,
+            } => {
+                if *exported {
+                    f.write_str("export ")?;
+                }
+                f.write_str("const ")?;
+                f.write_str(name.0.as_str())?;
+                compile_type_annotation(f, type_annotation.as_ref())?;
+                f.write_str(" = ")?;
+                value.compile(f)?;
+                f.write_str(";")
+            }
             Declaration::FuncDeclaration {
                 name,
                 func,
                 exported,
-                platforms,
+                platforms: _,
                 decorators,
             } => {
-                f.write_str("func ")?;
-                f.write_str(&name.0.as_str())?;
-                func.compile(f)
+                if *exported {
+                    f.write_str("export ")?;
+                }
+                f.write_str("const ")?;
+                f.write_str(name.0.as_str())?;
+                f.write_str(" = ")?;
+                compile_function(
+                    f,
+                    Some(name.0.as_str()),
+                    &func.node.type_annotation.node.args,
+                    func.node
+                        .type_annotation
+                        .node
+                        .returns
+                        .as_ref()
+                        .map(|x| x.as_ref()),
+                    &func.node.body,
+                )?;
+                f.write_str(";")
             }
             Declaration::ProcDeclaration {
                 name,
                 proc,
                 exported,
-                platforms,
+                platforms: _,
                 decorators,
-            } => todo!(),
+            } => {
+                if *exported {
+                    f.write_str("export ")?;
+                }
+                f.write_str("const ")?;
+                f.write_str(name.0.as_str())?;
+                f.write_str(" = ")?;
+                compile_function(
+                    f,
+                    None,
+                    &proc.node.type_annotation.node.args,
+                    None,
+                    &proc.node.body,
+                )?;
+                f.write_str(";")
+            }
             Declaration::TestExprDeclaration { name, expr } => todo!(),
             Declaration::TestBlockDeclaration { name, block } => todo!(),
             Declaration::TestTypeDeclaration {
@@ -186,28 +215,68 @@ impl Compile for Src<Expression> {
 pub const INT: &str = "___";
 pub const INT_FN: &str = "___fn_";
 
-impl Compile for Src<Func> {
+impl Compile for FuncBody {
     fn compile<W: Write>(&self, f: &mut W) -> Result {
-        todo!()
-        // f.write_str("function ")?;
+        match self {
+            FuncBody::Expression(expr) => {
+                f.write_str(" return ")?;
+                expr.compile(f)?;
+                f.write_char(' ')
+            }
+            FuncBody::Js(js) => f.write_str(js),
+        }
+    }
+}
 
-        // // TODO: name?
+impl Compile for ProcBody {
+    fn compile<W: Write>(&self, f: &mut W) -> Result {
+        match self {
+            ProcBody::Statements(stmts) => {
+                for statement in stmts {
+                    statement.compile(f)?;
+                    f.write_str(";\n")?;
+                }
 
-        // f.write_char('(')?;
-        // for arg in self.node.type_annotation.node.args {
-        //     arg.format(f, opts)?;
-        // }
-        // if let Some(spread) = self.node.type_annotation.node.args_spread {
-        //     f.write_str("...")?;
-        //     spread.format(f, opts)?;
-        // }
-        // f.write_char(')')?;
-        // if let Some(return_type) = self.node.type_annotation.node.returns {
-        //     f.write_str(": ")?;
-        //     return_type.format(f, opts)?;
-        // }
-        // f.write_str(" => ")?;
-        // self.node.body.format(f, opts)
+                Ok(())
+            }
+            ProcBody::Js(js) => f.write_str(js),
+        }
+    }
+}
+
+impl Compile for Src<Statement> {
+    fn compile<W: Write>(&self, f: &mut W) -> Result {
+        match &self.node {
+            Statement::DeclarationStatement {
+                destination,
+                value,
+                awaited,
+                is_const,
+            } => todo!(),
+            Statement::IfElseStatement {
+                cases,
+                default_case,
+            } => todo!(),
+            Statement::ForLoop {
+                item_identifier,
+                iterator,
+                body,
+            } => todo!(),
+            Statement::WhileLoop { condition, body } => todo!(),
+            Statement::Assignment {
+                target,
+                value,
+                operator,
+            } => todo!(),
+            Statement::TryCatch {
+                try_block,
+                error_identifier,
+                catch_block,
+            } => todo!(),
+            Statement::ThrowStatement { error_expression } => todo!(),
+            Statement::Autorun { effect, until } => todo!(),
+            Statement::InvocationStatement(_) => todo!(),
+        }
     }
 }
 
@@ -337,4 +406,60 @@ impl Compile for IdentifierOrExpression {
         //     }
         // }
     }
+}
+
+fn compile_function<W: Write, B: Compile>(
+    f: &mut W,
+    name: Option<&str>,
+    args: &Vec<Src<Arg>>,
+    return_type: Option<&Src<TypeExpression>>,
+    body: &B,
+) -> Result {
+    f.write_str("function ")?;
+
+    if let Some(name) = name {
+        f.write_str("___fn_")?;
+        f.write_str(name)?;
+    }
+
+    f.write_char('(')?;
+
+    for Src {
+        src: _,
+        node: Arg {
+            name,
+            type_annotation,
+            optional,
+        },
+    } in args.iter()
+    {
+        f.write_str(name.0.as_str())?;
+        if *optional {
+            f.write_char('?')?;
+        }
+        compile_type_annotation(f, type_annotation.as_ref())?;
+    }
+
+    f.write_char(')')?;
+
+    compile_type_annotation(f, return_type)?;
+
+    f.write_char(' ')?;
+    f.write_char('{')?;
+    body.compile(f)?;
+    f.write_char('}')?;
+
+    Ok(())
+}
+
+fn compile_type_annotation<W: Write>(
+    f: &mut W,
+    type_annotation: Option<&Src<TypeExpression>>,
+) -> Result {
+    if let Some(type_annotation) = type_annotation {
+        f.write_str(": ")?;
+        type_annotation.compile(f)?;
+    }
+
+    Ok(())
 }

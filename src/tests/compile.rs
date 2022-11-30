@@ -6,7 +6,7 @@ use crate::{model::ast::ModuleID, passes::compile::Compile, passes::parse::parse
 fn Simple_func_declaration() {
     test_compile(
         "func uid() => '12345'",
-        "const uid = function ___fn_uid() { return \"12345\" };",
+        "const uid = function ___fn_uid() { return `12345` };",
     );
 }
 
@@ -22,7 +22,7 @@ fn Func_declaration_with_memo() {
         @memo({ maxItems: 12 })
         func uid() => '12345'
         ",
-        "const uid = memo({maxItems: 12})(function ___fn_uid() { return \"12345\" });",
+        "const uid = memo({maxItems: 12})(function ___fn_uid() { return `12345` });",
     );
 }
 
@@ -145,11 +145,11 @@ fn Chained_if_statements() {
               }",
         "const foo = function ___fn_foo(): void{ 
           if (true) { 
-            log(\"true\");
+            log(`true`);
           } else if (false) { 
-            log(\"false\");
+            log(`false`);
           } else { 
-            log(\"other\");
+            log(`other`);
           };
         };",
     );
@@ -160,8 +160,8 @@ fn Object_literal_with_spread() {
     test_compile(
         "const a = { foo: 'stuff' }
         const b = { ...a, bar: 'other' }",
-        "const a = {foo: \"stuff\"};
-        const b = {...a, bar: \"other\"};",
+        "const a = {foo: `stuff`};
+        const b = {...a, bar: `other`};",
     );
 }
 
@@ -255,7 +255,7 @@ fn Proc_declaration_with_statements() {
             if ((___observe(count, 'value') > 12)) { 
               log(items);
             } else if ((___observe(count, 'value') !== 10)) { 
-              log(\"not 10!\");
+              log(`not 10!`);
             } else { 
               log(undefined);
             };
@@ -269,7 +269,7 @@ fn Proc_declaration_with_statements() {
 fn Const_declaration_with_type() {
     test_compile(
         "const foo: FooType = 'stuff'",
-        "const foo: FooType = \"stuff\";",
+        "const foo: FooType = `stuff`;",
     );
 }
 
@@ -775,7 +775,7 @@ fn test_compile(bgl: &str, js: &str) {
     let mut buf = String::new();
     parsed.compile(&mut buf).unwrap();
 
-    assert_eq!(normalize(js), normalize(&buf));
+    assert_eq!(normalize(&buf), normalize(js));
 }
 
 fn normalize(js: &str) -> String {
