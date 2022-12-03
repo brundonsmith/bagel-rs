@@ -165,20 +165,19 @@ fn func_declaration(i: Slice) -> ParseResult<Src<FuncDeclaration>> {
                 opt(preceded(whitespace, tag("async"))),
                 preceded(whitespace, tag("func")),
                 preceded(whitespace, plain_identifier),
-                preceded(whitespace, tag("(")),
                 preceded(whitespace, args),
-                preceded(whitespace, tag(")")),
                 preceded(whitespace, opt(type_annotation)),
                 preceded(whitespace, tag("=>")),
                 preceded(whitespace, expression(0)),
             )),
-            |(export, pure, asyn, keyword, name, open_paren, args, _, return_type, _, body)| {
+            |(export, pure, asyn, keyword, name, args, return_type, _, body)| {
                 let exported = export.is_some();
                 let is_async = asyn.is_some();
                 let is_pure = pure.is_some();
                 let src = export
                     .unwrap_or(pure.unwrap_or(asyn.unwrap_or(keyword)))
                     .spanning(&body.src);
+                let args_start = args[0].src.clone();
 
                 FuncDeclaration {
                     name,
@@ -189,7 +188,7 @@ fn func_declaration(i: Slice) -> ParseResult<Src<FuncDeclaration>> {
                             is_pure,
                             returns: return_type.map(Box::new),
                         }
-                        .with_src(open_paren.spanning(&body.src)),
+                        .with_src(args_start.spanning(&body.src)),
 
                         is_async,
                         is_pure,
@@ -207,31 +206,48 @@ fn func_declaration(i: Slice) -> ParseResult<Src<FuncDeclaration>> {
 }
 
 fn args(i: Slice) -> ParseResult<Vec<Src<Arg>>> {
-    map(
-        separated_list0(
-            preceded(whitespace, tag(",")),
-            preceded(whitespace, pair(plain_identifier, opt(type_annotation))),
-        ),
-        |args| {
-            args.into_iter()
-                .map(|(name, type_annotation)| {
-                    let src = name.0.clone().spanning(
-                        &type_annotation
-                            .as_ref()
-                            .map(|t| t.src.clone())
-                            .unwrap_or(name.0.clone()),
-                    );
+    alt((
+        map(plain_identifier, |name| {
+            vec![Arg {
+                name: name.clone(),
+                type_annotation: None,
+                optional: false,
+            }
+            .with_src(name.0)]
+        }),
+        map(
+            tuple((
+                tag("("),
+                preceded(
+                    whitespace,
+                    separated_list0(
+                        preceded(whitespace, tag(",")),
+                        preceded(whitespace, pair(plain_identifier, opt(type_annotation))),
+                    ),
+                ),
+                preceded(whitespace, tag(")")),
+            )),
+            |(_, args, _)| {
+                args.into_iter()
+                    .map(|(name, type_annotation)| {
+                        let src = name.0.clone().spanning(
+                            &type_annotation
+                                .as_ref()
+                                .map(|t| t.src.clone())
+                                .unwrap_or(name.0.clone()),
+                        );
 
-                    Arg {
-                        name,
-                        type_annotation,
-                        optional: false, // TODO
-                    }
-                    .with_src(src)
-                })
-                .collect()
-        },
-    )(i)
+                        Arg {
+                            name,
+                            type_annotation,
+                            optional: false, // TODO
+                        }
+                        .with_src(src)
+                    })
+                    .collect()
+            },
+        ),
+    ))(i)
 }
 
 fn proc_declaration(i: Slice) -> ParseResult<Src<ProcDeclaration>> {
@@ -244,20 +260,19 @@ fn proc_declaration(i: Slice) -> ParseResult<Src<ProcDeclaration>> {
                 opt(preceded(whitespace, tag("async"))),
                 preceded(whitespace, tag("proc")),
                 preceded(whitespace, plain_identifier),
-                preceded(whitespace, tag("(")),
                 preceded(whitespace, args),
-                preceded(whitespace, tag(")")),
                 preceded(whitespace, tag("{")),
                 many0(preceded(whitespace, statement)),
                 preceded(whitespace, tag("}")),
             )),
-            |(export, pure, asyn, keyword, name, open_paren, args, _, _, body, closing_brace)| {
+            |(export, pure, asyn, keyword, name, args, _, body, closing_brace)| {
                 let exported = export.is_some();
                 let is_async = asyn.is_some();
                 let is_pure = pure.is_some();
                 let src = export
                     .unwrap_or(pure.unwrap_or(asyn.unwrap_or(keyword)))
                     .spanning(&closing_brace);
+                let args_start = args[0].src.clone();
 
                 ProcDeclaration {
                     name,
@@ -269,7 +284,7 @@ fn proc_declaration(i: Slice) -> ParseResult<Src<ProcDeclaration>> {
                             is_async,
                             throws: None, // TODO
                         }
-                        .with_src(open_paren.spanning(&closing_brace)),
+                        .with_src(args_start.spanning(&closing_brace)),
 
                         is_async,
                         is_pure,
@@ -940,18 +955,16 @@ fn func(i: Slice) -> ParseResult<Src<Func>> {
         tuple((
             opt(tag("pure")),
             opt(preceded(whitespace, tag("async"))),
-            tag("("),
             preceded(whitespace, args),
-            preceded(whitespace, tag(")")),
             preceded(whitespace, opt(type_annotation)),
             preceded(whitespace, tag("=>")),
             preceded(whitespace, expression(0)),
         )),
-        |(pure, asyn, open_paren, args, _, returns, _, body)| {
+        |(pure, asyn, args, returns, _, body)| {
             let is_async = asyn.is_some();
             let is_pure = pure.is_some();
             let src = pure
-                .unwrap_or(asyn.unwrap_or(open_paren))
+                .unwrap_or(asyn.unwrap_or(args[0].src.clone()))
                 .spanning(&body.src);
 
             Func {

@@ -141,11 +141,13 @@ impl Compile for Src<Expression> {
                 f.write_str(" }")?;
             }
             Expression::BinaryOperation { left, op, right } => {
+                f.write_char('(')?;
                 left.compile(f)?;
                 f.write_char(' ')?;
                 op.compile(f)?;
                 f.write_char(' ')?;
                 right.compile(f)?;
+                f.write_char(')')?;
             }
             Expression::Parenthesis(inner) => {
                 f.write_char('(')?;
@@ -163,7 +165,15 @@ impl Compile for Src<Expression> {
                 is_async,
                 is_pure,
                 body,
-            } => todo!(),
+            } => {
+                compile_function(
+                    f,
+                    None,
+                    &type_annotation.node.args,
+                    type_annotation.node.returns.as_ref().map(|x| x.as_ref()),
+                    body,
+                )?;
+            }
             Expression::Proc {
                 type_annotation,
                 is_async,
