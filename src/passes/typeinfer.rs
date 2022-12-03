@@ -1,12 +1,12 @@
 use crate::{
     model::ast::*,
-    model::bgl_type::Type,
+    model::{bgl_type::Type, module::Module},
     passes::check::CheckContext,
     passes::resolve::{Binding, Resolve},
     ModulesStore,
 };
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug)]
 pub struct InferTypeContext<'a> {
     pub modules: &'a ModulesStore,
     pub current_module: &'a Module,

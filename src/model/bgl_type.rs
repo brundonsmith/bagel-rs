@@ -3,12 +3,12 @@ use std::fmt::{Display, Write};
 use enum_variant_type::EnumVariantType;
 
 use crate::{
-    model::ast::{ModuleID, Mutability},
+    model::ast::Mutability,
     passes::{check::CheckContext, typeinfer::InferTypeContext},
     ModulesStore,
 };
 
-use super::slice::Slice;
+use super::{module::ModuleID, slice::Slice};
 
 #[derive(Clone, Debug, PartialEq, EnumVariantType)]
 pub enum Type {
@@ -241,7 +241,7 @@ impl Type {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug)]
 pub struct SubsumationContext<'a> {
     pub modules: &'a ModulesStore,
     pub dest_mutability: Mutability,

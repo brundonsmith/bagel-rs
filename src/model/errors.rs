@@ -3,11 +3,9 @@ use std::{fmt::Write, usize};
 use colored::Colorize;
 use enum_variant_type::EnumVariantType;
 
-use crate::{
-    model::ast::{LocalIdentifier, ModuleID},
-    model::bgl_type::SubsumationIssue,
-    model::slice::Slice,
-};
+use crate::{model::ast::LocalIdentifier, model::bgl_type::SubsumationIssue, model::slice::Slice};
+
+use super::module::ModuleID;
 
 #[derive(Debug, Clone, PartialEq, EnumVariantType)]
 pub enum BagelError {

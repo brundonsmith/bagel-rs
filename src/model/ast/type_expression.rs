@@ -2,13 +2,13 @@ use enum_variant_type::EnumVariantType;
 
 use crate::{
     model::ast::{BooleanLiteral, ExactStringLiteral, Expression, NumberLiteral, PlainIdentifier},
-    model::{bgl_type::Type, slice::Slice},
+    model::{bgl_type::Type, module::Module},
     passes::check::CheckContext,
     passes::typeinfer::InferTypeContext,
     ModulesStore,
 };
 
-use super::{Module, ModuleID, Src};
+use super::Src;
 
 #[derive(Clone, Debug, PartialEq, EnumVariantType)]
 pub enum TypeExpression {
@@ -250,7 +250,7 @@ impl Src<TypeExpression> {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug)]
 pub struct ResolveContext<'a> {
     pub modules: &'a ModulesStore,
     pub current_module: &'a Module,

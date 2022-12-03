@@ -1,6 +1,6 @@
 use std::{collections::HashMap, ops::Add, rc::Rc};
 
-use crate::{gather_errors, model::ast::ModuleID, passes::parse::parse, print_errors};
+use crate::{gather_errors, model::module::ModuleID, passes::parse::parse, print_errors};
 
 #[test]
 fn Basic_constant() {
@@ -3861,6 +3861,7 @@ fn test_check(bgl: &str, should_fail: bool) {
 
     let mut modules_store = HashMap::new();
     modules_store.insert(module_id, Ok(parsed));
+    let modules_store = modules_store.into();
 
     let errors = gather_errors(&modules_store);
 

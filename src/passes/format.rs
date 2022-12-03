@@ -1,4 +1,4 @@
-use crate::model::ast::*;
+use crate::model::{ast::*, module::Module};
 
 use std::fmt::{Display, Formatter, Result, Write};
 

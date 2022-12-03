@@ -1,6 +1,5 @@
 use std::{rc::Rc, str::FromStr};
 
-use lazy_static::lazy_static;
 use nom::{
     branch::alt,
     bytes::complete::{escaped, tag, take_while, take_while1},
@@ -12,7 +11,11 @@ use nom::{
     IResult, Parser,
 };
 
-use crate::{model::ast::*, model::errors::ParseError, model::slice::Slice};
+use crate::{
+    model::ast::*,
+    model::{errors::ParseError, module::ModuleID},
+    model::{module::Module, slice::Slice},
+};
 
 pub fn parse(module_id: ModuleID, module_src: Rc<String>) -> Result<Module, ParseError> {
     let bgl = Slice::new(module_src.clone());

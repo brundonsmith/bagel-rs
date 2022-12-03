@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use crate::{model::ast::ModuleID, passes::compile::Compile, passes::parse::parse};
+use crate::{model::module::ModuleID, passes::compile::Compile, passes::parse::parse};
 
 #[test]
 fn Simple_func_declaration() {

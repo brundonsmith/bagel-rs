@@ -7,25 +7,17 @@ mod passes;
 mod tests;
 mod utils;
 
-use std::{
-    collections::HashMap,
-    ffi::OsStr,
-    ops::Add,
-    path::{Path, PathBuf},
-    process::ExitCode,
-    rc::Rc,
-};
+use std::{collections::HashMap, ffi::OsStr, ops::Add, path::PathBuf, process::ExitCode};
 
 use clap::{command, Parser};
 use cli::Command;
 use colored::Colorize;
 use glob::glob;
+use model::module::{Module, ModuleID, ModulesStore};
 
 use crate::{
-    model::ast::{Declaration, Module, ModuleID},
-    model::errors::{BagelError, ParseError},
+    model::errors::BagelError,
     passes::check::{Check, CheckContext},
-    passes::parse::parse,
 };
 
 #[derive(Parser, Debug, Clone)]
@@ -160,8 +152,6 @@ fn s_or_none(n: usize) -> &'static str {
     }
 }
 
-pub type ModulesStore = HashMap<ModuleID, Result<Module, ParseError>>;
-
 fn get_all_entrypoints(target: String) -> impl Iterator<Item = PathBuf> {
     let paths = glob(target.as_str()).unwrap();
 
@@ -179,11 +169,11 @@ fn get_all_entrypoints(target: String) -> impl Iterator<Item = PathBuf> {
 }
 
 fn load_and_parse<I: Iterator<Item = PathBuf>>(entrypoints: I) -> ModulesStore {
-    let mut modules_store: ModulesStore = HashMap::new();
+    let mut modules_store = ModulesStore::new();
 
     for path in entrypoints {
         let module_id = ModuleID::try_from(path.as_path()).unwrap();
-        load_module_and_dependencies(&mut modules_store, module_id);
+        modules_store.load_module_and_dependencies(module_id);
     }
 
     modules_store
@@ -192,7 +182,7 @@ fn load_and_parse<I: Iterator<Item = PathBuf>>(entrypoints: I) -> ModulesStore {
 pub fn gather_errors(modules_store: &ModulesStore) -> HashMap<ModuleID, Vec<BagelError>> {
     let mut errors = HashMap::new();
 
-    for (module_id, module) in modules_store {
+    for (module_id, module) in modules_store.iter() {
         let mut module_errors = Vec::new();
 
         match module {
@@ -259,45 +249,6 @@ pub fn print_errors(errors: &HashMap<ModuleID, Vec<BagelError>>) {
         }
 
         print!("{}", error_output_buf);
-    }
-}
-
-fn load_module_and_dependencies(
-    modules_store: &mut HashMap<ModuleID, Result<Module, ParseError>>,
-    module_id: ModuleID,
-) {
-    if let Some(mut bgl) = module_id.load() {
-        bgl.push('\n'); // https://github.com/Geal/nom/issues/1573
-
-        let parsed = parse(module_id.clone(), Rc::new(bgl));
-        modules_store.insert(module_id.clone(), parsed);
-
-        if let Some(Ok(parsed)) = modules_store.get(&module_id) {
-            let imported: Vec<String> = parsed
-                .declarations
-                .iter()
-                .filter_map(|decl| {
-                    if let Declaration::ImportAllDeclaration { name: _, path } = &decl.node {
-                        Some(path.node.value.as_str().to_owned())
-                    } else if let Declaration::ImportDeclaration { imports: _, path } = &decl.node {
-                        Some(path.node.value.as_str().to_owned())
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-
-            for path in imported {
-                let path = Path::new(&path);
-                let full_path = path.to_owned(); //module_id.as_path().join(path);
-                let other_module_id = ModuleID::try_from(full_path.as_path()).unwrap();
-                // TODO: Handle https modules
-
-                if !modules_store.contains_key(&other_module_id) {
-                    load_module_and_dependencies(modules_store, other_module_id);
-                }
-            }
-        }
     }
 }
 

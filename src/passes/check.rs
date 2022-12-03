@@ -1,9 +1,15 @@
 use crate::{
-    model::ast::*, model::bgl_type::Type, model::errors::BagelError, passes::resolve::Resolve,
-    passes::typeinfer::InferTypeContext, ModulesStore,
+    model::ast::*,
+    model::bgl_type::Type,
+    model::{
+        errors::BagelError,
+        module::{Module, ModulesStore},
+    },
+    passes::resolve::Resolve,
+    passes::typeinfer::InferTypeContext,
 };
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug)]
 pub struct CheckContext<'a> {
     pub modules: &'a ModulesStore,
     pub current_module: &'a Module,

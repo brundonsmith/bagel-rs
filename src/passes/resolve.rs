@@ -1,6 +1,6 @@
 use crate::{
     model::ast::*,
-    model::{bgl_type::Type, slice::Slice},
+    model::{bgl_type::Type, module::Module, slice::Slice},
 };
 
 use super::typeinfer::InferTypeContext;

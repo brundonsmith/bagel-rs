@@ -1,6 +1,6 @@
 use std::fmt::{Result, Write};
 
-use crate::model::{ast::*, slice::Slice};
+use crate::model::{ast::*, module::Module, slice::Slice};
 
 pub trait Compile {
     fn compile<W: Write>(&self, f: &mut W) -> Result;
