@@ -81,7 +81,7 @@ fn main() -> ExitCode {
         Command::Build { target, watch } => {
             let modules_store = load_and_parse(get_all_entrypoints(target));
             let errors = gather_errors(&modules_store);
-            print_errors(&errors);
+            print_error_results(&errors);
 
             if errors.values().any(|errors| errors.len() > 0) {
                 return ExitCode::FAILURE;
@@ -94,7 +94,7 @@ fn main() -> ExitCode {
         Command::Run { target, node, deno } => {
             let modules_store = load_and_parse(get_all_entrypoints(target));
             let errors = gather_errors(&modules_store);
-            print_errors(&errors);
+            print_error_results(&errors);
 
             if errors.values().any(|errors| errors.len() > 0) {
                 return ExitCode::FAILURE;
@@ -108,7 +108,7 @@ fn main() -> ExitCode {
         Command::Transpile { target, watch } => {
             let modules_store = load_and_parse(get_all_entrypoints(target));
             let errors = gather_errors(&modules_store);
-            print_errors(&errors);
+            print_error_results(&errors);
 
             if errors.values().any(|errors| errors.len() > 0) {
                 return ExitCode::FAILURE;
@@ -120,7 +120,7 @@ fn main() -> ExitCode {
         Command::Check { target, watch } => {
             let modules_store = load_and_parse(get_all_entrypoints(target));
             let errors = gather_errors(&modules_store);
-            print_errors(&errors);
+            print_error_results(&errors);
 
             if errors.values().any(|errors| errors.len() > 0) {
                 return ExitCode::FAILURE;
@@ -189,7 +189,7 @@ fn load_and_parse<I: Iterator<Item = PathBuf>>(entrypoints: I) -> ModulesStore {
     modules_store
 }
 
-fn gather_errors(modules_store: &ModulesStore) -> HashMap<ModuleID, Vec<BagelError>> {
+pub fn gather_errors(modules_store: &ModulesStore) -> HashMap<ModuleID, Vec<BagelError>> {
     let mut errors = HashMap::new();
 
     for (module_id, module) in modules_store {
@@ -218,25 +218,13 @@ fn gather_errors(modules_store: &ModulesStore) -> HashMap<ModuleID, Vec<BagelErr
     errors
 }
 
-fn print_errors(errors: &HashMap<ModuleID, Vec<BagelError>>) {
+fn print_error_results(errors: &HashMap<ModuleID, Vec<BagelError>>) {
     let modules_checked = errors.len();
     let modules_with_errors = errors.values().filter(|errors| errors.len() > 0).count();
     let total_errors = errors.values().map(|errors| errors.len()).fold(0, Add::add);
 
     if errors.len() > 0 {
-        let mut error_output_buf = String::new();
-        let error_output_buf_ref = &mut error_output_buf;
-
-        for (module_id, errors) in errors {
-            for error in errors {
-                error.pretty_print(error_output_buf_ref, true);
-                error_output_buf_ref.push('\n');
-                error_output_buf_ref.push('\n');
-            }
-        }
-
-        print!("{}", error_output_buf);
-
+        print_errors(errors);
         println!(
             "Found {} problem{} across {} module{} ({} module{} checked)",
             total_errors,
@@ -254,6 +242,23 @@ fn print_errors(errors: &HashMap<ModuleID, Vec<BagelError>>) {
             modules_checked,
             s_or_none(modules_checked)
         );
+    }
+}
+
+pub fn print_errors(errors: &HashMap<ModuleID, Vec<BagelError>>) {
+    if errors.len() > 0 {
+        let mut error_output_buf = String::new();
+        let error_output_buf_ref = &mut error_output_buf;
+
+        for (_, errors) in errors {
+            for error in errors {
+                error.pretty_print(error_output_buf_ref, true);
+                error_output_buf_ref.push('\n');
+                error_output_buf_ref.push('\n');
+            }
+        }
+
+        print!("{}", error_output_buf);
     }
 }
 

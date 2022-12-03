@@ -175,11 +175,7 @@ impl<'a> Check<'a> for Src<Expression> {
                 inner.check(ctx, report_error);
             }
 
-            Expression::NilLiteral => {}
-            Expression::NumberLiteral(_) => {}
-            Expression::BooleanLiteral(value) => todo!(),
             Expression::StringLiteral { tag, segments } => todo!(),
-            Expression::ExactStringLiteral { tag, value } => todo!(),
             Expression::ArrayLiteral(entries) => todo!(),
             Expression::ObjectLiteral(entries) => todo!(),
             Expression::NegationOperation(inner) => todo!(),
@@ -231,6 +227,12 @@ impl<'a> Check<'a> for Src<Expression> {
             } => todo!(),
             Expression::ErrorExpression(inner) => todo!(),
             Expression::RegularExpression { expr, flags } => todo!(),
+
+            // intentionally have nothing to check
+            Expression::NilLiteral => {}
+            Expression::NumberLiteral(_) => {}
+            Expression::BooleanLiteral(value) => {}
+            Expression::ExactStringLiteral { tag: _, value: _ } => {}
         };
     }
 }
