@@ -205,7 +205,12 @@ fn Function_returned_inference_fail() {
 }
 
 #[test]
-fn Basic_constant_inference() {
+fn Basic_constant_inference_pass() {
+    test_check("const x = 'foo'\nconst y: string = x", false);
+}
+
+#[test]
+fn Basic_constant_inference_fail() {
     test_check("const x = 'foo'\nconst y: number = x", true);
 }
 
