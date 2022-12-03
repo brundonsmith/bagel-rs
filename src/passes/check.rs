@@ -40,7 +40,7 @@ impl<'a> Check<'a> for Src<Declaration> {
                     let value_type = value.infer_type(ctx.into());
                     let issues = type_annotation
                         .resolve(ctx.into())
-                        .subsumation_issues(&value_type);
+                        .subsumation_issues(ctx.into(), &value_type);
 
                     if let Some(issues) = issues {
                         report_error(BagelError::AssignmentError {
@@ -91,10 +91,12 @@ impl<'a> Check<'a> for Src<Expression> {
                 let left_type = left.infer_type(ctx);
                 let right_type = right.infer_type(ctx);
 
-                let number_or_string = Type::NumberType.union(Type::StringType);
+                let number_or_string = Type::ANY_NUMBER.union(Type::ANY_STRING);
 
                 if op.node == BinaryOperator::Plus {
-                    if let Some(issues) = number_or_string.subsumation_issues(&left_type) {
+                    if let Some(issues) =
+                        number_or_string.subsumation_issues(ctx.into(), &left_type)
+                    {
                         report_error(BagelError::AssignmentError {
                             module_id: ctx.current_module.module_id.clone(),
                             src: left.src.clone(),
@@ -102,7 +104,9 @@ impl<'a> Check<'a> for Src<Expression> {
                         })
                     }
 
-                    if let Some(issues) = number_or_string.subsumation_issues(&right_type) {
+                    if let Some(issues) =
+                        number_or_string.subsumation_issues(ctx.into(), &right_type)
+                    {
                         report_error(BagelError::AssignmentError {
                             module_id: ctx.current_module.module_id.clone(),
                             src: right.src.clone(),
@@ -113,7 +117,9 @@ impl<'a> Check<'a> for Src<Expression> {
                     || op.node == BinaryOperator::Times
                     || op.node == BinaryOperator::Divide
                 {
-                    if let Some(issues) = Type::NumberType.subsumation_issues(&left_type) {
+                    if let Some(issues) =
+                        Type::ANY_NUMBER.subsumation_issues(ctx.into(), &left_type)
+                    {
                         report_error(BagelError::AssignmentError {
                             module_id: ctx.current_module.module_id.clone(),
                             src: left.src.clone(),
@@ -121,7 +127,9 @@ impl<'a> Check<'a> for Src<Expression> {
                         })
                     }
 
-                    if let Some(issues) = Type::NumberType.subsumation_issues(&right_type) {
+                    if let Some(issues) =
+                        Type::ANY_NUMBER.subsumation_issues(ctx.into(), &right_type)
+                    {
                         report_error(BagelError::AssignmentError {
                             module_id: ctx.current_module.module_id.clone(),
                             src: right.src.clone(),
@@ -168,12 +176,12 @@ impl<'a> Check<'a> for Src<Expression> {
             }
 
             Expression::NilLiteral => {}
-            Expression::NumberLiteral { value } => {}
-            Expression::BooleanLiteral { value } => todo!(),
+            Expression::NumberLiteral(_) => {}
+            Expression::BooleanLiteral(value) => todo!(),
             Expression::StringLiteral { tag, segments } => todo!(),
             Expression::ExactStringLiteral { tag, value } => todo!(),
-            Expression::ArrayLiteral { entries } => todo!(),
-            Expression::ObjectLiteral { entries } => todo!(),
+            Expression::ArrayLiteral(entries) => todo!(),
+            Expression::ObjectLiteral(entries) => todo!(),
             Expression::NegationOperation(inner) => todo!(),
             Expression::Func {
                 type_annotation,
@@ -221,7 +229,7 @@ impl<'a> Check<'a> for Src<Expression> {
                 inner,
                 possible_type,
             } => todo!(),
-            Expression::ErrorExpression { inner } => todo!(),
+            Expression::ErrorExpression(inner) => todo!(),
             Expression::RegularExpression { expr, flags } => todo!(),
         };
     }
@@ -246,7 +254,7 @@ impl<'a, T: Check<'a>> Check<'a> for Src<T> {
 impl<'a> Check<'a> for Src<TypeExpression> {
     fn check<F: FnMut(BagelError)>(&self, ctx: CheckContext<'a>, report_error: &mut F) {
         match &self.node {
-            TypeExpression::NamedType { name } => todo!(),
+            TypeExpression::NamedType(name) => todo!(),
             TypeExpression::GenericParamType { name, extends } => todo!(),
             TypeExpression::ProcType {
                 args,
@@ -263,28 +271,23 @@ impl<'a> Check<'a> for Src<TypeExpression> {
             } => todo!(),
             TypeExpression::GenericType { type_params, inner } => todo!(),
             TypeExpression::BoundGenericType { type_args, generic } => todo!(),
-            TypeExpression::ObjectType { entries } => todo!(),
-            TypeExpression::InterfaceType { entries } => todo!(),
+            TypeExpression::ObjectType(entries) => todo!(),
+            TypeExpression::InterfaceType(entries) => todo!(),
             TypeExpression::RecordType {
                 key_type,
                 value_type,
             } => todo!(),
-            TypeExpression::ArrayType { element } => todo!(),
-            TypeExpression::TupleType { members } => todo!(),
-            TypeExpression::ReadonlyType { inner } => todo!(),
-            TypeExpression::NominalType {
-                module_id,
-                name,
-                inner,
-            } => todo!(),
-            TypeExpression::IteratorType { inner } => todo!(),
-            TypeExpression::PlanType { inner } => todo!(),
-            TypeExpression::ErrorType { inner } => todo!(),
-            TypeExpression::ParenthesizedType { inner } => todo!(),
-            TypeExpression::TypeofType { expression } => todo!(),
-            TypeExpression::KeyofType { inner } => todo!(),
-            TypeExpression::ValueofType { inner } => todo!(),
-            TypeExpression::ElementofType { inner } => todo!(),
+            TypeExpression::ArrayType(element) => todo!(),
+            TypeExpression::TupleType(members) => todo!(),
+            TypeExpression::ReadonlyType(inner) => todo!(),
+            TypeExpression::IteratorType(inner) => todo!(),
+            TypeExpression::PlanType(inner) => todo!(),
+            TypeExpression::ErrorType(inner) => todo!(),
+            TypeExpression::ParenthesizedType(inner) => todo!(),
+            TypeExpression::TypeofType(expression) => todo!(),
+            TypeExpression::KeyofType(inner) => todo!(),
+            TypeExpression::ValueofType(inner) => todo!(),
+            TypeExpression::ElementofType(inner) => todo!(),
             TypeExpression::RegularExpressionType {} => todo!(),
             TypeExpression::PropertyType {
                 subject,
@@ -293,13 +296,13 @@ impl<'a> Check<'a> for Src<TypeExpression> {
             } => todo!(),
 
             // intentionally have nothing to check
-            TypeExpression::LiteralType { value } => {}
+            TypeExpression::LiteralType(value) => {}
             TypeExpression::StringType => {}
             TypeExpression::NumberType => {}
             TypeExpression::BooleanType => {}
             TypeExpression::NilType => {}
-            TypeExpression::UnionType { members } => {}
-            TypeExpression::MaybeType { inner } => {}
+            TypeExpression::UnionType(members) => {}
+            TypeExpression::MaybeType(inner) => {}
             TypeExpression::UnknownType => {}
             TypeExpression::PoisonedType => {}
             TypeExpression::AnyType => {}

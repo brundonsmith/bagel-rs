@@ -109,18 +109,18 @@ impl Format for Src<Expression> {
     fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
         match &self.node {
             Expression::NilLiteral => f.write_str("nil")?,
-            Expression::BooleanLiteral { value } => f.write_str(match value {
+            Expression::BooleanLiteral(value) => f.write_str(match value {
                 true => "true",
                 false => "false",
             })?,
-            Expression::NumberLiteral { value } => f.write_str(value.as_str())?,
+            Expression::NumberLiteral(value) => f.write_str(value.as_str())?,
             Expression::StringLiteral { tag, segments } => todo!(),
             Expression::ExactStringLiteral { tag, value } => {
                 f.write_str("\"")?;
                 f.write_str(value.as_str())?;
                 f.write_str("\"")?;
             }
-            Expression::ArrayLiteral { entries } => {
+            Expression::ArrayLiteral(entries) => {
                 f.write_char('[')?;
                 for (index, entry) in entries.iter().enumerate() {
                     if index > 0 {
@@ -132,7 +132,7 @@ impl Format for Src<Expression> {
                 }
                 f.write_str(" ]")?;
             }
-            Expression::ObjectLiteral { entries } => {
+            Expression::ObjectLiteral(entries) => {
                 f.write_char('{')?;
                 for (index, entry) in entries.iter().enumerate() {
                     if index > 0 {
@@ -208,7 +208,7 @@ impl Format for Src<Expression> {
                 inner,
                 possible_type,
             } => todo!(),
-            Expression::ErrorExpression { inner } => todo!(),
+            Expression::ErrorExpression(inner) => todo!(),
             Expression::RegularExpression { expr, flags } => todo!(),
         };
 
@@ -397,7 +397,7 @@ impl Display for Src<TypeExpression> {
 impl Format for Src<TypeExpression> {
     fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
         match &self.node {
-            TypeExpression::UnionType { members } => {
+            TypeExpression::UnionType(members) => {
                 for (index, member) in members.iter().enumerate() {
                     if index > 0 {
                         f.write_str(" | ")?;
@@ -406,8 +406,8 @@ impl Format for Src<TypeExpression> {
                     member.format(f, opts)?;
                 }
             }
-            TypeExpression::MaybeType { inner } => todo!(),
-            TypeExpression::NamedType { name } => todo!(),
+            TypeExpression::MaybeType(inner) => todo!(),
+            TypeExpression::NamedType(name) => todo!(),
             TypeExpression::GenericParamType { name, extends } => todo!(),
             TypeExpression::ProcType {
                 args,
@@ -424,33 +424,28 @@ impl Format for Src<TypeExpression> {
             } => todo!(),
             TypeExpression::GenericType { type_params, inner } => todo!(),
             TypeExpression::BoundGenericType { type_args, generic } => todo!(),
-            TypeExpression::ObjectType { entries } => todo!(),
-            TypeExpression::InterfaceType { entries } => todo!(),
+            TypeExpression::ObjectType(entries) => todo!(),
+            TypeExpression::InterfaceType(entries) => todo!(),
             TypeExpression::RecordType {
                 key_type,
                 value_type,
             } => todo!(),
-            TypeExpression::ArrayType { element } => todo!(),
-            TypeExpression::TupleType { members } => todo!(),
-            TypeExpression::ReadonlyType { inner } => todo!(),
+            TypeExpression::ArrayType(element) => todo!(),
+            TypeExpression::TupleType(members) => todo!(),
+            TypeExpression::ReadonlyType(inner) => todo!(),
             TypeExpression::StringType => f.write_str("string")?,
             TypeExpression::NumberType => f.write_str("number")?,
             TypeExpression::BooleanType => f.write_str("boolean")?,
             TypeExpression::NilType => f.write_str("nil")?,
-            TypeExpression::LiteralType { value } => todo!(),
-            TypeExpression::NominalType {
-                module_id,
-                name,
-                inner,
-            } => todo!(),
-            TypeExpression::IteratorType { inner } => todo!(),
-            TypeExpression::PlanType { inner } => todo!(),
-            TypeExpression::ErrorType { inner } => todo!(),
-            TypeExpression::ParenthesizedType { inner } => todo!(),
-            TypeExpression::TypeofType { expression } => todo!(),
-            TypeExpression::KeyofType { inner } => todo!(),
-            TypeExpression::ValueofType { inner } => todo!(),
-            TypeExpression::ElementofType { inner } => todo!(),
+            TypeExpression::LiteralType(value) => todo!(),
+            TypeExpression::IteratorType(inner) => todo!(),
+            TypeExpression::PlanType(inner) => todo!(),
+            TypeExpression::ErrorType(inner) => todo!(),
+            TypeExpression::ParenthesizedType(inner) => todo!(),
+            TypeExpression::TypeofType(expression) => todo!(),
+            TypeExpression::KeyofType(inner) => todo!(),
+            TypeExpression::ValueofType(inner) => todo!(),
+            TypeExpression::ElementofType(inner) => todo!(),
             TypeExpression::UnknownType => todo!(),
             TypeExpression::PoisonedType => todo!(),
             TypeExpression::AnyType => todo!(),

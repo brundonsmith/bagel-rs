@@ -74,6 +74,13 @@ impl BagelError {
                             f.write_char('\n')?;
                         }
                     }
+                    SubsumationIssue::Mutability(destination, value) => {
+                        f.write_str("Readonly type ")?;
+                        f.write_str(&format!("{}", value).blue().to_string())?;
+                        f.write_str(" is not assignable to mutable type ")?;
+                        f.write_str(&format!("{}", destination).blue().to_string())?;
+                        f.write_char('\n')?;
+                    }
                 };
 
                 f.write_char('\n')?;

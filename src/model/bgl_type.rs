@@ -2,15 +2,31 @@ use std::fmt::{Display, Write};
 
 use enum_variant_type::EnumVariantType;
 
-use crate::model::ast::{ModuleID, Mutability};
+use crate::{
+    model::ast::{ModuleID, Mutability},
+    passes::{check::CheckContext, typeinfer::InferTypeContext},
+    ModulesStore,
+};
 
 use super::slice::Slice;
 
 #[derive(Clone, Debug, PartialEq, EnumVariantType)]
 pub enum Type {
-    UnionType {
-        members: Vec<Type>,
+    ElementofType(Box<Type>),
+
+    ValueofType(Box<Type>),
+
+    KeyofType(Box<Type>),
+
+    ReadonlyType(Box<Type>),
+
+    PropertyType {
+        subject: Box<Type>,
+        property: Slice,
+        // optional: bool,
     },
+
+    UnionType(Vec<Type>),
 
     ProcType {
         args: Vec<Arg>,
@@ -29,72 +45,47 @@ pub enum Type {
 
     ObjectType {
         entries: Vec<(Slice, Box<Type>)>,
-        mutability: Mutability,
         is_interface: bool,
     },
 
     RecordType {
         key_type: Box<Type>,
         value_type: Box<Type>,
-        mutability: Mutability,
     },
 
-    ArrayType {
-        element: Box<Type>,
-        mutability: Mutability,
+    ArrayType(Box<Type>),
+
+    TupleType(Vec<Type>),
+
+    StringType(Option<Slice>),
+
+    NumberType {
+        min: Option<i32>,
+        max: Option<i32>,
     },
 
-    TupleType {
-        members: Vec<Type>,
-        mutability: Mutability,
-    },
-
-    StringType,
-
-    NumberType,
-
-    BooleanType,
+    BooleanType(Option<bool>),
 
     NilType,
-
-    LiteralType {
-        value: LiteralTypeValue,
-    },
 
     NamedType {
         module_id: ModuleID,
         name: Slice,
     },
 
-    NominalType {
-        module_id: ModuleID,
-        name: Slice,
-        inner: Option<Box<Type>>,
-    },
+    IteratorType(Box<Type>),
 
-    IteratorType {
-        inner: Box<Type>,
-    },
+    PlanType(Box<Type>),
 
-    PlanType {
-        inner: Box<Type>,
-    },
+    ErrorType(Box<Type>),
 
-    ErrorType {
-        inner: Box<Type>,
-    },
+    RegularExpressionType, // TODO: Number of match groups?
 
-    UnknownType {
-        mutability: Mutability,
-    },
+    UnknownType,
 
     PoisonedType,
 
     AnyType,
-
-    RegularExpressionType {
-        // TODO: Number of match groups?
-    },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -104,33 +95,23 @@ pub struct Arg {
     pub optional: bool,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum LiteralTypeValue {
-    ExactString(Slice),
-    NumberLiteral(Slice),
-    BooleanLiteral(bool),
-}
-
-impl From<super::ast::LiteralTypeValue> for LiteralTypeValue {
-    fn from(ast: super::ast::LiteralTypeValue) -> Self {
-        match ast {
-            super::ast::LiteralTypeValue::ExactString(s) => LiteralTypeValue::ExactString(s.value),
-            super::ast::LiteralTypeValue::NumberLiteral(s) => {
-                LiteralTypeValue::NumberLiteral(s.value)
-            }
-            super::ast::LiteralTypeValue::BooleanLiteral(b) => {
-                LiteralTypeValue::BooleanLiteral(b.value)
-            }
-        }
-    }
-}
-
 impl Type {
-    pub fn subsumes(&self, other: &Self) -> bool {
-        self.subsumation_issues(other).is_none()
+    pub const ANY_STRING: Type = Type::StringType(None);
+    pub const ANY_NUMBER: Type = Type::NumberType {
+        min: None,
+        max: None,
+    };
+    pub const ANY_BOOLEAN: Type = Type::BooleanType(None);
+
+    pub fn subsumes<'a>(&self, ctx: SubsumationContext<'a>, other: &Self) -> bool {
+        self.subsumation_issues(ctx, other).is_none()
     }
 
-    pub fn subsumation_issues(&self, other: &Self) -> Option<SubsumationIssue> {
+    pub fn subsumation_issues<'a>(
+        &self,
+        ctx: SubsumationContext<'a>,
+        other: &Self,
+    ) -> Option<SubsumationIssue> {
         let destination = self;
         let value = other;
 
@@ -138,34 +119,63 @@ impl Type {
             return None;
         }
 
+        if ctx.dest_mutability.is_mutable() && !ctx.val_mutability.is_mutable() {
+            return Some(SubsumationIssue::Mutability(
+                destination.clone(),
+                value.clone(),
+            ));
+        }
+
         match (destination, value) {
-            (Type::UnionType { members }, value) => {
-                if members.iter().any(|member| member.subsumes(&value)) {
+            (Type::ReadonlyType(inner), value) => {
+                return inner
+                    .subsumation_issues(ctx.with_dest_mutability(Mutability::Readonly), value);
+            }
+            (dest, Type::ReadonlyType(inner)) => {
+                return dest
+                    .subsumation_issues(ctx.with_val_mutability(Mutability::Readonly), inner);
+            }
+            (Type::UnionType(members), value) => {
+                if members.iter().any(|member| member.subsumes(ctx, &value)) {
                     return None;
                 }
             }
+            (Type::StringType(None), Type::StringType(_)) => {
+                return None;
+            }
+            (Type::StringType(Some(dest)), Type::StringType(Some(val)))
+                if dest.as_str() == val.as_str() =>
+            {
+                return None;
+            }
             (
-                Type::StringType,
-                Type::LiteralType {
-                    value: LiteralTypeValue::ExactString(_),
+                Type::NumberType {
+                    min: None,
+                    max: None,
                 },
+                Type::NumberType { min: _, max: _ },
             ) => {
                 return None;
             }
             (
-                Type::NumberType,
-                Type::LiteralType {
-                    value: LiteralTypeValue::NumberLiteral(_),
+                Type::NumberType {
+                    min: dest_min,
+                    max: dest_max,
                 },
-            ) => {
+                Type::NumberType {
+                    min: val_min,
+                    max: val_max,
+                },
+            ) if dest_min
+                .map(|dest_min| val_min.map(|val_min| val_min >= dest_min).unwrap_or(false))
+                .unwrap_or(true)
+                && dest_max
+                    .map(|dest_max| val_max.map(|val_max| val_max <= dest_max).unwrap_or(false))
+                    .unwrap_or(true) =>
+            {
                 return None;
             }
-            (
-                Type::BooleanType,
-                Type::LiteralType {
-                    value: LiteralTypeValue::BooleanLiteral(_),
-                },
-            ) => {
+            (Type::BooleanType(None), Type::BooleanType(_)) => {
                 return None;
             }
             (
@@ -198,12 +208,7 @@ impl Type {
                     returns: returns_2,
                 },
             ) => {}
-            (
-                Type::UnknownType {
-                    mutability: Mutability::Readonly,
-                },
-                _,
-            ) => {
+            (Type::UnknownType, _) => {
                 return None;
             }
             (Type::AnyType, _) => {
@@ -232,47 +237,51 @@ impl Type {
     }
 
     pub fn union(self, other: Self) -> Self {
-        Type::UnionType {
-            members: vec![self, other],
+        Type::UnionType(vec![self, other])
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SubsumationContext<'a> {
+    pub modules: &'a ModulesStore,
+    pub dest_mutability: Mutability,
+    pub val_mutability: Mutability,
+}
+
+impl<'a> From<CheckContext<'a>> for SubsumationContext<'a> {
+    fn from(ctx: CheckContext<'a>) -> Self {
+        Self {
+            modules: ctx.modules,
+            dest_mutability: Mutability::Mutable,
+            val_mutability: Mutability::Mutable,
+        }
+    }
+}
+
+impl<'a> From<InferTypeContext<'a>> for SubsumationContext<'a> {
+    fn from(ctx: InferTypeContext<'a>) -> Self {
+        Self {
+            modules: ctx.modules,
+            dest_mutability: Mutability::Mutable,
+            val_mutability: Mutability::Mutable,
+        }
+    }
+}
+
+impl<'a> SubsumationContext<'a> {
+    pub fn with_dest_mutability(self, dest_mutability: Mutability) -> Self {
+        Self {
+            modules: self.modules,
+            dest_mutability,
+            val_mutability: self.val_mutability,
         }
     }
 
-    pub fn with_mutability(self, mutability: Mutability) -> Self {
-        match self {
-            Type::ObjectType {
-                mutability: _,
-                entries,
-                is_interface,
-            } => Type::ObjectType {
-                mutability,
-                entries,
-                is_interface,
-            },
-            Type::RecordType {
-                mutability: _,
-                key_type,
-                value_type,
-            } => Type::RecordType {
-                mutability,
-                key_type,
-                value_type,
-            },
-            Type::ArrayType {
-                mutability: _,
-                element,
-            } => Type::ArrayType {
-                mutability,
-                element,
-            },
-            Type::TupleType {
-                mutability: _,
-                members,
-            } => Type::TupleType {
-                mutability,
-                members,
-            },
-            Type::UnknownType { mutability: _ } => Type::UnknownType { mutability },
-            _ => self,
+    pub fn with_val_mutability(self, val_mutability: Mutability) -> Self {
+        Self {
+            modules: self.modules,
+            dest_mutability: self.dest_mutability,
+            val_mutability,
         }
     }
 }
@@ -280,7 +289,14 @@ impl Type {
 impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Type::UnionType { members } => {
+            Type::ElementofType(inner) => f.write_fmt(format_args!("elementof {}", inner)),
+            Type::ValueofType(inner) => f.write_fmt(format_args!("valueof {}", inner)),
+            Type::KeyofType(inner) => f.write_fmt(format_args!("keyof {}", inner)),
+            Type::ReadonlyType(inner) => f.write_fmt(format_args!("readonly {}", inner)),
+            Type::PropertyType { subject, property } => {
+                f.write_fmt(format_args!("{}.{}", subject, property.as_str()))
+            }
+            Type::UnionType(members) => {
                 for (index, member) in members.iter().enumerate() {
                     if index > 0 {
                         f.write_str(" | ")?;
@@ -306,38 +322,14 @@ impl Display for Type {
             } => todo!(),
             Type::ObjectType {
                 entries,
-                mutability,
                 is_interface,
             } => todo!(),
             Type::RecordType {
                 key_type,
                 value_type,
-                mutability,
-            } => {
-                if !mutability.is_mutable() {
-                    f.write_str("readonly ")?;
-                }
-
-                f.write_fmt(format_args!("{{[{}]: {}}}", key_type, value_type))
-            }
-            Type::ArrayType {
-                element,
-                mutability,
-            } => {
-                if !mutability.is_mutable() {
-                    f.write_str("readonly ")?;
-                }
-
-                f.write_fmt(format_args!("{}[]", element))
-            }
-            Type::TupleType {
-                members,
-                mutability,
-            } => {
-                if !mutability.is_mutable() {
-                    f.write_str("readonly ")?;
-                }
-
+            } => f.write_fmt(format_args!("{{[{}]: {}}}", key_type, value_type)),
+            Type::ArrayType(element) => f.write_fmt(format_args!("{}[]", element)),
+            Type::TupleType(members) => {
                 f.write_char('[')?;
                 for (index, member) in members.iter().enumerate() {
                     if index > 0 {
@@ -348,34 +340,33 @@ impl Display for Type {
                 }
                 f.write_char(']')
             }
-            Type::StringType => f.write_str("string"),
-            Type::NumberType => f.write_str("number"),
-            Type::BooleanType => f.write_str("boolean"),
-            Type::NilType => f.write_str("nil"),
-            Type::LiteralType { value } => match value {
-                LiteralTypeValue::ExactString(s) => f.write_fmt(format_args!("'{}'", s.as_str())),
-                LiteralTypeValue::NumberLiteral(s) => f.write_str(s.as_str()),
-                LiteralTypeValue::BooleanLiteral(s) => {
-                    f.write_str(if *s { "true" } else { "false" })
+            Type::StringType(s) => match s {
+                Some(s) => f.write_fmt(format_args!("'{}'", s.as_str())),
+                None => f.write_str("string"),
+            },
+            Type::NumberType { min, max } => match (min, max) {
+                (None, None) => f.write_str("number"),
+                (None, Some(max)) => f.write_fmt(format_args!("<={}", max)),
+                (Some(min), None) => f.write_fmt(format_args!(">={}", min)),
+                (Some(min), Some(max)) => {
+                    if min == max {
+                        f.write_fmt(format_args!("{}", min))
+                    } else {
+                        f.write_fmt(format_args!("{}-{}", min, max))
+                    }
                 }
             },
+            Type::BooleanType(b) => match b {
+                Some(true) => f.write_str("true"),
+                Some(false) => f.write_str("false"),
+                None => f.write_str("boolean"),
+            },
+            Type::NilType => f.write_str("nil"),
             Type::NamedType { module_id, name } => f.write_str(name.as_str()),
-            Type::NominalType {
-                module_id,
-                name,
-                inner,
-            } => f.write_str(name.as_str()),
-            Type::IteratorType { inner } => f.write_fmt(format_args!("Iterator<{}>", inner)),
-            Type::PlanType { inner } => f.write_fmt(format_args!("Plan<{}>", inner)),
-            Type::ErrorType { inner } => f.write_fmt(format_args!("Error<{}>", inner)),
-            Type::UnknownType { mutability } => f.write_fmt(format_args!(
-                "{}unknown",
-                if mutability.is_mutable() {
-                    ""
-                } else {
-                    "readonly "
-                }
-            )),
+            Type::IteratorType(inner) => f.write_fmt(format_args!("Iterator<{}>", inner)),
+            Type::PlanType(inner) => f.write_fmt(format_args!("Plan<{}>", inner)),
+            Type::ErrorType(inner) => f.write_fmt(format_args!("Error<{}>", inner)),
+            Type::UnknownType => f.write_str("unknown"),
             Type::PoisonedType => f.write_str("unknown"),
             Type::AnyType => f.write_str("any"),
             Type::RegularExpressionType {} => f.write_str("RegExp"),
@@ -386,4 +377,5 @@ impl Display for Type {
 #[derive(Clone, Debug, PartialEq)]
 pub enum SubsumationIssue {
     Assignment(Vec<(Type, Type)>),
+    Mutability(Type, Type),
 }

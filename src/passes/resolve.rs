@@ -1,4 +1,9 @@
-use crate::{model::ast::*, model::slice::Slice};
+use crate::{
+    model::ast::*,
+    model::{bgl_type::Type, slice::Slice},
+};
+
+use super::typeinfer::InferTypeContext;
 
 pub trait Resolve {
     fn resolve_symbol(&self, symbol: &str, at: &Slice) -> Option<Binding>;
@@ -146,7 +151,7 @@ impl Resolve for Src<Expression> {
 
             Expression::LocalIdentifier(_) => {}
             Expression::NilLiteral => {}
-            Expression::NumberLiteral { value: _ } => {}
+            Expression::NumberLiteral(_) => {}
             Expression::InlineConstGroup {
                 declarations,
                 inner: _,
@@ -159,12 +164,12 @@ impl Resolve for Src<Expression> {
                     }
                 }
             }
-            Expression::BooleanLiteral { value } => todo!(),
+            Expression::BooleanLiteral(_) => todo!(),
             Expression::StringLiteral { tag, segments } => todo!(),
             Expression::ExactStringLiteral { tag, value } => todo!(),
-            Expression::ArrayLiteral { entries } => todo!(),
-            Expression::ObjectLiteral { entries } => todo!(),
-            Expression::NegationOperation(inner) => todo!(),
+            Expression::ArrayLiteral(_) => todo!(),
+            Expression::ObjectLiteral(_) => todo!(),
+            Expression::NegationOperation(_) => todo!(),
             Expression::Func {
                 type_annotation,
                 is_async,
@@ -211,7 +216,7 @@ impl Resolve for Src<Expression> {
                 inner,
                 possible_type,
             } => todo!(),
-            Expression::ErrorExpression { inner } => todo!(),
+            Expression::ErrorExpression(_) => todo!(),
             Expression::RegularExpression { expr, flags } => todo!(),
         };
 
@@ -232,4 +237,61 @@ impl Resolve for Src<InlineConstDeclaration> {
 pub enum Binding<'a> {
     Declaration(&'a Src<Declaration>),
     InlineConstDeclaration(&'a Src<InlineConstDeclaration>),
+}
+
+impl<'a> Binding<'a> {
+    pub fn contents(self, ctx: InferTypeContext<'a>) -> BindingContents {
+        match self {
+            Binding::Declaration(decl) => match &decl.node {
+                Declaration::ImportAllDeclaration { name, path } => todo!(),
+                Declaration::ImportDeclaration { imports, path } => todo!(),
+                Declaration::TypeDeclaration {
+                    name,
+                    declared_type,
+                    exported,
+                } => todo!(),
+                Declaration::FuncDeclaration {
+                    name,
+                    func,
+                    exported,
+                    platforms,
+                    decorators,
+                } => todo!(),
+                Declaration::ProcDeclaration {
+                    name,
+                    proc,
+                    exported,
+                    platforms,
+                    decorators,
+                } => todo!(),
+                Declaration::ValueDeclaration {
+                    name,
+                    type_annotation,
+                    value,
+                    is_const,
+                    exported,
+                    platforms,
+                } => todo!(),
+                Declaration::TestExprDeclaration { name, expr } => todo!(),
+                Declaration::TestBlockDeclaration { name, block } => todo!(),
+                Declaration::TestTypeDeclaration {
+                    name,
+                    destination_type,
+                    value_type,
+                } => todo!(),
+            },
+            Binding::InlineConstDeclaration(decl) => BindingContents::ValueWithType(
+                decl.node
+                    .type_annotation
+                    .as_ref()
+                    .map(|type_annotation| type_annotation.resolve(ctx.into()))
+                    .unwrap_or_else(|| decl.node.value.infer_type(ctx)),
+            ),
+        }
+    }
+}
+
+pub enum BindingContents {
+    DeclaredType(Type),
+    ValueWithType(Type),
 }

@@ -11,10 +11,10 @@ pub enum Expression {
     NilLiteral,
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    BooleanLiteral { value: bool },
+    BooleanLiteral(bool),
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    NumberLiteral { value: Slice },
+    NumberLiteral(Slice),
 
     #[evt(derive(Debug, Clone, PartialEq))]
     StringLiteral {
@@ -29,14 +29,10 @@ pub enum Expression {
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    ArrayLiteral {
-        entries: Vec<Src<ArrayLiteralEntry>>,
-    },
+    ArrayLiteral(Vec<Src<ArrayLiteralEntry>>),
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    ObjectLiteral {
-        entries: Vec<Src<ObjectLiteralEntry>>,
-    },
+    ObjectLiteral(Vec<Src<ObjectLiteralEntry>>),
 
     #[evt(derive(Debug, Clone, PartialEq))]
     BinaryOperation {
@@ -135,7 +131,7 @@ pub enum Expression {
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    ErrorExpression { inner: Box<Src<Expression>> },
+    ErrorExpression(Box<Src<Expression>>),
 
     #[evt(derive(Debug, Clone, PartialEq))]
     RegularExpression {

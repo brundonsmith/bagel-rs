@@ -392,10 +392,7 @@ fn type_expression(l: usize) -> impl Fn(Slice) -> ParseResult<Src<TypeExpression
                 |(inner, end)| {
                     let src = inner.src.clone().spanning(&end);
 
-                    TypeExpression::MaybeType {
-                        inner: inner.boxed(),
-                    }
-                    .with_src(src)
+                    TypeExpression::MaybeType(inner.boxed()).with_src(src)
                 }
             )
         );
@@ -411,10 +408,7 @@ fn type_expression(l: usize) -> impl Fn(Slice) -> ParseResult<Src<TypeExpression
                 |(element, end)| {
                     let src = element.src.clone().spanning(&end);
 
-                    TypeExpression::ArrayType {
-                        element: element.boxed(),
-                    }
-                    .with_src(src)
+                    TypeExpression::ArrayType(element.boxed()).with_src(src)
                 }
             )
         );
@@ -434,26 +428,18 @@ fn type_expression(l: usize) -> impl Fn(Slice) -> ParseResult<Src<TypeExpression
                         preceded(whitespace, tag(")"))
                     )),
                     |(open, inner, close)| {
-                        TypeExpression::ParenthesizedType {
-                            inner: inner.boxed(),
-                        }
-                        .with_src(open.spanning(&close))
+                        TypeExpression::ParenthesizedType(inner.boxed())
+                            .with_src(open.spanning(&close))
                     }
                 ),
                 map(exact_string_literal, |s| {
-                    s.map(|s| TypeExpression::LiteralType {
-                        value: LiteralTypeValue::ExactString(s),
-                    })
+                    s.map(|s| TypeExpression::LiteralType(LiteralTypeValue::ExactString(s)))
                 }),
                 map(number_literal, |s| {
-                    s.map(|s| TypeExpression::LiteralType {
-                        value: LiteralTypeValue::NumberLiteral(s),
-                    })
+                    s.map(|s| TypeExpression::LiteralType(LiteralTypeValue::NumberLiteral(s)))
                 }),
                 map(boolean_literal, |s| {
-                    s.map(|s| TypeExpression::LiteralType {
-                        value: LiteralTypeValue::BooleanLiteral(s),
-                    })
+                    s.map(|s| TypeExpression::LiteralType(LiteralTypeValue::BooleanLiteral(s)))
                 }),
                 map(tag("string"), |s: Slice| {
                     TypeExpression::StringType.with_src(s)
@@ -477,7 +463,7 @@ fn type_expression(l: usize) -> impl Fn(Slice) -> ParseResult<Src<TypeExpression
             map(plain_identifier, |name| {
                 let src = name.0.clone();
 
-                TypeExpression::NamedType { name }.with_src(src)
+                TypeExpression::NamedType(name).with_src(src)
             })
         );
 
@@ -1035,8 +1021,8 @@ fn object_literal(i: Slice) -> ParseResult<Src<ObjectLiteral>> {
                 )),
             ),
             |(open_bracket, (entries, close_bracket))| {
-                ObjectLiteral {
-                    entries: entries
+                ObjectLiteral(
+                    entries
                         .into_iter()
                         .map(|(key, value)| {
                             let src = key.clone().spanning(&value.src);
@@ -1048,7 +1034,7 @@ fn object_literal(i: Slice) -> ParseResult<Src<ObjectLiteral>> {
                             .with_src(src)
                         })
                         .collect(),
-                }
+                )
                 .with_src(open_bracket.spanning(&close_bracket))
             },
         ),
@@ -1075,12 +1061,12 @@ fn array_literal(i: Slice) -> ParseResult<Src<ArrayLiteral>> {
                 )),
             ),
             |(open_bracket, (entries, close_bracket))| {
-                ArrayLiteral {
-                    entries: entries
+                ArrayLiteral(
+                    entries
                         .into_iter()
                         .map(|x| x.map(ArrayLiteralEntry::Element))
                         .collect(),
-                }
+                )
                 .with_src(open_bracket.spanning(&close_bracket))
             },
         ),
@@ -1152,21 +1138,16 @@ fn number_literal(i: Slice) -> ParseResult<Src<NumberLiteral>> {
             let back = tail.map(|(_, decimal)| decimal).unwrap_or(int);
             let full = front.spanning(&back);
 
-            NumberLiteral {
-                value: full.clone(),
-            }
-            .with_src(full)
+            NumberLiteral(full.clone()).with_src(full)
         },
     )(i)
 }
 
 fn boolean_literal(input: Slice) -> ParseResult<Src<BooleanLiteral>> {
-    let parse_true = map(tag("true"), |src: Slice| {
-        BooleanLiteral { value: true }.with_src(src)
-    });
+    let parse_true = map(tag("true"), |src: Slice| BooleanLiteral(true).with_src(src));
 
     let parse_false = map(tag("false"), |src: Slice| {
-        BooleanLiteral { value: false }.with_src(src)
+        BooleanLiteral(false).with_src(src)
     });
 
     alt((parse_true, parse_false))(input)
