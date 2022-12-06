@@ -200,7 +200,21 @@ impl Resolve for Src<Expression> {
             Expression::IfElseExpression {
                 cases,
                 default_case,
-            } => todo!(),
+            } => {
+                for (condition, outcome) in cases {
+                    if condition.contains(at) {
+                        return condition.resolve_symbol(symbol, at);
+                    } else if outcome.contains(at) {
+                        return outcome.resolve_symbol(symbol, at);
+                    }
+                }
+
+                if let Some(default_case) = default_case {
+                    if default_case.contains(at) {
+                        return default_case.resolve_symbol(symbol, at);
+                    }
+                }
+            }
             Expression::SwitchExpression {
                 value,
                 cases,

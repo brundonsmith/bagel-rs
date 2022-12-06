@@ -1,3 +1,5 @@
+use std::time::SystemTime;
+
 use crate::{
     model::ast::*,
     model::bgl_type::Type,
@@ -7,6 +9,7 @@ use crate::{
     },
     passes::resolve::Resolve,
     passes::typeinfer::InferTypeContext,
+    DEBUG_MODE,
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -21,8 +24,18 @@ pub trait Check<'a> {
 
 impl<'a> Check<'a> for Module {
     fn check<F: FnMut(BagelError)>(&self, ctx: CheckContext<'a>, report_error: &mut F) {
+        let start = SystemTime::now();
+
         for decl in &self.declarations {
             decl.check(ctx, report_error);
+        }
+
+        if DEBUG_MODE {
+            println!(
+                "* Checking {:?} took {}ms",
+                self.module_id,
+                start.elapsed().unwrap().as_millis()
+            );
         }
     }
 }
@@ -167,7 +180,7 @@ impl<'a> Check<'a> for Src<Expression> {
                     report_error(BagelError::NotFoundError {
                         module_id: ctx.current_module.module_id.clone(),
                         identifier: LocalIdentifier(name.clone()),
-                    })
+                    });
                 }
             }
             Expression::InlineConstGroup {
@@ -215,7 +228,30 @@ impl<'a> Check<'a> for Src<Expression> {
             Expression::IfElseExpression {
                 cases,
                 default_case,
-            } => todo!(),
+            } => {
+                let truthiness_safe = Type::get_truthiness_safe_types();
+
+                for (condition, outcome) in cases {
+                    let condition_type = condition.infer_type(ctx.into());
+
+                    if let Some(issues) =
+                        truthiness_safe.subsumation_issues(ctx.into(), &condition_type)
+                    {
+                        report_error(BagelError::AssignmentError {
+                            module_id: ctx.current_module.module_id.clone(),
+                            src: condition.src.clone(),
+                            issues,
+                        });
+                    }
+
+                    condition.check(ctx, report_error);
+                    outcome.check(ctx, report_error);
+                }
+
+                if let Some(default_case) = default_case {
+                    default_case.check(ctx, report_error);
+                }
+            }
             Expression::SwitchExpression {
                 value,
                 cases,

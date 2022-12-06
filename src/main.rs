@@ -13,12 +13,14 @@ use clap::{command, Parser};
 use cli::Command;
 use colored::Colorize;
 use glob::glob;
-use model::module::{Module, ModuleID, ModulesStore};
+use model::module::{ModuleID, ModulesStore};
 
 use crate::{
     model::errors::BagelError,
     passes::check::{Check, CheckContext},
 };
+
+pub const DEBUG_MODE: bool = true;
 
 #[derive(Parser, Debug, Clone)]
 // #[command(author, version, about, long_about = None)]

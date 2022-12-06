@@ -5,7 +5,7 @@ use nom::{AsChar, Compare, InputIter, InputLength, InputTake, Offset, Unspeciali
 
 use crate::utils::Loggable;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct Slice {
     pub full_string: Rc<String>,
     pub start: usize,
@@ -22,9 +22,7 @@ impl Slice {
             end,
         }
     }
-}
 
-impl Slice {
     pub fn len(&self) -> usize {
         self.end - self.start
     }
@@ -59,6 +57,12 @@ impl Slice {
             start: self.start + start,
             end: end.map(|end| self.start + end).unwrap_or(self.end),
         }
+    }
+}
+
+impl Debug for Slice {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("Slice({:?})", self.as_str()))
     }
 }
 

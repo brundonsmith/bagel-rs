@@ -1,5 +1,6 @@
-use std::{rc::Rc, str::FromStr};
+use std::{rc::Rc, str::FromStr, time::SystemTime};
 
+use boa::syntax::ast::node::Switch;
 use nom::{
     branch::alt,
     bytes::complete::{escaped, tag, take_while, take_while1},
@@ -15,15 +16,27 @@ use crate::{
     model::ast::*,
     model::{errors::ParseError, module::ModuleID},
     model::{module::Module, slice::Slice},
+    DEBUG_MODE,
 };
+
+use memoize::memoize;
 
 pub fn parse(module_id: ModuleID, module_src: Rc<String>) -> Result<Module, ParseError> {
     let bgl = Slice::new(module_src.clone());
 
+    let start = SystemTime::now();
     let res = complete(terminated(
         separated_list0(whitespace, declaration),
         whitespace,
     ))(bgl);
+
+    if DEBUG_MODE {
+        println!(
+            "* Parsing  {:?} took {}ms",
+            module_id,
+            start.elapsed().unwrap().as_millis()
+        );
+    }
 
     match res {
         Ok((i, declarations)) => {
@@ -395,11 +408,71 @@ fn type_expression(l: usize) -> impl Fn(Slice) -> ParseResult<Src<TypeExpression
     move |i: Slice| -> ParseResult<Src<TypeExpression>> {
         let mut tl = 0;
 
-        // typeofType, keyofValueofElementofType, readonlyType
+        type_expr_level!(
+            l,
+            tl,
+            i,
+            map(
+                tuple((tag("typeof"), preceded(whitespace, expression(0)))),
+                |(keyword, expr)| {
+                    let src = keyword.clone().spanning(&expr.src);
+
+                    TypeExpression::TypeofType(expr).with_src(src)
+                }
+            )
+        );
+
+        type_expr_level!(
+            l,
+            tl,
+            i,
+            map(
+                tuple((
+                    alt((
+                        tag("keyof"),
+                        tag("valueof"),
+                        tag("elementof"),
+                        tag("readonly")
+                    )),
+                    preceded(whitespace, type_expression(0))
+                )),
+                |(keyword, t)| {
+                    let src = keyword.clone().spanning(&t.src);
+                    let inner = t.boxed();
+
+                    match keyword.as_str() {
+                        "keyof" => TypeExpression::KeyofType(inner),
+                        "valueof" => TypeExpression::ValueofType(inner),
+                        "elementof" => TypeExpression::ElementofType(inner),
+                        "readonly" => TypeExpression::ReadonlyType(inner),
+                        _ => unreachable!(),
+                    }
+                    .with_src(src)
+                }
+            )
+        );
 
         // generic type
 
-        // union type
+        type_expr_level!(
+            l,
+            tl,
+            i,
+            map(
+                separated_list2(
+                    preceded(whitespace, tag("|")),
+                    preceded(whitespace, type_expression(tl + 1))
+                ),
+                |members| {
+                    let src = members[0]
+                        .src
+                        .clone()
+                        .spanning(&members[members.len() - 1].src);
+
+                    TypeExpression::UnionType(members).with_src(src)
+                }
+            )
+        );
 
         type_expr_level!(
             l,
@@ -436,9 +509,11 @@ fn type_expression(l: usize) -> impl Fn(Slice) -> ParseResult<Src<TypeExpression
             tl,
             i,
             alt((
-                // funcType, procType,
-                //         recordType, interfaceType, objectType,
-                //         tupleType
+                map(func_type, |s| s.map(TypeExpression::from)),
+                map(proc_type, |s| s.map(TypeExpression::from)),
+                map(record_type, |s| s.map(TypeExpression::from)),
+                object_or_interface_type,
+                map(tuple_type, |s| s.map(TypeExpression::from)),
                 map(
                     tuple((
                         tag("("),
@@ -492,23 +567,147 @@ fn type_expression(l: usize) -> impl Fn(Slice) -> ParseResult<Src<TypeExpression
     }
 }
 
+#[memoize]
+fn func_type(i: Slice) -> ParseResult<Src<FuncType>> {
+    map(
+        tuple((
+            args,
+            preceded(whitespace, tag("=>")),
+            preceded(whitespace, type_expression(0)),
+        )),
+        |(args, _, returns)| {
+            let src = args // TODO: func type with 0 arguments will have weird src
+                .get(0)
+                .map(|a| a.src.clone())
+                .unwrap_or_else(|| returns.src.clone())
+                .spanning(&returns.src);
+
+            FuncType {
+                args,
+                args_spread: None, // TODO
+                is_pure: false,    // TODO
+                returns: Some(returns.boxed()),
+            }
+            .with_src(src)
+        },
+    )(i)
+}
+
+#[memoize]
+fn proc_type(i: Slice) -> ParseResult<Src<ProcType>> {
+    map(
+        tuple((
+            args,
+            preceded(whitespace, tag("(")),
+            preceded(whitespace, tag(")")),
+            preceded(whitespace, tag("{")),
+            preceded(whitespace, tag("}")),
+        )),
+        |(args, _, _, _, close)| {
+            let src = args // TODO: proc type with 0 arguments will have weird src
+                .get(0)
+                .map(|a| a.src.clone())
+                .unwrap_or_else(|| close.clone())
+                .spanning(&close);
+
+            ProcType {
+                args,
+                args_spread: None, // TODO
+                is_pure: false,    // TODO
+                is_async: false,   // TODO
+                throws: None,      // TODO
+            }
+            .with_src(src)
+        },
+    )(i)
+}
+
+#[memoize]
+fn record_type(i: Slice) -> ParseResult<Src<RecordType>> {
+    map(
+        tuple((
+            tag("{"),
+            preceded(whitespace, tag("[")),
+            preceded(whitespace, type_expression(0)),
+            preceded(whitespace, tag("]")),
+            preceded(whitespace, tag(":")),
+            preceded(whitespace, type_expression(0)),
+            preceded(whitespace, tag("}")),
+        )),
+        |(open, _, key_type, _, _, value_type, close)| {
+            RecordType {
+                key_type: key_type.boxed(),
+                value_type: value_type.boxed(),
+            }
+            .with_src(open.spanning(&close))
+        },
+    )(i)
+}
+
+#[memoize]
+fn object_or_interface_type(i: Slice) -> ParseResult<Src<TypeExpression>> {
+    map(
+        tuple((
+            opt(tag("interface")),
+            preceded(whitespace, tag("{")),
+            separated_list0(
+                preceded(whitespace, tag(",")),
+                preceded(whitespace, key_value_type_expression),
+            ),
+            preceded(whitespace, tag("}")),
+        )),
+        |(interface, open, entries, close)| {
+            if let Some(interface) = interface {
+                TypeExpression::InterfaceType(entries).with_src(interface.spanning(&close))
+            } else {
+                TypeExpression::ObjectType(
+                    entries
+                        .into_iter()
+                        .map(|(key, value)| ObjectTypeEntry::KeyValue(key, value.boxed()))
+                        .collect(),
+                )
+                .with_src(open.spanning(&close))
+            }
+        },
+    )(i)
+}
+
+fn key_value_type_expression(i: Slice) -> ParseResult<(PlainIdentifier, Src<TypeExpression>)> {
+    separated_pair(
+        preceded(whitespace, plain_identifier),
+        cut(preceded(whitespace, char(':'))),
+        preceded(whitespace, type_expression(0)),
+    )(i)
+}
+
+fn tuple_type(i: Slice) -> ParseResult<Src<TupleType>> {
+    map(
+        tuple((
+            tag("["),
+            separated_list0(
+                preceded(whitespace, tag(",")),
+                preceded(whitespace, type_expression(0)),
+            ),
+            preceded(whitespace, tag("]")),
+        )),
+        |(open, members, close)| TupleType(members).with_src(open.spanning(&close)),
+    )(i)
+}
+
 // --- Statement ---
 
 fn statement(i: Slice) -> ParseResult<Src<Statement>> {
-    preceded(
-        whitespace,
-        alt((
-            // map(declaration_statement, |x| x.map(Statement::from)),
-            map(if_else_statement, |x| x.map(Statement::from)),
-            map(for_loop, |x| x.map(Statement::from)),
-            map(while_loop, |x| x.map(Statement::from)),
-            // map(assignment, |x| x.map(Statement::from)),
-            // map(try_catch, |x| x.map(Statement::from)),
-            map(throw_statement, |x| x.map(Statement::from)),
-            map(autorun, |x| x.map(Statement::from)),
-            // map(invocation_statement, |x| x.map(Statement::from)),
-        )),
-    )(i)
+    alt((
+        // map(declaration_statement, |x| x.map(Statement::from)),
+        map(if_else_statement, |x| x.map(Statement::from)),
+        map(for_loop, |x| x.map(Statement::from)),
+        map(while_loop, |x| x.map(Statement::from)),
+        // map(assignment, |x| x.map(Statement::from)),
+        // map(try_catch, |x| x.map(Statement::from)),
+        map(throw_statement, |x| x.map(Statement::from)),
+        map(autorun, |x| x.map(Statement::from)),
+        // map(invocation_statement, |x| x.map(Statement::from)),
+    ))(i)
 }
 
 fn declaration_statement(i: Slice) -> ParseResult<Src<DeclarationStatement>> {
@@ -617,6 +816,7 @@ fn throw_statement(i: Slice) -> ParseResult<Src<ThrowStatement>> {
     )(i)
 }
 
+#[memoize]
 fn autorun(i: Slice) -> ParseResult<Src<Autorun>> {
     map(
         tuple((
@@ -705,22 +905,15 @@ fn expression(l: usize) -> impl Fn(Slice) -> ParseResult<Src<Expression>> {
 
         expr_level!(l, tl, i, range_expression);
 
-        // this_level += 1;
-        // if level <= this_level {
-        //     let res = (i.clone());
-        //     if res.is_ok() {
-        //         return res;
-        //     }
-        // }
-
         expr_level!(l, tl, i, parenthesis(tl));
+
         expr_level!(
             l,
             tl,
             i,
             alt((
                 map(if_else_expression, |x| x.map(Expression::from)),
-                // map(switch_expression, |x| x.map(Expression::from)),
+                map(switch_expression, |x| x.map(Expression::from)),
                 // map(inline_const_group, |x| x.map(Expression::from)),
                 map(object_literal, |x| x.map(Expression::from)),
                 map(array_literal, |x| x.map(Expression::from)),
@@ -882,14 +1075,14 @@ fn element_tag(i: Slice) -> ParseResult<Src<ElementTag>> {
     todo!()
 }
 
-fn switch_expression(i: Slice) -> ParseResult<Src<SwitchExpression>> {
-    todo!()
-}
-
+#[memoize]
 fn if_else_expression(i: Slice) -> ParseResult<Src<IfElseExpression>> {
     map(
         tuple((
-            separated_list1(preceded(whitespace, tag("else")), if_else_expression_case),
+            separated_list1(
+                preceded(whitespace, tag("else")),
+                preceded(whitespace, if_else_expression_case),
+            ),
             opt(preceded(
                 whitespace,
                 tuple((
@@ -930,6 +1123,51 @@ fn if_else_expression_case(i: Slice) -> ParseResult<Src<(Src<Expression>, Src<Ex
     )(i)
 }
 
+#[memoize]
+fn switch_expression(i: Slice) -> ParseResult<Src<SwitchExpression>> {
+    map(
+        tuple((
+            tag("switch"),
+            preceded(whitespace, expression(0)),
+            preceded(whitespace, tag("{")),
+            preceded(
+                whitespace,
+                separated_list1(
+                    preceded(whitespace, tag(",")),
+                    preceded(
+                        whitespace,
+                        map(
+                            tuple((
+                                tag("case"),
+                                preceded(whitespace, type_expression(0)),
+                                preceded(whitespace, tag(":")),
+                                preceded(whitespace, expression(0)),
+                            )),
+                            |(keyword, typ, _, expr)| (typ, expr),
+                        ),
+                    ),
+                ),
+            ),
+            opt(preceded(
+                whitespace,
+                map(
+                    tuple((tag("default"), preceded(whitespace, expression(0)))),
+                    |(_, expr)| expr,
+                ),
+            )),
+            preceded(whitespace, tag("}")),
+        )),
+        |(start, value, _, cases, default_case, end)| {
+            SwitchExpression {
+                value: value.boxed(),
+                cases,
+                default_case: default_case.map(Box::new),
+            }
+            .with_src(start.spanning(&end))
+        },
+    )(i)
+}
+
 fn range_expression(i: Slice) -> ParseResult<Src<RangeExpression>> {
     map(
         tuple((number_literal, tag(".."), number_literal)),
@@ -953,6 +1191,7 @@ fn proc(i: Slice) -> ParseResult<Src<Proc>> {
     todo!()
 }
 
+#[memoize]
 fn func(i: Slice) -> ParseResult<Src<Func>> {
     map(
         tuple((
@@ -1025,6 +1264,7 @@ fn parenthesis(level: usize) -> impl Parser<Slice, Src<Parenthesis>, RawParseErr
     }
 }
 
+#[memoize]
 fn object_literal(i: Slice) -> ParseResult<Src<ObjectLiteral>> {
     context(
         "object",
@@ -1032,7 +1272,7 @@ fn object_literal(i: Slice) -> ParseResult<Src<ObjectLiteral>> {
             pair(
                 tag("{"),
                 cut(pair(
-                    separated_list0(preceded(whitespace, char(',')), key_value),
+                    separated_list0(preceded(whitespace, char(',')), key_value_expression),
                     preceded(whitespace, tag("}")),
                 )),
             ),
@@ -1057,7 +1297,7 @@ fn object_literal(i: Slice) -> ParseResult<Src<ObjectLiteral>> {
     )(i)
 }
 
-fn key_value(i: Slice) -> ParseResult<(Slice, Src<Expression>)> {
+fn key_value_expression(i: Slice) -> ParseResult<(Slice, Src<Expression>)> {
     separated_pair(
         preceded(whitespace, identifier_like),
         cut(preceded(whitespace, char(':'))),
@@ -1065,6 +1305,7 @@ fn key_value(i: Slice) -> ParseResult<(Slice, Src<Expression>)> {
     )(i)
 }
 
+#[memoize]
 fn array_literal(i: Slice) -> ParseResult<Src<ArrayLiteral>> {
     context(
         "array",
@@ -1089,6 +1330,7 @@ fn array_literal(i: Slice) -> ParseResult<Src<ArrayLiteral>> {
     )(i)
 }
 
+#[memoize]
 fn string_literal(i: Slice) -> ParseResult<Src<StringLiteral>> {
     context(
         "string",
@@ -1199,6 +1441,27 @@ fn numeric(i: Slice) -> ParseResult<Slice> {
 
 fn whitespace(i: Slice) -> ParseResult<Slice> {
     take_while(|c| c == ' ' || c == '\n' || c == '\t' || c == '\r')(i)
+}
+
+fn separated_list2<O, O2, F, G>(sep: G, f: F) -> impl FnMut(Slice) -> ParseResult<Vec<O>>
+where
+    F: Parser<Slice, O, RawParseError>,
+    G: Parser<Slice, O2, RawParseError>,
+{
+    let mut parser = separated_list1(sep, f);
+
+    move |i: Slice| -> ParseResult<Vec<O>> {
+        let res = parser(i)?;
+
+        if res.1.len() < 2 {
+            Err(nom::Err::Error(RawParseError {
+                src: res.0,
+                details: RawParseErrorDetails::Kind(ErrorKind::SeparatedList),
+            }))
+        } else {
+            Ok(res)
+        }
+    }
 }
 
 // --- Util types ---

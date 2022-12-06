@@ -1,6 +1,7 @@
 use std::fmt::{Display, Write};
 
 use enum_variant_type::EnumVariantType;
+use lazy_static::lazy_static;
 
 use crate::{
     model::ast::Mutability,
@@ -102,6 +103,29 @@ impl Type {
         max: None,
     };
     pub const ANY_BOOLEAN: Type = Type::BooleanType(None);
+
+    pub fn get_truthiness_safe_types() -> Type {
+        Type::UnionType(vec![
+            Type::ANY_BOOLEAN,
+            Type::NilType,
+            // RECORD_OF_ANY,
+            // ARRAY_OF_ANY,
+            // ITERATOR_OF_ANY,
+            // PLAN_OF_ANY,
+            // PROC,
+            // FUNC
+        ])
+    }
+
+    // export const FALSY: UnionType = {
+    //     kind: "union-type",
+    //     members: [
+    //         FALSE_TYPE,
+    //         NIL_TYPE,
+    //         ERROR_OF_ANY
+    //     ],
+    //     ...TYPE_AST_NOISE
+    // }
 
     pub fn subsumes<'a>(&self, ctx: SubsumationContext<'a>, other: &Self) -> bool {
         self.subsumation_issues(ctx, other).is_none()
