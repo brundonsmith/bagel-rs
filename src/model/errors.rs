@@ -1,6 +1,6 @@
 use std::{fmt::Write, usize};
 
-use colored::Colorize;
+use colored::{Color, Colorize};
 use enum_variant_type::EnumVariantType;
 
 use crate::{model::ast::LocalIdentifier, model::bgl_type::SubsumationIssue, model::slice::Slice};
@@ -147,14 +147,6 @@ fn error_heading<W: Write>(
 }
 
 fn code_block_highlighted<W: Write>(f: &mut W, highlighted_slice: &Slice) -> std::fmt::Result {
-    let mut highlighted = String::with_capacity(highlighted_slice.full_string.len());
-    highlighted += &highlighted_slice.full_string[0..highlighted_slice.start];
-    highlighted += highlighted_slice.full_string[highlighted_slice.start..highlighted_slice.end]
-        .red()
-        .to_string()
-        .as_str();
-    highlighted += &highlighted_slice.full_string[highlighted_slice.end..];
-
     let mut lines_and_starts = vec![];
     let mut next_line_start = 0;
     let mut first_error_line = 0;
@@ -213,17 +205,20 @@ fn code_block_highlighted<W: Write>(f: &mut W, highlighted_slice: &Slice) -> std
         f.write_str("  ")?;
 
         if line_slice.end < highlighted_slice.start || line_slice.start > highlighted_slice.end {
+            // white, entire line is before or after the highlighted part
             f.write_str(line)?;
         } else if highlighted_slice.contains(&line_slice) {
+            // red, entire line is within the highlighted part
             f.write_str(line.red().to_string().as_str())?;
-        } else if line_slice.start < highlighted_slice.start {
-            let src_start = highlighted_slice.start - line_slice.start;
-            f.write_str(&line[0..src_start])?;
-            f.write_str(&line[src_start..].red().to_string().as_str())?;
         } else {
-            let src_end = highlighted_slice.end - line_slice.start;
-            f.write_str(&line[0..src_end].red().to_string().as_str())?;
-            f.write_str(&line[src_end..])?;
+            let red_start = highlighted_slice.start - line_slice.start;
+            let red_end = usize::min(
+                highlighted_slice.end - usize::min(line_slice.start, highlighted_slice.end),
+                line.len(),
+            );
+            f.write_str(&line[0..red_start])?;
+            f.write_str(&line[red_start..red_end].red().to_string().as_str())?;
+            f.write_str(&line[red_end..])?;
         }
 
         f.write_char('\n')?;
