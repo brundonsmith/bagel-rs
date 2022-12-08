@@ -86,7 +86,7 @@ impl ModuleID {
                 let cache_path = cache_path(url.as_ref());
 
                 if !clean {
-                    if let Some(cache_path) = cache_path {
+                    if let Some(cache_path) = &cache_path {
                         if let Some(cached) = std::fs::read_to_string(cache_path).ok() {
                             return Some(cached);
                         }
@@ -101,8 +101,8 @@ impl ModuleID {
                 if let Some(loaded) = loaded {
                     println!("{} {}", cli_label("Downloaded", Color::Green), url.as_str());
 
-                    if let Some(cache_path) = cache_path {
-                        let write_res = std::fs::write(cache_path, loaded);
+                    if let Some(cache_path) = &cache_path {
+                        let write_res = std::fs::write(cache_path, &loaded);
 
                         if write_res.is_err() {
                             println!(
@@ -141,6 +141,7 @@ fn cache_path(url: &Url) -> Option<PathBuf> {
             .map(|base_dir| base_dir.join("./Cache"))
             .ok(),
         "linux" => std::env::var("XDG_CACHE_HOME").map(PathBuf::from).ok(),
+        _ => None,
     }
     .map(|base_dir| base_dir.join("./bagel"))
     .map(|base_dir| base_dir.join(url_escape::encode_fragment(url.as_str()).to_string() + ".bgl"))

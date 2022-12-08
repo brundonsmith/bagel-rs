@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{path::PathBuf, rc::Rc};
 
 use crate::{model::module::ModuleID, passes::compile::Compile, passes::parse::parse};
 
@@ -767,7 +767,7 @@ fn Comment_test_block() {
 
 fn test_compile(bgl: &str, js: &str) {
     let parsed = parse(
-        ModuleID::from("/foo/bar.bgl".to_owned()),
+        ModuleID::try_from(PathBuf::from("/foo/bar.bgl").as_path()).unwrap(),
         Rc::new(bgl.to_owned() + " "),
     )
     .unwrap();

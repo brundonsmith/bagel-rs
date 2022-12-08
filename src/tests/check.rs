@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ops::Add, rc::Rc};
+use std::{collections::HashMap, ops::Add, path::PathBuf, rc::Rc};
 
 use crate::{gather_errors, model::module::ModuleID, passes::parse::parse, print_errors};
 
@@ -3860,7 +3860,7 @@ fn Pure_procs_fail_3() {
 }
 
 fn test_check(bgl: &str, should_fail: bool) {
-    let module_id = ModuleID::from("/foo/bar.bgl".to_owned());
+    let module_id = ModuleID::try_from(PathBuf::from("/foo/bar.bgl").as_path()).unwrap();
 
     let parsed = parse(module_id.clone(), Rc::new(bgl.to_owned() + " ")).unwrap();
 
