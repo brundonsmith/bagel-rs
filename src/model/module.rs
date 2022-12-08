@@ -3,6 +3,7 @@ use std::path::Path;
 use std::{collections::HashMap, path::PathBuf, rc::Rc};
 
 use colored::Color;
+use memoize::memoize;
 use reqwest::Url;
 
 use crate::passes::parse::parse;
@@ -88,7 +89,16 @@ impl ModuleID {
         match self {
             ModuleID::Local(path) => std::fs::read_to_string(path.as_ref()).ok(),
             ModuleID::Remote(url) => {
-                let cache_path = cache_path(url.as_ref());
+                let cache_dir = cache_dir();
+                let cache_path = cache_dir.as_ref().map(|base_dir| {
+                    base_dir.join(url_escape::encode_component(url.as_str()).to_string() + ".bgl")
+                });
+
+                if let Some(cache_dir) = cache_dir {
+                    if !cache_dir.exists() {
+                        std::fs::create_dir_all(cache_dir);
+                    }
+                }
 
                 if !clean {
                     if let Some(cache_path) = &cache_path {
@@ -133,7 +143,8 @@ impl ModuleID {
     }
 }
 
-fn cache_path(url: &Url) -> Option<PathBuf> {
+#[memoize]
+fn cache_dir() -> Option<PathBuf> {
     match std::env::consts::OS {
         "macos" => std::env::var("HOME")
             .map(|home_dir| PathBuf::from(home_dir).join("Library/Caches"))
@@ -149,7 +160,6 @@ fn cache_path(url: &Url) -> Option<PathBuf> {
         _ => None,
     }
     .map(|base_dir| base_dir.join("bagel"))
-    .map(|base_dir| base_dir.join(url_escape::encode_component(url.as_str()).to_string() + ".bgl"))
 }
 
 impl Display for ModuleID {
