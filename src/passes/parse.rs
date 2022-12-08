@@ -4,7 +4,7 @@ use boa::syntax::ast::node::Switch;
 use nom::{
     branch::alt,
     bytes::complete::{escaped, tag, take_while, take_while1},
-    character::complete::{alphanumeric1, char, one_of},
+    character::complete::{char, one_of},
     combinator::{complete, cut, map, opt},
     error::{context, ErrorKind},
     multi::{many0, separated_list0, separated_list1},
@@ -19,6 +19,7 @@ use crate::{
     DEBUG_MODE,
 };
 
+use crate::utils::Loggable;
 use memoize::memoize;
 
 pub fn parse(module_id: ModuleID, module_src: Rc<String>) -> Result<Module, ParseError> {
@@ -1350,12 +1351,13 @@ fn string_literal(i: Slice) -> ParseResult<Src<StringLiteral>> {
     )(i)
 }
 
+#[memoize]
 fn exact_string_literal(i: Slice) -> ParseResult<Src<ExactStringLiteral>> {
     context(
         "string",
         map(
-            pair(tag("\'"), cut(pair(string_contents, tag("\'")))),
-            |(open_quote, (contents, close_quote))| {
+            tuple((tag("\'"), string_contents, tag("\'"))),
+            |(open_quote, contents, close_quote)| {
                 ExactStringLiteral {
                     tag: None, // TODO
                     value: contents,
@@ -1385,7 +1387,7 @@ fn string_literal_segment(i: Slice) -> ParseResult<Src<StringLiteralSegment>> {
 }
 
 fn string_contents(i: Slice) -> ParseResult<Slice> {
-    escaped(alphanumeric1, '\\', one_of("$\"n\\"))(i)
+    escaped(take_while(|ch: char| ch != '\''), '\\', one_of("$\'n\\"))(i)
 }
 
 fn number_literal(i: Slice) -> ParseResult<Src<NumberLiteral>> {
