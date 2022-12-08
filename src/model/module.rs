@@ -48,10 +48,15 @@ impl ModulesStore {
                     .collect();
 
                 for path in imported {
-                    let path = Path::new(&path);
-                    let full_path = path.to_owned(); //module_id.as_path().join(path);
-                    let other_module_id = ModuleID::try_from(full_path.as_path()).unwrap();
-                    // TODO: Handle https modules
+                    let other_module_id =
+                        if path.starts_with("https://") || path.starts_with("http://") {
+                            ModuleID::from(Url::parse(path.as_str()).unwrap())
+                        } else {
+                            let path = Path::new(&path);
+                            let full_path = path.to_owned(); //module_id.as_path().join(path);
+
+                            ModuleID::try_from(full_path.as_path()).unwrap()
+                        };
 
                     if !self.modules.contains_key(&other_module_id) {
                         self.load_module_and_dependencies(other_module_id, clean);
@@ -131,20 +136,20 @@ impl ModuleID {
 fn cache_path(url: &Url) -> Option<PathBuf> {
     match std::env::consts::OS {
         "macos" => std::env::var("HOME")
-            .map(|home_dir| PathBuf::from(home_dir).join("./Library/Caches"))
+            .map(|home_dir| PathBuf::from(home_dir).join("Library/Caches"))
             .ok(),
         "windows" => std::env::var("LOCALAPPDATA")
             .map(PathBuf::from)
             .or(std::env::var("USERPROFILE")
                 .map(PathBuf::from)
-                .map(|dir| dir.join("./AppData/Local")))
-            .map(|base_dir| base_dir.join("./Cache"))
+                .map(|dir| dir.join("AppData/Local")))
+            .map(|base_dir| base_dir.join("Cache"))
             .ok(),
         "linux" => std::env::var("XDG_CACHE_HOME").map(PathBuf::from).ok(),
         _ => None,
     }
-    .map(|base_dir| base_dir.join("./bagel"))
-    .map(|base_dir| base_dir.join(url_escape::encode_fragment(url.as_str()).to_string() + ".bgl"))
+    .map(|base_dir| base_dir.join("bagel"))
+    .map(|base_dir| base_dir.join(url_escape::encode_component(url.as_str()).to_string() + ".bgl"))
 }
 
 impl Display for ModuleID {
