@@ -2,7 +2,11 @@ use std::fmt::Display;
 use std::path::Path;
 use std::{collections::HashMap, path::PathBuf, rc::Rc};
 
+use colored::Color;
+use reqwest::Url;
+
 use crate::passes::parse::parse;
+use crate::utils::cli_label;
 
 use super::ast::{Declaration, Src};
 use super::errors::ParseError;
@@ -19,8 +23,8 @@ impl ModulesStore {
         }
     }
 
-    pub fn load_module_and_dependencies(&mut self, module_id: ModuleID) {
-        if let Some(mut bgl) = module_id.load() {
+    pub fn load_module_and_dependencies(&mut self, module_id: ModuleID, clean: bool) {
+        if let Some(mut bgl) = module_id.load(clean) {
             bgl.push('\n'); // https://github.com/Geal/nom/issues/1573
 
             let parsed = parse(module_id.clone(), Rc::new(bgl));
@@ -50,7 +54,7 @@ impl ModulesStore {
                     // TODO: Handle https modules
 
                     if !self.modules.contains_key(&other_module_id) {
-                        self.load_module_and_dependencies(other_module_id);
+                        self.load_module_and_dependencies(other_module_id, clean);
                     }
                 }
             }
@@ -71,26 +75,82 @@ impl From<HashMap<ModuleID, Result<Module, ParseError>>> for ModulesStore {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum ModuleID {
     Local(Rc<PathBuf>),
-    Remote(Rc<String>),
+    Remote(Rc<Url>),
 }
 
 impl ModuleID {
-    pub fn load(&self) -> Option<String> {
+    pub fn load(&self, clean: bool) -> Option<String> {
         match self {
             ModuleID::Local(path) => std::fs::read_to_string(path.as_ref()).ok(),
-            ModuleID::Remote(url) => reqwest::blocking::get(url.as_ref())
-                .ok()
-                .map(|res| res.text().ok())
-                .flatten(),
+            ModuleID::Remote(url) => {
+                let cache_path = cache_path(url.as_ref());
+
+                if !clean {
+                    if let Some(cache_path) = cache_path {
+                        if let Some(cached) = std::fs::read_to_string(cache_path).ok() {
+                            return Some(cached);
+                        }
+                    }
+                }
+
+                let loaded = reqwest::blocking::get(url.as_ref().clone())
+                    .ok()
+                    .map(|res| res.text().ok())
+                    .flatten();
+
+                if let Some(loaded) = loaded {
+                    println!("{} {}", cli_label("Downloaded", Color::Green), url.as_str());
+
+                    if let Some(cache_path) = cache_path {
+                        let write_res = std::fs::write(cache_path, loaded);
+
+                        if write_res.is_err() {
+                            println!(
+                                "{} failed writing cache of module {}",
+                                cli_label("Warning", Color::Yellow),
+                                url.as_str()
+                            );
+                        }
+                    }
+
+                    return Some(loaded);
+                } else {
+                    println!(
+                        "{} couldn't load remote module {}",
+                        cli_label("Error", Color::Red),
+                        url.as_str()
+                    );
+                }
+
+                None
+            }
         }
     }
+}
+
+fn cache_path(url: &Url) -> Option<PathBuf> {
+    match std::env::consts::OS {
+        "macos" => std::env::var("HOME")
+            .map(|home_dir| PathBuf::from(home_dir).join("./Library/Caches"))
+            .ok(),
+        "windows" => std::env::var("LOCALAPPDATA")
+            .map(PathBuf::from)
+            .or(std::env::var("USERPROFILE")
+                .map(PathBuf::from)
+                .map(|dir| dir.join("./AppData/Local")))
+            .map(|base_dir| base_dir.join("./Cache"))
+            .ok(),
+        "linux" => std::env::var("XDG_CACHE_HOME").map(PathBuf::from).ok(),
+    }
+    .map(|base_dir| base_dir.join("./bagel"))
+    .map(|base_dir| base_dir.join(url_escape::encode_fragment(url.as_str()).to_string() + ".bgl"))
 }
 
 impl Display for ModuleID {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ModuleID::Local(p) => f.write_str(&p.to_string_lossy()),
-            ModuleID::Remote(s) => f.write_str(s),
+            ModuleID::Remote(s) => f.write_str(s.as_str()),
         }
     }
 }
@@ -103,8 +163,8 @@ impl TryFrom<&Path> for ModuleID {
     }
 }
 
-impl From<String> for ModuleID {
-    fn from(s: String) -> Self {
+impl From<Url> for ModuleID {
+    fn from(s: Url) -> Self {
         Self::Remote(Rc::new(s))
     }
 }

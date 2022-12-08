@@ -18,6 +18,9 @@ pub enum Command {
 
         #[arg(long)]
         watch: bool,
+
+        #[arg(long)]
+        clean: bool,
     },
 
     /// Bundle into a single JS file and immediately run it
@@ -33,6 +36,9 @@ pub enum Command {
         /// Run using Deno
         #[arg(long)]
         deno: bool,
+
+        #[arg(long)]
+        clean: bool,
     },
 
     Transpile {
@@ -42,6 +48,9 @@ pub enum Command {
 
         #[arg(long)]
         watch: bool,
+
+        #[arg(long)]
+        clean: bool,
     },
 
     /// Typecheck and lint Bagel files
@@ -52,6 +61,9 @@ pub enum Command {
 
         #[arg(long)]
         watch: bool,
+
+        #[arg(long)]
+        clean: bool,
     },
 
     /// Run tests found in Bagel files
@@ -66,6 +78,9 @@ pub enum Command {
 
         #[arg(long)]
         watch: bool,
+
+        #[arg(long)]
+        clean: bool,
     },
 
     Clean {
@@ -93,14 +108,32 @@ impl Command {
         match self {
             Command::New { dir } => todo!(),
             Command::Init => todo!(),
-            Command::Build { target, watch } => todo!(),
-            Command::Run { target, node, deno } => todo!(),
-            Command::Transpile { target, watch } => todo!(),
-            Command::Check { target, watch } => todo!(),
+            Command::Build {
+                target,
+                watch,
+                clean,
+            } => todo!(),
+            Command::Run {
+                target,
+                node,
+                deno,
+                clean,
+            } => todo!(),
+            Command::Transpile {
+                target,
+                watch,
+                clean,
+            } => todo!(),
+            Command::Check {
+                target,
+                watch,
+                clean,
+            } => todo!(),
             Command::Test {
                 target,
                 test_filter,
                 watch,
+                clean,
             } => todo!(),
             Command::Clean { target } => todo!(),
         }

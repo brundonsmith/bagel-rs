@@ -11,13 +11,14 @@ use std::{collections::HashMap, ffi::OsStr, ops::Add, path::PathBuf, process::Ex
 
 use clap::{command, Parser};
 use cli::Command;
-use colored::Colorize;
+use colored::Color;
 use glob::glob;
 use model::module::{ModuleID, ModulesStore};
 
 use crate::{
     model::errors::BagelError,
     passes::check::{Check, CheckContext},
+    utils::cli_label,
 };
 
 pub const DEBUG_MODE: bool = true;
@@ -38,20 +39,18 @@ fn main() -> ExitCode {
             let index_path = project_path.clone().join("index.bgl");
 
             if project_path.exists() {
-                let failed = "Failed".red().to_string();
                 println!(
-                    "{}      Cannot create project directory {} because it already exists",
-                    failed,
+                    "{} Cannot create project directory {} because it already exists",
+                    cli_label("Failed", Color::Red),
                     project_path.to_string_lossy()
                 );
                 return ExitCode::FAILURE;
             } else {
                 std::fs::create_dir_all(project_path.clone()).unwrap();
                 std::fs::write(index_path, DEFAULT_INDEX_BGL).unwrap();
-                let created = "Created".green().to_string();
                 println!(
-                    "{}     new Bagel project {}",
-                    created,
+                    "{} new Bagel project {}",
+                    cli_label("Created", Color::Green),
                     project_path.to_string_lossy()
                 );
             }
@@ -60,20 +59,25 @@ fn main() -> ExitCode {
             let index_path = std::env::current_dir().unwrap().join("index.bgl");
 
             if index_path.exists() {
-                let failed = "Failed".red().to_string();
                 println!(
-                    "{}      Can't initialize Bagel project here because one already exists",
-                    failed
+                    "{} Can't initialize Bagel project here because one already exists",
+                    cli_label("Failed", Color::Red)
                 );
                 return ExitCode::FAILURE;
             } else {
                 std::fs::write(index_path, DEFAULT_INDEX_BGL).unwrap();
-                let initialized = "Initialized".green().to_string();
-                println!("{} Bagel project in current directory", initialized);
+                println!(
+                    "{} Bagel project in current directory",
+                    cli_label("Initialized", Color::Green)
+                );
             }
         }
-        Command::Build { target, watch } => {
-            let modules_store = load_and_parse(get_all_entrypoints(target));
+        Command::Build {
+            target,
+            watch,
+            clean,
+        } => {
+            let modules_store = load_and_parse(get_all_entrypoints(target), clean);
             let errors = gather_errors(&modules_store);
             print_error_results(&errors);
 
@@ -85,8 +89,13 @@ fn main() -> ExitCode {
             //  transpile
             //  then bundle
         }
-        Command::Run { target, node, deno } => {
-            let modules_store = load_and_parse(get_all_entrypoints(target));
+        Command::Run {
+            target,
+            node,
+            deno,
+            clean,
+        } => {
+            let modules_store = load_and_parse(get_all_entrypoints(target), clean);
             let errors = gather_errors(&modules_store);
             print_error_results(&errors);
 
@@ -99,8 +108,12 @@ fn main() -> ExitCode {
             //  then bundle
             //  then run
         }
-        Command::Transpile { target, watch } => {
-            let modules_store = load_and_parse(get_all_entrypoints(target));
+        Command::Transpile {
+            target,
+            watch,
+            clean,
+        } => {
+            let modules_store = load_and_parse(get_all_entrypoints(target), clean);
             let errors = gather_errors(&modules_store);
             print_error_results(&errors);
 
@@ -111,8 +124,12 @@ fn main() -> ExitCode {
             // if no errors,
             //  transpile
         }
-        Command::Check { target, watch } => {
-            let modules_store = load_and_parse(get_all_entrypoints(target));
+        Command::Check {
+            target,
+            watch,
+            clean,
+        } => {
+            let modules_store = load_and_parse(get_all_entrypoints(target), clean);
             let errors = gather_errors(&modules_store);
             print_error_results(&errors);
 
@@ -124,6 +141,7 @@ fn main() -> ExitCode {
             target,
             test_filter,
             watch,
+            clean,
         } => todo!(),
         Command::Clean { target } => todo!(),
     };
@@ -170,12 +188,12 @@ fn get_all_entrypoints(target: String) -> impl Iterator<Item = PathBuf> {
     })
 }
 
-fn load_and_parse<I: Iterator<Item = PathBuf>>(entrypoints: I) -> ModulesStore {
+fn load_and_parse<I: Iterator<Item = PathBuf>>(entrypoints: I, clean: bool) -> ModulesStore {
     let mut modules_store = ModulesStore::new();
 
     for path in entrypoints {
         let module_id = ModuleID::try_from(path.as_path()).unwrap();
-        modules_store.load_module_and_dependencies(module_id);
+        modules_store.load_module_and_dependencies(module_id, clean);
     }
 
     modules_store
@@ -227,10 +245,9 @@ fn print_error_results(errors: &HashMap<ModuleID, Vec<BagelError>>) {
             s_or_none(modules_checked)
         );
     } else {
-        let checked = "Checked".green().to_string();
         println!(
-            "{}     {} module{} and found no problems",
-            checked,
+            "{} {} module{} and found no problems",
+            cli_label("Checked", Color::Green),
             modules_checked,
             s_or_none(modules_checked)
         );

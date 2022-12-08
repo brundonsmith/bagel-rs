@@ -16,3 +16,4 @@ reqwest = { version = "0.11", features = ["blocking", "json"] }
 strum = "0.24"
 strum_macros = "0.24"
 memoize = "0.3.1"
+url-escape = "0.1.1"
