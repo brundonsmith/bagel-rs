@@ -110,6 +110,7 @@ impl ModuleID {
 
                 let loaded = reqwest::blocking::get(url.as_ref().clone())
                     .ok()
+                    .filter(|res| res.status().is_success())
                     .map(|res| res.text().ok())
                     .flatten();
 
