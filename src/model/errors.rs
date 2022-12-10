@@ -1,6 +1,6 @@
 use std::{fmt::Write, usize};
 
-use colored::{Color, Colorize};
+use colored::Colorize;
 use enum_variant_type::EnumVariantType;
 
 use crate::{model::ast::LocalIdentifier, model::bgl_type::SubsumationIssue, model::slice::Slice};

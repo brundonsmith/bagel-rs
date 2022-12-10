@@ -9,7 +9,7 @@ use reqwest::Url;
 use crate::passes::parse::parse;
 use crate::utils::cli_label;
 
-use super::ast::{Declaration, Src};
+use super::ast::{Declaration, Node};
 use super::errors::ParseError;
 
 #[derive(Debug)]
@@ -36,12 +36,12 @@ impl ModulesStore {
                     .declarations
                     .iter()
                     .filter_map(|decl| {
-                        if let Declaration::ImportAllDeclaration { name: _, path } = &decl.node {
-                            Some(path.node.value.as_str().to_owned())
+                        if let Declaration::ImportAllDeclaration { name: _, path } = decl.this() {
+                            Some(path.this().value.as_str().to_owned())
                         } else if let Declaration::ImportDeclaration { imports: _, path } =
-                            &decl.node
+                            decl.this()
                         {
-                            Some(path.node.value.as_str().to_owned())
+                            Some(path.this().value.as_str().to_owned())
                         } else {
                             None
                         }
@@ -190,5 +190,5 @@ impl From<Url> for ModuleID {
 pub struct Module {
     pub module_id: ModuleID,
     pub src: Rc<String>,
-    pub declarations: Vec<Src<Declaration>>,
+    pub declarations: Vec<Node<Declaration>>,
 }

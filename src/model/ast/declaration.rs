@@ -1,7 +1,7 @@
 use enum_variant_type::EnumVariantType;
 
 use super::{
-    ExactStringLiteral, Expression, Func, Invocation, LocalIdentifier, PlainIdentifier, Proc, Src,
+    ExactStringLiteral, Expression, Func, Invocation, LocalIdentifier, Node, PlainIdentifier, Proc,
     Statement, TypeExpression,
 };
 
@@ -10,45 +10,45 @@ pub enum Declaration {
     #[evt(derive(Debug, Clone, PartialEq))]
     ImportAllDeclaration {
         name: PlainIdentifier,
-        path: Src<ExactStringLiteral>,
+        path: Node<ExactStringLiteral>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ImportDeclaration {
         imports: Vec<(PlainIdentifier, Option<PlainIdentifier>)>,
-        path: Src<ExactStringLiteral>,
+        path: Node<ExactStringLiteral>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     TypeDeclaration {
         name: PlainIdentifier,
-        declared_type: Src<TypeExpression>,
+        declared_type: Node<TypeExpression>,
         exported: bool,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     FuncDeclaration {
         name: PlainIdentifier,
-        func: Src<Func>, // TODO:  | JsFunc
+        func: Node<Func>, // TODO:  | JsFunc
         exported: bool,
         platforms: PlatformSet,
-        decorators: Vec<Src<Decorator>>,
+        decorators: Vec<Node<Decorator>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ProcDeclaration {
         name: PlainIdentifier,
-        proc: Src<Proc>, // TODO:  | JsProc
+        proc: Node<Proc>, // TODO:  | JsProc
         exported: bool,
         platforms: PlatformSet,
-        decorators: Vec<Src<Decorator>>,
+        decorators: Vec<Node<Decorator>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ValueDeclaration {
         name: PlainIdentifier,
-        type_annotation: Option<Src<TypeExpression>>,
-        value: Src<Expression>,
+        type_annotation: Option<Node<TypeExpression>>,
+        value: Node<Expression>,
         is_const: bool,
         exported: bool,
         platforms: PlatformSet,
@@ -56,26 +56,26 @@ pub enum Declaration {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     TestExprDeclaration {
-        name: Src<ExactStringLiteral>,
-        expr: Src<Expression>,
+        name: Node<ExactStringLiteral>,
+        expr: Node<Expression>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     TestBlockDeclaration {
-        name: Src<ExactStringLiteral>,
-        block: Vec<Src<Statement>>,
+        name: Node<ExactStringLiteral>,
+        block: Vec<Node<Statement>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     TestTypeDeclaration {
-        name: Src<ExactStringLiteral>,
-        destination_type: Src<TypeExpression>,
-        value_type: Src<TypeExpression>,
+        name: Node<ExactStringLiteral>,
+        destination_type: Node<TypeExpression>,
+        value_type: Node<TypeExpression>,
     },
 }
 
 impl Declaration {
-    pub fn get_type_and_value(&self) -> Option<(Src<Expression>, Option<Src<TypeExpression>>)> {
+    pub fn get_value_and_type(&self) -> Option<(Node<Expression>, Option<Node<TypeExpression>>)> {
         match self {
             Declaration::FuncDeclaration {
                 name: _,
@@ -84,8 +84,8 @@ impl Declaration {
                 platforms: _,
                 decorators: _,
             } => Some((
-                func.clone().map(Expression::from),
-                Some(func.node.type_annotation.clone().map(TypeExpression::from)),
+                func.map_deep(Expression::from),
+                Some(func.this().type_annotation.map_deep(TypeExpression::from)),
             )),
             Declaration::ProcDeclaration {
                 name: _,
@@ -94,8 +94,8 @@ impl Declaration {
                 platforms: _,
                 decorators: _,
             } => Some((
-                proc.clone().map(Expression::from),
-                Some(proc.node.type_annotation.clone().map(TypeExpression::from)),
+                proc.map_deep(Expression::from),
+                Some(proc.this().type_annotation.map_deep(TypeExpression::from)),
             )),
             Declaration::ValueDeclaration {
                 name: _,
@@ -109,7 +109,7 @@ impl Declaration {
         }
     }
 
-    pub fn get_declared_type(&self) -> Option<&Src<TypeExpression>> {
+    pub fn get_declared_type(&self) -> Option<&Node<TypeExpression>> {
         if let Declaration::TypeDeclaration {
             name: _,
             declared_type,

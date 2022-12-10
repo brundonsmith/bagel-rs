@@ -1,60 +1,60 @@
 use enum_variant_type::EnumVariantType;
 
 use super::{
-    BinaryOperator, Expression, Invocation, LocalIdentifier, PlainIdentifier, PropertyAccessor,
-    Src, TypeExpression,
+    BinaryOperator, Expression, Invocation, LocalIdentifier, Node, PlainIdentifier,
+    PropertyAccessor, TypeExpression,
 };
 
 #[derive(Clone, Debug, PartialEq, EnumVariantType)]
 pub enum Statement {
     #[evt(derive(Debug, Clone, PartialEq))]
     DeclarationStatement {
-        destination: Src<Destination>,
-        value: Src<Expression>,
+        destination: Node<Destination>,
+        value: Node<Expression>,
         awaited: bool,
         is_const: bool,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     IfElseStatement {
-        cases: Vec<(Src<Expression>, Vec<Src<Statement>>)>,
-        default_case: Option<Vec<Src<Statement>>>,
+        cases: Vec<Node<(Node<Expression>, Vec<Node<Statement>>)>>,
+        default_case: Option<Vec<Node<Statement>>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ForLoop {
         item_identifier: PlainIdentifier,
-        iterator: Src<Expression>,
-        body: Vec<Src<Statement>>,
+        iterator: Node<Expression>,
+        body: Vec<Node<Statement>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     WhileLoop {
-        condition: Src<Expression>,
-        body: Vec<Src<Statement>>,
+        condition: Node<Expression>,
+        body: Vec<Node<Statement>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     Assignment {
         target: AssignmentTarget,
-        value: Src<Expression>,
+        value: Node<Expression>,
         operator: Option<BinaryOperator>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     TryCatch {
-        try_block: Vec<Src<Statement>>,
+        try_block: Vec<Node<Statement>>,
         error_identifier: PlainIdentifier,
-        catch_block: Vec<Src<Statement>>,
+        catch_block: Vec<Node<Statement>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    ThrowStatement { error_expression: Src<Expression> },
+    ThrowStatement { error_expression: Node<Expression> },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     Autorun {
-        effect: Vec<Src<Statement>>,
-        until: Option<Src<Expression>>,
+        effect: Vec<Node<Statement>>,
+        until: Option<Node<Expression>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
@@ -64,12 +64,12 @@ pub enum Statement {
 #[derive(Debug, Clone, PartialEq)]
 pub enum AssignmentTarget {
     LocalIdentifier(LocalIdentifier),
-    PropertyAccessor(Src<PropertyAccessor>),
+    PropertyAccessor(Node<PropertyAccessor>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Destination {
-    NameAndType(PlainIdentifier, Option<Src<TypeExpression>>),
+    NameAndType(PlainIdentifier, Option<Node<TypeExpression>>),
     Destructure {
         properties: Vec<PlainIdentifier>,
         spread: Option<PlainIdentifier>,

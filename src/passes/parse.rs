@@ -1,6 +1,5 @@
 use std::{rc::Rc, str::FromStr, time::SystemTime};
 
-use boa::syntax::ast::node::Switch;
 use nom::{
     branch::alt,
     bytes::complete::{escaped, tag, take_while, take_while1},
@@ -79,24 +78,24 @@ pub fn parse(module_id: ModuleID, module_src: Rc<String>) -> Result<Module, Pars
 
 // --- Declaration
 
-fn declaration(i: Slice) -> ParseResult<Src<Declaration>> {
+fn declaration(i: Slice) -> ParseResult<Node<Declaration>> {
     preceded(
         whitespace,
         alt((
-            map(import_all_declaration, |x| x.map(Declaration::from)),
-            map(import_declaration, |x| x.map(Declaration::from)),
-            map(type_declaration, |x| x.map(Declaration::from)),
-            map(func_declaration, |x| x.map(Declaration::from)),
-            map(proc_declaration, |x| x.map(Declaration::from)),
-            map(value_declaration, |x| x.map(Declaration::from)),
-            map(test_expr_declaration, |x| x.map(Declaration::from)),
-            map(test_block_declaration, |x| x.map(Declaration::from)),
-            // map(test_type_declaration, |x| x.map(Declaration::from)),
+            map(import_all_declaration, |x| x.map_deep(Declaration::from)),
+            map(import_declaration, |x| x.map_deep(Declaration::from)),
+            map(type_declaration, |x| x.map_deep(Declaration::from)),
+            map(func_declaration, |x| x.map_deep(Declaration::from)),
+            map(proc_declaration, |x| x.map_deep(Declaration::from)),
+            map(value_declaration, |x| x.map_deep(Declaration::from)),
+            map(test_expr_declaration, |x| x.map_deep(Declaration::from)),
+            map(test_block_declaration, |x| x.map_deep(Declaration::from)),
+            // map(test_type_declaration, |x| x.map_deep(Declaration::from)),
         )),
     )(i)
 }
 
-fn import_all_declaration(i: Slice) -> ParseResult<Src<ImportAllDeclaration>> {
+fn import_all_declaration(i: Slice) -> ParseResult<Node<ImportAllDeclaration>> {
     context(
         "import-all declaration",
         map(
@@ -109,13 +108,13 @@ fn import_all_declaration(i: Slice) -> ParseResult<Src<ImportAllDeclaration>> {
             |(start, path, _, name)| {
                 let src = start.spanning(&name.0);
 
-                ImportAllDeclaration { path, name }.with_src(src)
+                ImportAllDeclaration { path, name }.with_slice(src)
             },
         ),
     )(i)
 }
 
-fn import_declaration(i: Slice) -> ParseResult<Src<ImportDeclaration>> {
+fn import_declaration(i: Slice) -> ParseResult<Node<ImportDeclaration>> {
     context(
         "import declaration",
         map(
@@ -140,13 +139,13 @@ fn import_declaration(i: Slice) -> ParseResult<Src<ImportDeclaration>> {
                 preceded(whitespace, tag("}")),
             )),
             |(start, path, _, _, imports, end)| {
-                ImportDeclaration { path, imports }.with_src(start.spanning(&end))
+                ImportDeclaration { path, imports }.with_slice(start.spanning(&end))
             },
         ),
     )(i)
 }
 
-fn type_declaration(i: Slice) -> ParseResult<Src<TypeDeclaration>> {
+fn type_declaration(i: Slice) -> ParseResult<Node<TypeDeclaration>> {
     context(
         "type declaration",
         map(
@@ -159,20 +158,20 @@ fn type_declaration(i: Slice) -> ParseResult<Src<TypeDeclaration>> {
             )),
             |(export, keyword, name, _, declared_type)| {
                 let exported = export.is_some();
-                let src = export.unwrap_or(keyword).spanning(&declared_type.src);
+                let src = export.unwrap_or(keyword).spanning(&declared_type.slice);
 
                 TypeDeclaration {
                     name,
                     declared_type,
                     exported,
                 }
-                .with_src(src)
+                .with_slice(src)
             },
         ),
     )(i)
 }
 
-fn func_declaration(i: Slice) -> ParseResult<Src<FuncDeclaration>> {
+fn func_declaration(i: Slice) -> ParseResult<Node<FuncDeclaration>> {
     context(
         "func declaration",
         map(
@@ -187,14 +186,14 @@ fn func_declaration(i: Slice) -> ParseResult<Src<FuncDeclaration>> {
                 preceded(whitespace, tag("=>")),
                 preceded(whitespace, expression(0)),
             )),
-            |(export, pure, asyn, keyword, name, args, return_type, _, body)| {
+            |(export, pure, asyn, keyword, name, args, returns, _, body)| {
                 let exported = export.is_some();
                 let is_async = asyn.is_some();
                 let is_pure = pure.is_some();
                 let src = export
                     .unwrap_or(pure.unwrap_or(asyn.unwrap_or(keyword)))
-                    .spanning(&body.src);
-                let args_start = args[0].src.clone();
+                    .spanning(&body.slice);
+                let args_start = args[0].slice.clone();
 
                 FuncDeclaration {
                     name,
@@ -203,26 +202,26 @@ fn func_declaration(i: Slice) -> ParseResult<Src<FuncDeclaration>> {
                             args,
                             args_spread: None, // TODO
                             is_pure,
-                            returns: return_type.map(Box::new),
+                            returns,
                         }
-                        .with_src(args_start.spanning(&body.src)),
+                        .with_slice(args_start.spanning(&body.slice)),
 
                         is_async,
                         is_pure,
-                        body: FuncBody::Expression(body.boxed()),
+                        body: FuncBody::Expression(body),
                     }
-                    .with_src(src.clone()),
+                    .with_slice(src.clone()),
                     exported,
                     platforms: PlatformSet::all(), // TODO
                     decorators: vec![],            // TODO
                 }
-                .with_src(src)
+                .with_slice(src)
             },
         ),
     )(i)
 }
 
-fn args(i: Slice) -> ParseResult<Vec<Src<Arg>>> {
+fn args(i: Slice) -> ParseResult<Vec<Node<Arg>>> {
     alt((
         map(plain_identifier, |name| {
             vec![Arg {
@@ -230,7 +229,7 @@ fn args(i: Slice) -> ParseResult<Vec<Src<Arg>>> {
                 type_annotation: None,
                 optional: false,
             }
-            .with_src(name.0)]
+            .with_slice(name.0)]
         }),
         map(
             tuple((
@@ -250,7 +249,7 @@ fn args(i: Slice) -> ParseResult<Vec<Src<Arg>>> {
                         let src = name.0.clone().spanning(
                             &type_annotation
                                 .as_ref()
-                                .map(|t| t.src.clone())
+                                .map(|t| t.slice.clone())
                                 .unwrap_or(name.0.clone()),
                         );
 
@@ -259,7 +258,7 @@ fn args(i: Slice) -> ParseResult<Vec<Src<Arg>>> {
                             type_annotation,
                             optional: false, // TODO
                         }
-                        .with_src(src)
+                        .with_slice(src)
                     })
                     .collect()
             },
@@ -267,7 +266,7 @@ fn args(i: Slice) -> ParseResult<Vec<Src<Arg>>> {
     ))(i)
 }
 
-fn proc_declaration(i: Slice) -> ParseResult<Src<ProcDeclaration>> {
+fn proc_declaration(i: Slice) -> ParseResult<Node<ProcDeclaration>> {
     context(
         "proc declaration",
         map(
@@ -289,7 +288,7 @@ fn proc_declaration(i: Slice) -> ParseResult<Src<ProcDeclaration>> {
                 let src = export
                     .unwrap_or(pure.unwrap_or(asyn.unwrap_or(keyword)))
                     .spanning(&closing_brace);
-                let args_start = args[0].src.clone();
+                let args_start = args[0].slice.clone();
 
                 ProcDeclaration {
                     name,
@@ -301,24 +300,24 @@ fn proc_declaration(i: Slice) -> ParseResult<Src<ProcDeclaration>> {
                             is_async,
                             throws: None, // TODO
                         }
-                        .with_src(args_start.spanning(&closing_brace)),
+                        .with_slice(args_start.spanning(&closing_brace)),
 
                         is_async,
                         is_pure,
                         body: ProcBody::Statements(body),
                     }
-                    .with_src(src.clone()),
+                    .with_slice(src.clone()),
                     exported,
                     platforms: PlatformSet::all(), // TODO
                     decorators: vec![],            // TODO
                 }
-                .with_src(src)
+                .with_slice(src)
             },
         ),
     )(i)
 }
 
-fn value_declaration(i: Slice) -> ParseResult<Src<ValueDeclaration>> {
+fn value_declaration(i: Slice) -> ParseResult<Node<ValueDeclaration>> {
     context(
         "value declaration",
         map(
@@ -333,7 +332,7 @@ fn value_declaration(i: Slice) -> ParseResult<Src<ValueDeclaration>> {
             |(export, keyword, name, type_annotation, _, value)| {
                 let exported = export.is_some();
                 let is_const = keyword.as_str() == "const";
-                let src = export.unwrap_or(keyword).spanning(&value.src);
+                let src = export.unwrap_or(keyword).spanning(&value.slice);
 
                 ValueDeclaration {
                     name,
@@ -343,13 +342,13 @@ fn value_declaration(i: Slice) -> ParseResult<Src<ValueDeclaration>> {
                     exported,
                     platforms: PlatformSet::all(), // TODO
                 }
-                .with_src(src)
+                .with_slice(src)
             },
         ),
     )(i)
 }
 
-fn test_expr_declaration(i: Slice) -> ParseResult<Src<TestExprDeclaration>> {
+fn test_expr_declaration(i: Slice) -> ParseResult<Node<TestExprDeclaration>> {
     map(
         tuple((
             tag("test"),
@@ -359,14 +358,14 @@ fn test_expr_declaration(i: Slice) -> ParseResult<Src<TestExprDeclaration>> {
             preceded(whitespace, expression(0)),
         )),
         |(start, _, name, _, expr)| {
-            let src = start.spanning(&expr.src);
+            let src = start.spanning(&expr.slice);
 
-            TestExprDeclaration { name, expr }.with_src(src)
+            TestExprDeclaration { name, expr }.with_slice(src)
         },
     )(i)
 }
 
-fn test_block_declaration(i: Slice) -> ParseResult<Src<TestBlockDeclaration>> {
+fn test_block_declaration(i: Slice) -> ParseResult<Node<TestBlockDeclaration>> {
     map(
         tuple((
             tag("test"),
@@ -377,16 +376,16 @@ fn test_block_declaration(i: Slice) -> ParseResult<Src<TestBlockDeclaration>> {
             preceded(whitespace, tag("}")),
         )),
         |(start, _, name, _, block, end)| {
-            TestBlockDeclaration { name, block }.with_src(start.spanning(&end))
+            TestBlockDeclaration { name, block }.with_slice(start.spanning(&end))
         },
     )(i)
 }
 
-fn test_type_declaration(i: Slice) -> ParseResult<Src<TestTypeDeclaration>> {
+fn test_type_declaration(i: Slice) -> ParseResult<Node<TestTypeDeclaration>> {
     todo!()
 }
 
-fn type_annotation(i: Slice) -> ParseResult<Src<TypeExpression>> {
+fn type_annotation(i: Slice) -> ParseResult<Node<TypeExpression>> {
     preceded(tag(":"), preceded(whitespace, type_expression(0)))(i)
 }
 
@@ -396,7 +395,7 @@ macro_rules! type_expr_level {
     ($level:expr, $this_level:expr, $i:expr, $a:expr) => {
         $this_level += 1;
         if $level <= $this_level {
-            let res = map($a, |x| x.map(TypeExpression::from))($i.clone());
+            let res = map($a, |x| x.map_deep(TypeExpression::from))($i.clone());
 
             if res.is_ok() {
                 return res;
@@ -405,8 +404,8 @@ macro_rules! type_expr_level {
     };
 }
 
-fn type_expression(l: usize) -> impl Fn(Slice) -> ParseResult<Src<TypeExpression>> {
-    move |i: Slice| -> ParseResult<Src<TypeExpression>> {
+fn type_expression(l: usize) -> impl Fn(Slice) -> ParseResult<Node<TypeExpression>> {
+    move |i: Slice| -> ParseResult<Node<TypeExpression>> {
         let mut tl = 0;
 
         type_expr_level!(
@@ -416,9 +415,9 @@ fn type_expression(l: usize) -> impl Fn(Slice) -> ParseResult<Src<TypeExpression
             map(
                 tuple((tag("typeof"), preceded(whitespace, expression(0)))),
                 |(keyword, expr)| {
-                    let src = keyword.clone().spanning(&expr.src);
+                    let src = keyword.clone().spanning(&expr.slice);
 
-                    TypeExpression::TypeofType(expr).with_src(src)
+                    TypeExpression::TypeofType(expr).with_slice(src)
                 }
             )
         );
@@ -437,9 +436,8 @@ fn type_expression(l: usize) -> impl Fn(Slice) -> ParseResult<Src<TypeExpression
                     )),
                     preceded(whitespace, type_expression(0))
                 )),
-                |(keyword, t)| {
-                    let src = keyword.clone().spanning(&t.src);
-                    let inner = t.boxed();
+                |(keyword, inner)| {
+                    let src = keyword.clone().spanning(&inner.slice);
 
                     match keyword.as_str() {
                         "keyof" => TypeExpression::KeyofType(inner),
@@ -448,7 +446,7 @@ fn type_expression(l: usize) -> impl Fn(Slice) -> ParseResult<Src<TypeExpression
                         "readonly" => TypeExpression::ReadonlyType(inner),
                         _ => unreachable!(),
                     }
-                    .with_src(src)
+                    .with_slice(src)
                 }
             )
         );
@@ -466,11 +464,11 @@ fn type_expression(l: usize) -> impl Fn(Slice) -> ParseResult<Src<TypeExpression
                 ),
                 |members| {
                     let src = members[0]
-                        .src
+                        .slice
                         .clone()
-                        .spanning(&members[members.len() - 1].src);
+                        .spanning(&members[members.len() - 1].slice);
 
-                    TypeExpression::UnionType(members).with_src(src)
+                    TypeExpression::UnionType(members).with_slice(src)
                 }
             )
         );
@@ -482,9 +480,9 @@ fn type_expression(l: usize) -> impl Fn(Slice) -> ParseResult<Src<TypeExpression
             map(
                 tuple((type_expression(tl + 1), tag("?"))),
                 |(inner, end)| {
-                    let src = inner.src.clone().spanning(&end);
+                    let src = inner.slice.clone().spanning(&end);
 
-                    TypeExpression::MaybeType(inner.boxed()).with_src(src)
+                    TypeExpression::MaybeType(inner).with_slice(src)
                 }
             )
         );
@@ -498,9 +496,9 @@ fn type_expression(l: usize) -> impl Fn(Slice) -> ParseResult<Src<TypeExpression
             map(
                 tuple((type_expression(tl + 1), tag("[]"))),
                 |(element, end)| {
-                    let src = element.src.clone().spanning(&end);
+                    let src = element.slice.clone().spanning(&end);
 
-                    TypeExpression::ArrayType(element.boxed()).with_src(src)
+                    TypeExpression::ArrayType(element).with_slice(src)
                 }
             )
         );
@@ -510,11 +508,11 @@ fn type_expression(l: usize) -> impl Fn(Slice) -> ParseResult<Src<TypeExpression
             tl,
             i,
             alt((
-                map(func_type, |s| s.map(TypeExpression::from)),
-                map(proc_type, |s| s.map(TypeExpression::from)),
-                map(record_type, |s| s.map(TypeExpression::from)),
+                map(func_type, |s| s.map_deep(TypeExpression::from)),
+                map(proc_type, |s| s.map_deep(TypeExpression::from)),
+                map(record_type, |s| s.map_deep(TypeExpression::from)),
                 object_or_interface_type,
-                map(tuple_type, |s| s.map(TypeExpression::from)),
+                map(tuple_type, |s| s.map_deep(TypeExpression::from)),
                 map(
                     tuple((
                         tag("("),
@@ -522,31 +520,30 @@ fn type_expression(l: usize) -> impl Fn(Slice) -> ParseResult<Src<TypeExpression
                         preceded(whitespace, tag(")"))
                     )),
                     |(open, inner, close)| {
-                        TypeExpression::ParenthesizedType(inner.boxed())
-                            .with_src(open.spanning(&close))
+                        TypeExpression::ParenthesizedType(inner).with_slice(open.spanning(&close))
                     }
                 ),
                 map(exact_string_literal, |s| {
-                    s.map(|s| TypeExpression::LiteralType(LiteralTypeValue::ExactString(s)))
+                    s.map_deep(|s| TypeExpression::LiteralType(LiteralTypeValue::ExactString(s)))
                 }),
                 map(number_literal, |s| {
-                    s.map(|s| TypeExpression::LiteralType(LiteralTypeValue::NumberLiteral(s)))
+                    s.map_deep(|s| TypeExpression::LiteralType(LiteralTypeValue::NumberLiteral(s)))
                 }),
                 map(boolean_literal, |s| {
-                    s.map(|s| TypeExpression::LiteralType(LiteralTypeValue::BooleanLiteral(s)))
+                    s.map_deep(|s| TypeExpression::LiteralType(LiteralTypeValue::BooleanLiteral(s)))
                 }),
                 map(tag("string"), |s: Slice| {
-                    TypeExpression::StringType.with_src(s)
+                    TypeExpression::StringType.with_slice(s)
                 }),
                 map(tag("number"), |s: Slice| {
-                    TypeExpression::NumberType.with_src(s)
+                    TypeExpression::NumberType.with_slice(s)
                 }),
                 map(tag("boolean"), |s: Slice| {
-                    TypeExpression::BooleanType.with_src(s)
+                    TypeExpression::BooleanType.with_slice(s)
                 }),
                 map(tag("unknown"), |s: Slice| TypeExpression::UnknownType
-                    .with_src(s)),
-                map(tag("nil"), |s: Slice| TypeExpression::NilType.with_src(s)),
+                    .with_slice(s)),
+                map(tag("nil"), |s: Slice| TypeExpression::NilType.with_slice(s)),
             ))
         );
 
@@ -557,7 +554,7 @@ fn type_expression(l: usize) -> impl Fn(Slice) -> ParseResult<Src<TypeExpression
             map(plain_identifier, |name| {
                 let src = name.0.clone();
 
-                TypeExpression::NamedType(name).with_src(src)
+                TypeExpression::NamedType(name).with_slice(src)
             })
         );
 
@@ -569,7 +566,7 @@ fn type_expression(l: usize) -> impl Fn(Slice) -> ParseResult<Src<TypeExpression
 }
 
 #[memoize]
-fn func_type(i: Slice) -> ParseResult<Src<FuncType>> {
+fn func_type(i: Slice) -> ParseResult<Node<FuncType>> {
     map(
         tuple((
             args,
@@ -579,23 +576,23 @@ fn func_type(i: Slice) -> ParseResult<Src<FuncType>> {
         |(args, _, returns)| {
             let src = args // TODO: func type with 0 arguments will have weird src
                 .get(0)
-                .map(|a| a.src.clone())
-                .unwrap_or_else(|| returns.src.clone())
-                .spanning(&returns.src);
+                .map(|a| a.slice.clone())
+                .unwrap_or_else(|| returns.slice.clone())
+                .spanning(&returns.slice);
 
             FuncType {
                 args,
                 args_spread: None, // TODO
                 is_pure: false,    // TODO
-                returns: Some(returns.boxed()),
+                returns: Some(returns),
             }
-            .with_src(src)
+            .with_slice(src)
         },
     )(i)
 }
 
 #[memoize]
-fn proc_type(i: Slice) -> ParseResult<Src<ProcType>> {
+fn proc_type(i: Slice) -> ParseResult<Node<ProcType>> {
     map(
         tuple((
             args,
@@ -607,7 +604,7 @@ fn proc_type(i: Slice) -> ParseResult<Src<ProcType>> {
         |(args, _, _, _, close)| {
             let src = args // TODO: proc type with 0 arguments will have weird src
                 .get(0)
-                .map(|a| a.src.clone())
+                .map(|a| a.slice.clone())
                 .unwrap_or_else(|| close.clone())
                 .spanning(&close);
 
@@ -618,13 +615,13 @@ fn proc_type(i: Slice) -> ParseResult<Src<ProcType>> {
                 is_async: false,   // TODO
                 throws: None,      // TODO
             }
-            .with_src(src)
+            .with_slice(src)
         },
     )(i)
 }
 
 #[memoize]
-fn record_type(i: Slice) -> ParseResult<Src<RecordType>> {
+fn record_type(i: Slice) -> ParseResult<Node<RecordType>> {
     map(
         tuple((
             tag("{"),
@@ -637,16 +634,16 @@ fn record_type(i: Slice) -> ParseResult<Src<RecordType>> {
         )),
         |(open, _, key_type, _, _, value_type, close)| {
             RecordType {
-                key_type: key_type.boxed(),
-                value_type: value_type.boxed(),
+                key_type: key_type,
+                value_type: value_type,
             }
-            .with_src(open.spanning(&close))
+            .with_slice(open.spanning(&close))
         },
     )(i)
 }
 
 #[memoize]
-fn object_or_interface_type(i: Slice) -> ParseResult<Src<TypeExpression>> {
+fn object_or_interface_type(i: Slice) -> ParseResult<Node<TypeExpression>> {
     map(
         tuple((
             opt(tag("interface")),
@@ -659,21 +656,21 @@ fn object_or_interface_type(i: Slice) -> ParseResult<Src<TypeExpression>> {
         )),
         |(interface, open, entries, close)| {
             if let Some(interface) = interface {
-                TypeExpression::InterfaceType(entries).with_src(interface.spanning(&close))
+                TypeExpression::InterfaceType(entries).with_slice(interface.spanning(&close))
             } else {
                 TypeExpression::ObjectType(
                     entries
                         .into_iter()
-                        .map(|(key, value)| ObjectTypeEntry::KeyValue(key, value.boxed()))
+                        .map(|(key, value)| ObjectTypeEntry::KeyValue(key, value))
                         .collect(),
                 )
-                .with_src(open.spanning(&close))
+                .with_slice(open.spanning(&close))
             }
         },
     )(i)
 }
 
-fn key_value_type_expression(i: Slice) -> ParseResult<(PlainIdentifier, Src<TypeExpression>)> {
+fn key_value_type_expression(i: Slice) -> ParseResult<(PlainIdentifier, Node<TypeExpression>)> {
     separated_pair(
         preceded(whitespace, plain_identifier),
         cut(preceded(whitespace, char(':'))),
@@ -681,7 +678,7 @@ fn key_value_type_expression(i: Slice) -> ParseResult<(PlainIdentifier, Src<Type
     )(i)
 }
 
-fn tuple_type(i: Slice) -> ParseResult<Src<TupleType>> {
+fn tuple_type(i: Slice) -> ParseResult<Node<TupleType>> {
     map(
         tuple((
             tag("["),
@@ -691,31 +688,31 @@ fn tuple_type(i: Slice) -> ParseResult<Src<TupleType>> {
             ),
             preceded(whitespace, tag("]")),
         )),
-        |(open, members, close)| TupleType(members).with_src(open.spanning(&close)),
+        |(open, members, close)| TupleType(members).with_slice(open.spanning(&close)),
     )(i)
 }
 
 // --- Statement ---
 
-fn statement(i: Slice) -> ParseResult<Src<Statement>> {
+fn statement(i: Slice) -> ParseResult<Node<Statement>> {
     alt((
         // map(declaration_statement, |x| x.map(Statement::from)),
-        map(if_else_statement, |x| x.map(Statement::from)),
-        map(for_loop, |x| x.map(Statement::from)),
-        map(while_loop, |x| x.map(Statement::from)),
-        // map(assignment, |x| x.map(Statement::from)),
-        // map(try_catch, |x| x.map(Statement::from)),
-        map(throw_statement, |x| x.map(Statement::from)),
-        map(autorun, |x| x.map(Statement::from)),
-        // map(invocation_statement, |x| x.map(Statement::from)),
+        map(if_else_statement, |x| x.map_deep(Statement::from)),
+        map(for_loop, |x| x.map_deep(Statement::from)),
+        map(while_loop, |x| x.map_deep(Statement::from)),
+        // map(assignment, |x| x.map_deep(Statement::from)),
+        // map(try_catch, |x| x.map_deep(Statement::from)),
+        map(throw_statement, |x| x.map_deep(Statement::from)),
+        map(autorun, |x| x.map_deep(Statement::from)),
+        // map(invocation_statement, |x| x.map_deep(Statement::from)),
     ))(i)
 }
 
-fn declaration_statement(i: Slice) -> ParseResult<Src<DeclarationStatement>> {
+fn declaration_statement(i: Slice) -> ParseResult<Node<DeclarationStatement>> {
     todo!()
 }
 
-fn if_else_statement(i: Slice) -> ParseResult<Src<IfElseStatement>> {
+fn if_else_statement(i: Slice) -> ParseResult<Node<IfElseStatement>> {
     map(
         tuple((
             separated_list1(preceded(whitespace, tag("else")), if_else_statement_case),
@@ -730,23 +727,23 @@ fn if_else_statement(i: Slice) -> ParseResult<Src<IfElseStatement>> {
             )),
         )),
         |(cases, default_case)| {
-            let src = cases[0].src.clone().spanning(
+            let src = cases[0].slice.clone().spanning(
                 &default_case
                     .as_ref()
                     .map(|(start, _, _, end)| start.clone().spanning(end))
-                    .unwrap_or_else(|| cases[cases.len() - 1].src.clone()),
+                    .unwrap_or_else(|| cases[cases.len() - 1].slice.clone()),
             );
 
             IfElseStatement {
-                cases: cases.into_iter().map(|case| case.node).collect(),
+                cases,
                 default_case: default_case.map(|(_, _, statements, _)| statements),
             }
-            .with_src(src)
+            .with_slice(src)
         },
     )(i)
 }
 
-fn if_else_statement_case(i: Slice) -> ParseResult<Src<(Src<Expression>, Vec<Src<Statement>>)>> {
+fn if_else_statement_case(i: Slice) -> ParseResult<Node<(Node<Expression>, Vec<Node<Statement>>)>> {
     map(
         tuple((
             tag("if"),
@@ -755,11 +752,11 @@ fn if_else_statement_case(i: Slice) -> ParseResult<Src<(Src<Expression>, Vec<Src
             many0(preceded(whitespace, statement)),
             preceded(whitespace, tag("}")),
         )),
-        |(start, condition, _, outcome, end)| (condition, outcome).with_src(start.spanning(&end)),
+        |(start, condition, _, outcome, end)| (condition, outcome).with_slice(start.spanning(&end)),
     )(i)
 }
 
-fn for_loop(i: Slice) -> ParseResult<Src<ForLoop>> {
+fn for_loop(i: Slice) -> ParseResult<Node<ForLoop>> {
     map(
         tuple((
             tag("for"),
@@ -776,12 +773,12 @@ fn for_loop(i: Slice) -> ParseResult<Src<ForLoop>> {
                 iterator,
                 body,
             }
-            .with_src(start.spanning(&end))
+            .with_slice(start.spanning(&end))
         },
     )(i)
 }
 
-fn while_loop(i: Slice) -> ParseResult<Src<WhileLoop>> {
+fn while_loop(i: Slice) -> ParseResult<Node<WhileLoop>> {
     map(
         tuple((
             tag("while"),
@@ -791,20 +788,20 @@ fn while_loop(i: Slice) -> ParseResult<Src<WhileLoop>> {
             preceded(whitespace, tag("}")),
         )),
         |(start, condition, _, body, end)| {
-            WhileLoop { condition, body }.with_src(start.spanning(&end))
+            WhileLoop { condition, body }.with_slice(start.spanning(&end))
         },
     )(i)
 }
 
-fn assignment(i: Slice) -> ParseResult<Src<Assignment>> {
+fn assignment(i: Slice) -> ParseResult<Node<Assignment>> {
     todo!()
 }
 
-fn try_catch(i: Slice) -> ParseResult<Src<TryCatch>> {
+fn try_catch(i: Slice) -> ParseResult<Node<TryCatch>> {
     todo!()
 }
 
-fn throw_statement(i: Slice) -> ParseResult<Src<ThrowStatement>> {
+fn throw_statement(i: Slice) -> ParseResult<Node<ThrowStatement>> {
     map(
         tuple((
             tag("throw"),
@@ -812,13 +809,13 @@ fn throw_statement(i: Slice) -> ParseResult<Src<ThrowStatement>> {
             preceded(whitespace, tag(";")),
         )),
         |(start, error_expression, end)| {
-            ThrowStatement { error_expression }.with_src(start.spanning(&end))
+            ThrowStatement { error_expression }.with_slice(start.spanning(&end))
         },
     )(i)
 }
 
 #[memoize]
-fn autorun(i: Slice) -> ParseResult<Src<Autorun>> {
+fn autorun(i: Slice) -> ParseResult<Node<Autorun>> {
     map(
         tuple((
             tag("autorun"),
@@ -842,12 +839,12 @@ fn autorun(i: Slice) -> ParseResult<Src<Autorun>> {
             preceded(whitespace, tag(";")),
         )),
         |(start, _, effect, _, until, end)| {
-            Autorun { effect, until }.with_src(start.spanning(&end))
+            Autorun { effect, until }.with_slice(start.spanning(&end))
         },
     )(i)
 }
 
-fn invocation_statement(i: Slice) -> ParseResult<Src<InvocationStatement>> {
+fn invocation_statement(i: Slice) -> ParseResult<Node<InvocationStatement>> {
     todo!()
 }
 
@@ -857,7 +854,7 @@ macro_rules! expr_level {
     ($level:expr, $this_level:expr, $i:expr, $a:expr) => {
         $this_level += 1;
         if $level <= $this_level {
-            let res = map($a, |x| x.map(Expression::from))($i.clone());
+            let res = map($a, |x| x.map_deep(Expression::from))($i.clone());
 
             if res.is_ok() {
                 return res;
@@ -866,8 +863,8 @@ macro_rules! expr_level {
     };
 }
 
-fn expression(l: usize) -> impl Fn(Slice) -> ParseResult<Src<Expression>> {
-    move |i: Slice| -> ParseResult<Src<Expression>> {
+fn expression(l: usize) -> impl Fn(Slice) -> ParseResult<Node<Expression>> {
+    move |i: Slice| -> ParseResult<Node<Expression>> {
         let mut tl = 0;
 
         // expr_level!(level, this_level, i, ); // debug, javascriptEscape, elementTag
@@ -876,7 +873,7 @@ fn expression(l: usize) -> impl Fn(Slice) -> ParseResult<Src<Expression>> {
             tl,
             i,
             alt((
-                map(func, |x| x.map(Expression::from)),
+                map(func, |x| x.map_deep(Expression::from)),
                 // map(proc, |x| x.map(Expression::from)),
             ))
         );
@@ -892,8 +889,8 @@ fn expression(l: usize) -> impl Fn(Slice) -> ParseResult<Src<Expression>> {
             tl,
             i,
             alt((
-                map(as_cast(tl), |x| x.map(Expression::from)),
-                map(instance_of(tl), |x| x.map(Expression::from)),
+                map(as_cast(tl), |x| x.map_deep(Expression::from)),
+                map(instance_of(tl), |x| x.map_deep(Expression::from)),
             ))
         );
         expr_level!(l, tl, i, negation_operation(tl));
@@ -913,15 +910,15 @@ fn expression(l: usize) -> impl Fn(Slice) -> ParseResult<Src<Expression>> {
             tl,
             i,
             alt((
-                map(if_else_expression, |x| x.map(Expression::from)),
-                map(switch_expression, |x| x.map(Expression::from)),
-                // map(inline_const_group, |x| x.map(Expression::from)),
-                map(object_literal, |x| x.map(Expression::from)),
-                map(array_literal, |x| x.map(Expression::from)),
-                map(exact_string_literal, |x| x.map(Expression::from)),
-                map(number_literal, |x| x.map(Expression::from)),
-                map(boolean_literal, |x| x.map(Expression::from)),
-                map(nil_literal, |x| x.map(Expression::from)),
+                map(if_else_expression, |x| x.map_deep(Expression::from)),
+                map(switch_expression, |x| x.map_deep(Expression::from)),
+                // map(inline_const_group, |x| x.map_deep(Expression::from)),
+                map(object_literal, |x| x.map_deep(Expression::from)),
+                map(array_literal, |x| x.map_deep(Expression::from)),
+                map(exact_string_literal, |x| x.map_deep(Expression::from)),
+                map(number_literal, |x| x.map_deep(Expression::from)),
+                map(boolean_literal, |x| x.map_deep(Expression::from)),
+                map(nil_literal, |x| x.map_deep(Expression::from)),
             ))
         );
         expr_level!(
@@ -930,7 +927,7 @@ fn expression(l: usize) -> impl Fn(Slice) -> ParseResult<Src<Expression>> {
             i,
             alt((
                 map(local_identifier, |x| {
-                    Expression::from(x.clone()).with_src(x.0)
+                    Expression::from(x.clone()).with_slice(x.0)
                 }),
                 // localIdentifier, regExp
             ))
@@ -946,8 +943,8 @@ fn expression(l: usize) -> impl Fn(Slice) -> ParseResult<Src<Expression>> {
 fn binary_operator_1(
     level: usize,
     a: &'static str,
-) -> impl Fn(Slice) -> ParseResult<Src<Expression>> {
-    move |i: Slice| -> ParseResult<Src<Expression>> {
+) -> impl Fn(Slice) -> ParseResult<Node<Expression>> {
+    move |i: Slice| -> ParseResult<Node<Expression>> {
         map(
             tuple((
                 expression(level + 1),
@@ -955,14 +952,16 @@ fn binary_operator_1(
                 preceded(whitespace, expression(level + 1)),
             )),
             |(left, op, right)| {
-                let src = left.src.clone().spanning(&right.src);
+                let src = left.slice.clone().spanning(&right.slice);
 
                 Expression::BinaryOperation {
-                    left: left.boxed(),
-                    op: BinaryOperator::from_str(op.as_str()).unwrap().with_src(op),
-                    right: right.boxed(),
+                    left: left,
+                    op: BinaryOperator::from_str(op.as_str())
+                        .unwrap()
+                        .with_slice(op),
+                    right: right,
                 }
-                .with_src(src)
+                .with_slice(src)
             },
         )(i.clone())
     }
@@ -972,8 +971,8 @@ fn binary_operator_2(
     level: usize,
     a: &'static str,
     b: &'static str,
-) -> impl Fn(Slice) -> ParseResult<Src<Expression>> {
-    move |i: Slice| -> ParseResult<Src<Expression>> {
+) -> impl Fn(Slice) -> ParseResult<Node<Expression>> {
+    move |i: Slice| -> ParseResult<Node<Expression>> {
         map(
             tuple((
                 expression(level + 1),
@@ -981,14 +980,16 @@ fn binary_operator_2(
                 preceded(whitespace, expression(level + 1)),
             )),
             |(left, op, right)| {
-                let src = left.src.clone().spanning(&right.src);
+                let src = left.slice.clone().spanning(&right.slice);
 
                 Expression::BinaryOperation {
-                    left: left.boxed(),
-                    op: BinaryOperator::from_str(op.as_str()).unwrap().with_src(op),
-                    right: right.boxed(),
+                    left: left,
+                    op: BinaryOperator::from_str(op.as_str())
+                        .unwrap()
+                        .with_slice(op),
+                    right: right,
                 }
-                .with_src(src)
+                .with_slice(src)
             },
         )(i.clone())
     }
@@ -1000,8 +1001,8 @@ fn binary_operator_4(
     b: &'static str,
     c: &'static str,
     d: &'static str,
-) -> impl Fn(Slice) -> ParseResult<Src<Expression>> {
-    move |i: Slice| -> ParseResult<Src<Expression>> {
+) -> impl Fn(Slice) -> ParseResult<Node<Expression>> {
+    move |i: Slice| -> ParseResult<Node<Expression>> {
         map(
             tuple((
                 expression(level + 1),
@@ -1009,29 +1010,31 @@ fn binary_operator_4(
                 preceded(whitespace, expression(level + 1)),
             )),
             |(left, op, right)| {
-                let src = left.src.clone().spanning(&right.src);
+                let src = left.slice.clone().spanning(&right.slice);
 
                 Expression::BinaryOperation {
-                    left: left.boxed(),
-                    op: BinaryOperator::from_str(op.as_str()).unwrap().with_src(op),
-                    right: right.boxed(),
+                    left: left,
+                    op: BinaryOperator::from_str(op.as_str())
+                        .unwrap()
+                        .with_slice(op),
+                    right: right,
                 }
-                .with_src(src)
+                .with_slice(src)
             },
         )(i.clone())
     }
 }
 
-fn regular_expression(i: Slice) -> ParseResult<Src<RegularExpression>> {
+fn regular_expression(i: Slice) -> ParseResult<Node<RegularExpression>> {
     todo!()
 }
 
-fn error_expression(i: Slice) -> ParseResult<Src<ErrorExpression>> {
+fn error_expression(i: Slice) -> ParseResult<Node<ErrorExpression>> {
     todo!()
 }
 
-fn instance_of(level: usize) -> impl Parser<Slice, Src<InstanceOf>, RawParseError> {
-    move |i: Slice| -> ParseResult<Src<InstanceOf>> {
+fn instance_of(level: usize) -> impl Parser<Slice, Node<InstanceOf>, RawParseError> {
+    move |i: Slice| -> ParseResult<Node<InstanceOf>> {
         map(
             tuple((
                 expression(level + 1),
@@ -1039,20 +1042,20 @@ fn instance_of(level: usize) -> impl Parser<Slice, Src<InstanceOf>, RawParseErro
                 type_expression(0),
             )),
             |(inner, _, possible_type)| {
-                let src = inner.src.clone().spanning(&possible_type.src);
+                let src = inner.slice.clone().spanning(&possible_type.slice);
 
                 InstanceOf {
-                    inner: inner.boxed(),
-                    possible_type: possible_type.boxed(),
+                    inner: inner,
+                    possible_type: possible_type,
                 }
-                .with_src(src)
+                .with_slice(src)
             },
         )(i)
     }
 }
 
-fn as_cast(level: usize) -> impl Parser<Slice, Src<AsCast>, RawParseError> {
-    move |i: Slice| -> ParseResult<Src<AsCast>> {
+fn as_cast(level: usize) -> impl Parser<Slice, Node<AsCast>, RawParseError> {
+    move |i: Slice| -> ParseResult<Node<AsCast>> {
         map(
             tuple((
                 expression(level + 1),
@@ -1060,24 +1063,24 @@ fn as_cast(level: usize) -> impl Parser<Slice, Src<AsCast>, RawParseError> {
                 type_expression(0),
             )),
             |(inner, _, as_type)| {
-                let src = inner.src.clone().spanning(&as_type.src);
+                let src = inner.slice.clone().spanning(&as_type.slice);
 
                 AsCast {
-                    inner: inner.boxed(),
-                    as_type: as_type.boxed(),
+                    inner: inner,
+                    as_type: as_type,
                 }
-                .with_src(src)
+                .with_slice(src)
             },
         )(i)
     }
 }
 
-fn element_tag(i: Slice) -> ParseResult<Src<ElementTag>> {
+fn element_tag(i: Slice) -> ParseResult<Node<ElementTag>> {
     todo!()
 }
 
 #[memoize]
-fn if_else_expression(i: Slice) -> ParseResult<Src<IfElseExpression>> {
+fn if_else_expression(i: Slice) -> ParseResult<Node<IfElseExpression>> {
     map(
         tuple((
             separated_list1(
@@ -1095,23 +1098,23 @@ fn if_else_expression(i: Slice) -> ParseResult<Src<IfElseExpression>> {
             )),
         )),
         |(cases, default_case)| {
-            let src = cases[0].src.clone().spanning(
+            let src = cases[0].slice.clone().spanning(
                 &default_case
                     .as_ref()
                     .map(|(start, _, _, end)| start.clone().spanning(end))
-                    .unwrap_or_else(|| cases[cases.len() - 1].src.clone()),
+                    .unwrap_or_else(|| cases[cases.len() - 1].slice.clone()),
             );
 
             IfElseExpression {
-                cases: cases.into_iter().map(|case| case.node).collect(),
-                default_case: default_case.map(|(_, _, expr, _)| expr.boxed()),
+                cases,
+                default_case: default_case.map(|(_, _, expr, _)| expr),
             }
-            .with_src(src)
+            .with_slice(src)
         },
     )(i)
 }
 
-fn if_else_expression_case(i: Slice) -> ParseResult<Src<(Src<Expression>, Src<Expression>)>> {
+fn if_else_expression_case(i: Slice) -> ParseResult<Node<(Node<Expression>, Node<Expression>)>> {
     map(
         tuple((
             tag("if"),
@@ -1120,12 +1123,12 @@ fn if_else_expression_case(i: Slice) -> ParseResult<Src<(Src<Expression>, Src<Ex
             preceded(whitespace, expression(0)),
             preceded(whitespace, tag("}")),
         )),
-        |(start, condition, _, outcome, end)| (condition, outcome).with_src(start.spanning(&end)),
+        |(start, condition, _, outcome, end)| (condition, outcome).with_slice(start.spanning(&end)),
     )(i)
 }
 
 #[memoize]
-fn switch_expression(i: Slice) -> ParseResult<Src<SwitchExpression>> {
+fn switch_expression(i: Slice) -> ParseResult<Node<SwitchExpression>> {
     map(
         tuple((
             tag("switch"),
@@ -1160,40 +1163,40 @@ fn switch_expression(i: Slice) -> ParseResult<Src<SwitchExpression>> {
         )),
         |(start, value, _, cases, default_case, end)| {
             SwitchExpression {
-                value: value.boxed(),
+                value,
                 cases,
-                default_case: default_case.map(Box::new),
+                default_case,
             }
-            .with_src(start.spanning(&end))
+            .with_slice(start.spanning(&end))
         },
     )(i)
 }
 
-fn range_expression(i: Slice) -> ParseResult<Src<RangeExpression>> {
+fn range_expression(i: Slice) -> ParseResult<Node<RangeExpression>> {
     map(
         tuple((number_literal, tag(".."), number_literal)),
         |(start, _, end)| {
-            let src = start.src.clone().spanning(&end.src);
+            let src = start.slice.clone().spanning(&end.slice);
 
             RangeExpression {
-                start: start.map(|n| Expression::from(n)).boxed(),
-                end: end.map(|n| Expression::from(n)).boxed(),
+                start: start.map_deep(Expression::from),
+                end: end.map_deep(Expression::from),
             }
-            .with_src(src)
+            .with_slice(src)
         },
     )(i)
 }
 
-fn javascript_escape_expression(i: Slice) -> ParseResult<Src<JavascriptEscapeExpression>> {
+fn javascript_escape_expression(i: Slice) -> ParseResult<Node<JavascriptEscapeExpression>> {
     todo!()
 }
 
-fn proc(i: Slice) -> ParseResult<Src<Proc>> {
+fn proc(i: Slice) -> ParseResult<Node<Proc>> {
     todo!()
 }
 
 #[memoize]
-fn func(i: Slice) -> ParseResult<Src<Func>> {
+fn func(i: Slice) -> ParseResult<Node<Func>> {
     map(
         tuple((
             opt(tag("pure")),
@@ -1207,46 +1210,46 @@ fn func(i: Slice) -> ParseResult<Src<Func>> {
             let is_async = asyn.is_some();
             let is_pure = pure.is_some();
             let src = pure
-                .unwrap_or(asyn.unwrap_or(args[0].src.clone()))
-                .spanning(&body.src);
+                .unwrap_or(asyn.unwrap_or(args[0].slice.clone()))
+                .spanning(&body.slice);
 
             Func {
                 type_annotation: FuncType {
                     args,
                     args_spread: None, // TODO
                     is_pure,
-                    returns: returns.map(Box::new),
+                    returns,
                 }
-                .with_src(src.clone()),
+                .with_slice(src.clone()),
 
                 is_async,
                 is_pure,
-                body: FuncBody::Expression(body.boxed()),
+                body: FuncBody::Expression(body),
             }
-            .with_src(src.clone())
+            .with_slice(src.clone())
         },
     )(i)
 }
 
-fn inline_const_group(i: Slice) -> ParseResult<Src<InlineConstGroup>> {
+fn inline_const_group(i: Slice) -> ParseResult<Node<InlineConstGroup>> {
     todo!()
 }
 
-fn negation_operation(level: usize) -> impl Parser<Slice, Src<NegationOperation>, RawParseError> {
-    move |i: Slice| -> ParseResult<Src<NegationOperation>> {
+fn negation_operation(level: usize) -> impl Parser<Slice, Node<NegationOperation>, RawParseError> {
+    move |i: Slice| -> ParseResult<Node<NegationOperation>> {
         map(
             tuple((tag("!"), preceded(whitespace, expression(level + 1)))),
             |(start, expr)| {
-                let src = start.spanning(&expr.src);
+                let src = start.spanning(&expr.slice);
 
-                NegationOperation(expr.boxed()).with_src(src)
+                NegationOperation(expr).with_slice(src)
             },
         )(i)
     }
 }
 
-fn parenthesis(level: usize) -> impl Parser<Slice, Src<Parenthesis>, RawParseError> {
-    move |i: Slice| -> ParseResult<Src<Parenthesis>> {
+fn parenthesis(level: usize) -> impl Parser<Slice, Node<Parenthesis>, RawParseError> {
+    move |i: Slice| -> ParseResult<Node<Parenthesis>> {
         context(
             "parenthesized expression",
             map(
@@ -1258,7 +1261,7 @@ fn parenthesis(level: usize) -> impl Parser<Slice, Src<Parenthesis>, RawParseErr
                     )),
                 ),
                 |(open_paren, (inner, close_paren))| {
-                    Parenthesis(inner.boxed()).with_src(open_paren.spanning(&close_paren))
+                    Parenthesis(inner).with_slice(open_paren.spanning(&close_paren))
                 },
             ),
         )(i)
@@ -1266,7 +1269,7 @@ fn parenthesis(level: usize) -> impl Parser<Slice, Src<Parenthesis>, RawParseErr
 }
 
 #[memoize]
-fn object_literal(i: Slice) -> ParseResult<Src<ObjectLiteral>> {
+fn object_literal(i: Slice) -> ParseResult<Node<ObjectLiteral>> {
     context(
         "object",
         map(
@@ -1282,23 +1285,23 @@ fn object_literal(i: Slice) -> ParseResult<Src<ObjectLiteral>> {
                     entries
                         .into_iter()
                         .map(|(key, value)| {
-                            let src = key.clone().spanning(&value.src);
+                            let src = key.clone().spanning(&value.slice);
 
                             ObjectLiteralEntry::KeyAndValue(
                                 IdentifierOrExpression::PlainIdentifier(PlainIdentifier(key)),
                                 value,
                             )
-                            .with_src(src)
+                            .with_slice(src)
                         })
                         .collect(),
                 )
-                .with_src(open_bracket.spanning(&close_bracket))
+                .with_slice(open_bracket.spanning(&close_bracket))
             },
         ),
     )(i)
 }
 
-fn key_value_expression(i: Slice) -> ParseResult<(Slice, Src<Expression>)> {
+fn key_value_expression(i: Slice) -> ParseResult<(Slice, Node<Expression>)> {
     separated_pair(
         preceded(whitespace, identifier_like),
         cut(preceded(whitespace, char(':'))),
@@ -1307,7 +1310,7 @@ fn key_value_expression(i: Slice) -> ParseResult<(Slice, Src<Expression>)> {
 }
 
 #[memoize]
-fn array_literal(i: Slice) -> ParseResult<Src<ArrayLiteral>> {
+fn array_literal(i: Slice) -> ParseResult<Node<ArrayLiteral>> {
     context(
         "array",
         map(
@@ -1322,17 +1325,17 @@ fn array_literal(i: Slice) -> ParseResult<Src<ArrayLiteral>> {
                 ArrayLiteral(
                     entries
                         .into_iter()
-                        .map(|x| x.map(ArrayLiteralEntry::Element))
+                        .map(|x| x.map_deep(ArrayLiteralEntry::Element))
                         .collect(),
                 )
-                .with_src(open_bracket.spanning(&close_bracket))
+                .with_slice(open_bracket.spanning(&close_bracket))
             },
         ),
     )(i)
 }
 
 #[memoize]
-fn string_literal(i: Slice) -> ParseResult<Src<StringLiteral>> {
+fn string_literal(i: Slice) -> ParseResult<Node<StringLiteral>> {
     context(
         "string",
         map(
@@ -1345,14 +1348,14 @@ fn string_literal(i: Slice) -> ParseResult<Src<StringLiteral>> {
                     tag: None, // TODO
                     segments,
                 }
-                .with_src(open_quote.spanning(&close_quote))
+                .with_slice(open_quote.spanning(&close_quote))
             },
         ),
     )(i)
 }
 
 #[memoize]
-fn exact_string_literal(i: Slice) -> ParseResult<Src<ExactStringLiteral>> {
+fn exact_string_literal(i: Slice) -> ParseResult<Node<ExactStringLiteral>> {
     context(
         "string",
         map(
@@ -1362,13 +1365,13 @@ fn exact_string_literal(i: Slice) -> ParseResult<Src<ExactStringLiteral>> {
                     tag: None, // TODO
                     value: contents,
                 }
-                .with_src(open_quote.spanning(&close_quote))
+                .with_slice(open_quote.spanning(&close_quote))
             },
         ),
     )(i)
 }
 
-fn string_literal_segment(i: Slice) -> ParseResult<Src<StringLiteralSegment>> {
+fn string_literal_segment(i: Slice) -> ParseResult<Node<StringLiteralSegment>> {
     alt((
         map(
             tuple((
@@ -1377,11 +1380,11 @@ fn string_literal_segment(i: Slice) -> ParseResult<Src<StringLiteralSegment>> {
                 preceded(whitespace, tag("}")),
             )),
             |(open, expr, close)| {
-                StringLiteralSegment::Expression(expr).with_src(open.spanning(&close))
+                StringLiteralSegment::Expression(expr).with_slice(open.spanning(&close))
             },
         ),
         map(string_contents, |s| {
-            StringLiteralSegment::String(s.clone()).with_src(s)
+            StringLiteralSegment::String(s.clone()).with_slice(s)
         }),
     ))(i)
 }
@@ -1390,7 +1393,7 @@ fn string_contents(i: Slice) -> ParseResult<Slice> {
     escaped(take_while(|ch: char| ch != '\''), '\\', one_of("$\'n\\"))(i)
 }
 
-fn number_literal(i: Slice) -> ParseResult<Src<NumberLiteral>> {
+fn number_literal(i: Slice) -> ParseResult<Node<NumberLiteral>> {
     map(
         tuple((opt(tag("-")), numeric, opt(tuple((tag("."), cut(numeric)))))),
         |(neg, int, tail)| {
@@ -1398,23 +1401,25 @@ fn number_literal(i: Slice) -> ParseResult<Src<NumberLiteral>> {
             let back = tail.map(|(_, decimal)| decimal).unwrap_or(int);
             let full = front.spanning(&back);
 
-            NumberLiteral(full.clone()).with_src(full)
+            NumberLiteral(full.clone()).with_slice(full)
         },
     )(i)
 }
 
-fn boolean_literal(input: Slice) -> ParseResult<Src<BooleanLiteral>> {
-    let parse_true = map(tag("true"), |src: Slice| BooleanLiteral(true).with_src(src));
+fn boolean_literal(input: Slice) -> ParseResult<Node<BooleanLiteral>> {
+    let parse_true = map(tag("true"), |src: Slice| {
+        BooleanLiteral(true).with_slice(src)
+    });
 
     let parse_false = map(tag("false"), |src: Slice| {
-        BooleanLiteral(false).with_src(src)
+        BooleanLiteral(false).with_slice(src)
     });
 
     alt((parse_true, parse_false))(input)
 }
 
-fn nil_literal(input: Slice) -> ParseResult<Src<NilLiteral>> {
-    map(tag("nil"), |src: Slice| NilLiteral.with_src(src))(input)
+fn nil_literal(input: Slice) -> ParseResult<Node<NilLiteral>> {
+    map(tag("nil"), |src: Slice| NilLiteral.with_slice(src))(input)
 }
 
 fn local_identifier(i: Slice) -> ParseResult<LocalIdentifier> {
@@ -1516,11 +1521,3 @@ impl<E> nom::error::FromExternalError<Slice, E> for RawParseError {
         }
     }
 }
-
-trait Boxable: Sized {
-    fn boxed(self) -> Box<Self> {
-        Box::new(self)
-    }
-}
-
-impl<T: Sized> Boxable for T {}

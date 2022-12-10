@@ -13,7 +13,7 @@ impl Resolve for Module {
     fn resolve_symbol(&self, symbol: &str, at: &Slice) -> Option<Binding> {
         // find the declaration that this index is within, and see if anything lower resolves
         for decl in &self.declarations {
-            if decl.src.contains(&at) {
+            if decl.slice.contains(&at) {
                 let inner = decl.resolve_symbol(symbol, &at);
 
                 if inner.is_some() {
@@ -24,7 +24,7 @@ impl Resolve for Module {
 
         // look in module declarations
         for decl in &self.declarations {
-            match &decl.node {
+            match decl.this() {
                 Declaration::ValueDeclaration {
                     name,
                     type_annotation: _,
@@ -84,9 +84,9 @@ impl Resolve for Module {
     }
 }
 
-impl Resolve for Src<Declaration> {
+impl Resolve for Node<Declaration> {
     fn resolve_symbol(&self, symbol: &str, at: &Slice) -> Option<Binding> {
-        match &self.node {
+        match self.this() {
             Declaration::ValueDeclaration {
                 name: _,
                 type_annotation: _,
@@ -133,9 +133,9 @@ impl Resolve for Src<Declaration> {
     }
 }
 
-impl Resolve for Src<Expression> {
+impl Resolve for Node<Expression> {
     fn resolve_symbol(&self, symbol: &str, at: &Slice) -> Option<Binding> {
-        match &self.node {
+        match self.this() {
             Expression::BinaryOperation { left, op: _, right } => {
                 if left.contains(at) {
                     return left.resolve_symbol(symbol, at);
@@ -201,7 +201,7 @@ impl Resolve for Src<Expression> {
                 cases,
                 default_case,
             } => {
-                for (condition, outcome) in cases {
+                for (condition, outcome) in cases.iter().map(|case| case.this()) {
                     if condition.contains(at) {
                         return condition.resolve_symbol(symbol, at);
                     } else if outcome.contains(at) {
@@ -238,9 +238,9 @@ impl Resolve for Src<Expression> {
     }
 }
 
-impl Resolve for Src<InlineConstDeclaration> {
+impl Resolve for Node<InlineConstDeclaration> {
     fn resolve_symbol(&self, symbol: &str, at: &Slice) -> Option<Binding> {
-        if self.node.name.0.as_str() == symbol {
+        if self.this().name.0.as_str() == symbol {
             Some(Binding::InlineConstDeclaration(self))
         } else {
             None
@@ -249,14 +249,14 @@ impl Resolve for Src<InlineConstDeclaration> {
 }
 
 pub enum Binding<'a> {
-    Declaration(&'a Src<Declaration>),
-    InlineConstDeclaration(&'a Src<InlineConstDeclaration>),
+    Declaration(&'a Node<Declaration>),
+    InlineConstDeclaration(&'a Node<InlineConstDeclaration>),
 }
 
 impl<'a> Binding<'a> {
     pub fn contents(self, ctx: InferTypeContext<'a>) -> BindingContents {
         match self {
-            Binding::Declaration(decl) => match &decl.node {
+            Binding::Declaration(decl) => match decl.this() {
                 Declaration::ImportAllDeclaration { name, path } => todo!(),
                 Declaration::ImportDeclaration { imports, path } => todo!(),
                 Declaration::TypeDeclaration {
@@ -295,11 +295,11 @@ impl<'a> Binding<'a> {
                 } => todo!(),
             },
             Binding::InlineConstDeclaration(decl) => BindingContents::ValueWithType(
-                decl.node
+                decl.this()
                     .type_annotation
                     .as_ref()
                     .map(|type_annotation| type_annotation.resolve(ctx.into()))
-                    .unwrap_or_else(|| decl.node.value.infer_type(ctx)),
+                    .unwrap_or_else(|| decl.this().value.infer_type(ctx)),
             ),
         }
     }

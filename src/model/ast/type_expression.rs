@@ -8,15 +8,15 @@ use crate::{
     ModulesStore,
 };
 
-use super::Src;
+use super::Node;
 
 #[derive(Clone, Debug, PartialEq, EnumVariantType)]
 pub enum TypeExpression {
     #[evt(derive(Debug, Clone, PartialEq))]
-    UnionType(Vec<Src<TypeExpression>>),
+    UnionType(Vec<Node<TypeExpression>>),
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    MaybeType(Box<Src<TypeExpression>>),
+    MaybeType(Node<TypeExpression>),
 
     #[evt(derive(Debug, Clone, PartialEq))]
     NamedType(PlainIdentifier),
@@ -24,58 +24,58 @@ pub enum TypeExpression {
     #[evt(derive(Debug, Clone, PartialEq))]
     GenericParamType {
         name: PlainIdentifier,
-        extends: Option<Box<Src<TypeExpression>>>,
+        extends: Option<Node<TypeExpression>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ProcType {
-        args: Vec<Src<Arg>>,
-        args_spread: Option<Box<Src<TypeExpression>>>,
+        args: Vec<Node<Arg>>,
+        args_spread: Option<Node<TypeExpression>>,
         is_pure: bool,
         is_async: bool,
-        throws: Option<Box<Src<TypeExpression>>>,
+        throws: Option<Node<TypeExpression>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     FuncType {
-        args: Vec<Src<Arg>>,
-        args_spread: Option<Box<Src<TypeExpression>>>,
+        args: Vec<Node<Arg>>,
+        args_spread: Option<Node<TypeExpression>>,
         is_pure: bool,
-        returns: Option<Box<Src<TypeExpression>>>,
+        returns: Option<Node<TypeExpression>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     GenericType {
-        type_params: Vec<(PlainIdentifier, Option<Src<TypeExpression>>)>,
-        inner: Box<Src<TypeExpression>>,
+        type_params: Vec<(PlainIdentifier, Option<Node<TypeExpression>>)>,
+        inner: Node<TypeExpression>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     BoundGenericType {
-        type_args: Vec<Src<TypeExpression>>,
-        generic: Box<Src<TypeExpression>>,
+        type_args: Vec<Node<TypeExpression>>,
+        generic: Node<TypeExpression>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ObjectType(Vec<ObjectTypeEntry>),
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    InterfaceType(Vec<(PlainIdentifier, Src<TypeExpression>)>),
+    InterfaceType(Vec<(PlainIdentifier, Node<TypeExpression>)>),
 
     #[evt(derive(Debug, Clone, PartialEq))]
     RecordType {
-        key_type: Box<Src<TypeExpression>>,
-        value_type: Box<Src<TypeExpression>>,
+        key_type: Node<TypeExpression>,
+        value_type: Node<TypeExpression>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    ArrayType(Box<Src<TypeExpression>>),
+    ArrayType(Node<TypeExpression>),
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    TupleType(Vec<Src<TypeExpression>>),
+    TupleType(Vec<Node<TypeExpression>>),
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    ReadonlyType(Box<Src<TypeExpression>>),
+    ReadonlyType(Node<TypeExpression>),
 
     #[evt(derive(Debug, Clone, PartialEq))]
     StringType,
@@ -93,28 +93,28 @@ pub enum TypeExpression {
     LiteralType(LiteralTypeValue),
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    IteratorType(Box<Src<TypeExpression>>),
+    IteratorType(Node<TypeExpression>),
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    PlanType(Box<Src<TypeExpression>>),
+    PlanType(Node<TypeExpression>),
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    ErrorType(Box<Src<TypeExpression>>),
+    ErrorType(Node<TypeExpression>),
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    ParenthesizedType(Box<Src<TypeExpression>>),
+    ParenthesizedType(Node<TypeExpression>),
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    TypeofType(Src<Expression>),
+    TypeofType(Node<Expression>),
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    KeyofType(Box<Src<TypeExpression>>),
+    KeyofType(Node<TypeExpression>),
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    ValueofType(Box<Src<TypeExpression>>),
+    ValueofType(Node<TypeExpression>),
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    ElementofType(Box<Src<TypeExpression>>),
+    ElementofType(Node<TypeExpression>),
 
     #[evt(derive(Debug, Clone, PartialEq))]
     UnknownType,
@@ -130,15 +130,15 @@ pub enum TypeExpression {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     PropertyType {
-        subject: Box<Src<TypeExpression>>,
+        subject: Node<TypeExpression>,
         property: PlainIdentifier, // TODO:  | TypeExpression?
         optional: bool,
     },
 }
 
-impl Src<TypeExpression> {
+impl Node<TypeExpression> {
     pub fn resolve<'a>(&self, ctx: ResolveContext<'a>) -> Type {
-        match &self.node {
+        match self.this() {
             TypeExpression::GenericParamType { name, extends } => todo!(),
             TypeExpression::ProcType {
                 args,
@@ -306,14 +306,14 @@ impl Mutability {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Arg {
     pub name: PlainIdentifier,
-    pub type_annotation: Option<Src<TypeExpression>>,
+    pub type_annotation: Option<Node<TypeExpression>>,
     pub optional: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ObjectTypeEntry {
     Spread(NamedType),
-    KeyValue(PlainIdentifier, Box<Src<TypeExpression>>),
+    KeyValue(PlainIdentifier, Node<TypeExpression>),
 }
 
 #[derive(Clone, Debug, PartialEq)]

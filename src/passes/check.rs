@@ -40,9 +40,9 @@ impl<'a> Check<'a> for Module {
     }
 }
 
-impl<'a> Check<'a> for Src<Declaration> {
+impl<'a> Check<'a> for Node<Declaration> {
     fn check<F: FnMut(BagelError)>(&self, ctx: CheckContext<'a>, report_error: &mut F) {
-        match &self.node {
+        match self.this() {
             Declaration::ValueDeclaration {
                 name,
                 type_annotation,
@@ -64,7 +64,7 @@ impl<'a> Check<'a> for Src<Declaration> {
                     if let Some(issues) = issues {
                         report_error(BagelError::AssignmentError {
                             module_id: ctx.current_module.module_id.clone(),
-                            src: value.src.clone(),
+                            src: value.slice.clone(),
                             issues,
                         });
                     }
@@ -102,9 +102,9 @@ impl<'a> Check<'a> for Src<Declaration> {
     }
 }
 
-impl<'a> Check<'a> for Src<Expression> {
+impl<'a> Check<'a> for Node<Expression> {
     fn check<F: FnMut(BagelError)>(&self, ctx: CheckContext<'a>, report_error: &mut F) {
-        match &self.node {
+        match self.this() {
             Expression::BinaryOperation { left, op, right } => {
                 let ctx: InferTypeContext = ctx.into();
                 let left_type = left.infer_type(ctx);
@@ -112,13 +112,13 @@ impl<'a> Check<'a> for Src<Expression> {
 
                 let number_or_string = Type::ANY_NUMBER.union(Type::ANY_STRING);
 
-                if op.node == BinaryOperator::Plus {
+                if op.this() == &BinaryOperator::Plus {
                     if let Some(issues) =
                         number_or_string.subsumation_issues(ctx.into(), &left_type)
                     {
                         report_error(BagelError::AssignmentError {
                             module_id: ctx.current_module.module_id.clone(),
-                            src: left.src.clone(),
+                            src: left.slice.clone(),
                             issues,
                         })
                     }
@@ -128,20 +128,20 @@ impl<'a> Check<'a> for Src<Expression> {
                     {
                         report_error(BagelError::AssignmentError {
                             module_id: ctx.current_module.module_id.clone(),
-                            src: right.src.clone(),
+                            src: right.slice.clone(),
                             issues,
                         })
                     }
-                } else if op.node == BinaryOperator::Minus
-                    || op.node == BinaryOperator::Times
-                    || op.node == BinaryOperator::Divide
+                } else if op.this() == &BinaryOperator::Minus
+                    || op.this() == &BinaryOperator::Times
+                    || op.this() == &BinaryOperator::Divide
                 {
                     if let Some(issues) =
                         Type::ANY_NUMBER.subsumation_issues(ctx.into(), &left_type)
                     {
                         report_error(BagelError::AssignmentError {
                             module_id: ctx.current_module.module_id.clone(),
-                            src: left.src.clone(),
+                            src: left.slice.clone(),
                             issues,
                         })
                     }
@@ -151,7 +151,7 @@ impl<'a> Check<'a> for Src<Expression> {
                     {
                         report_error(BagelError::AssignmentError {
                             module_id: ctx.current_module.module_id.clone(),
-                            src: right.src.clone(),
+                            src: right.slice.clone(),
                             issues,
                         })
                     }
@@ -174,7 +174,7 @@ impl<'a> Check<'a> for Src<Expression> {
             Expression::LocalIdentifier(name) => {
                 if ctx
                     .current_module
-                    .resolve_symbol(name.as_str(), &self.src)
+                    .resolve_symbol(name.as_str(), &self.slice)
                     .is_none()
                 {
                     report_error(BagelError::NotFoundError {
@@ -231,7 +231,7 @@ impl<'a> Check<'a> for Src<Expression> {
             } => {
                 let truthiness_safe = Type::get_truthiness_safe_types();
 
-                for (condition, outcome) in cases {
+                for (condition, outcome) in cases.iter().map(|case| case.this()) {
                     let condition_type = condition.infer_type(ctx.into());
 
                     if let Some(issues) =
@@ -239,7 +239,7 @@ impl<'a> Check<'a> for Src<Expression> {
                     {
                         report_error(BagelError::AssignmentError {
                             module_id: ctx.current_module.module_id.clone(),
-                            src: condition.src.clone(),
+                            src: condition.slice.clone(),
                             issues,
                         });
                     }
@@ -279,25 +279,25 @@ impl<'a> Check<'a> for Src<Expression> {
     }
 }
 
-impl<'a> Check<'a> for Src<InlineConstDeclaration> {
+impl<'a> Check<'a> for Node<InlineConstDeclaration> {
     fn check<F: FnMut(BagelError)>(&self, ctx: CheckContext<'a>, report_error: &mut F) {
-        if let Some(type_annotation) = &self.node.type_annotation {
+        if let Some(type_annotation) = &self.this().type_annotation {
             type_annotation.check(ctx, report_error);
         }
 
-        self.node.value.check(ctx, report_error);
+        self.this().value.check(ctx, report_error);
     }
 }
 
-impl<'a, T: Check<'a>> Check<'a> for Src<T> {
+impl<'a, T: Clone + Check<'a>> Check<'a> for Node<T> {
     fn check<F: FnMut(BagelError)>(&self, ctx: CheckContext<'a>, report_error: &mut F) {
-        self.node.check(ctx, report_error)
+        self.this().check(ctx, report_error)
     }
 }
 
-impl<'a> Check<'a> for Src<TypeExpression> {
+impl<'a> Check<'a> for Node<TypeExpression> {
     fn check<F: FnMut(BagelError)>(&self, ctx: CheckContext<'a>, report_error: &mut F) {
-        match &self.node {
+        match self.this() {
             TypeExpression::NamedType(name) => todo!(),
             TypeExpression::GenericParamType { name, extends } => todo!(),
             TypeExpression::ProcType {

@@ -1,6 +1,6 @@
 use std::fmt::{Result, Write};
 
-use crate::model::{ast::*, module::Module, slice::Slice};
+use crate::model::{ast::*, module::Module};
 
 pub trait Compile {
     fn compile<W: Write>(&self, f: &mut W) -> Result;
@@ -16,9 +16,9 @@ impl Compile for Module {
     }
 }
 
-impl Compile for Src<Declaration> {
+impl Compile for Node<Declaration> {
     fn compile<W: Write>(&self, f: &mut W) -> Result {
-        match &self.node {
+        match self.this() {
             Declaration::ImportAllDeclaration { name, path } => todo!(),
             Declaration::ImportDeclaration { imports, path } => todo!(),
             Declaration::TypeDeclaration {
@@ -60,14 +60,9 @@ impl Compile for Src<Declaration> {
                 compile_function(
                     f,
                     Some(name.0.as_str()),
-                    &func.node.type_annotation.node.args,
-                    func.node
-                        .type_annotation
-                        .node
-                        .returns
-                        .as_ref()
-                        .map(|x| x.as_ref()),
-                    &func.node.body,
+                    &func.this().type_annotation.this().args,
+                    func.this().type_annotation.this().returns.as_ref(),
+                    &func.this().body,
                 )?;
                 f.write_str(";")
             }
@@ -87,9 +82,9 @@ impl Compile for Src<Declaration> {
                 compile_function(
                     f,
                     None,
-                    &proc.node.type_annotation.node.args,
+                    &proc.this().type_annotation.this().args,
                     None,
-                    &proc.node.body,
+                    &proc.this().body,
                 )?;
                 f.write_str(";")
             }
@@ -104,9 +99,9 @@ impl Compile for Src<Declaration> {
     }
 }
 
-impl Compile for Src<Expression> {
+impl Compile for Node<Expression> {
     fn compile<W: Write>(&self, f: &mut W) -> Result {
-        match &self.node {
+        match self.this() {
             Expression::NilLiteral => f.write_str("undefined")?,
             Expression::BooleanLiteral(value) => todo!(),
             Expression::NumberLiteral(value) => f.write_str(value.as_str())?,
@@ -169,8 +164,8 @@ impl Compile for Src<Expression> {
                 compile_function(
                     f,
                     None,
-                    &type_annotation.node.args,
-                    type_annotation.node.returns.as_ref().map(|x| x.as_ref()),
+                    &type_annotation.this().args,
+                    type_annotation.this().returns.as_ref(),
                     body,
                 )?;
             }
@@ -233,7 +228,7 @@ impl Compile for FuncBody {
                 expr.compile(f)?;
                 f.write_char(' ')
             }
-            FuncBody::Js(js) => f.write_str(js),
+            FuncBody::Js(js) => f.write_str(js.this()),
         }
     }
 }
@@ -249,14 +244,14 @@ impl Compile for ProcBody {
 
                 Ok(())
             }
-            ProcBody::Js(js) => f.write_str(js),
+            ProcBody::Js(js) => f.write_str(js.this()),
         }
     }
 }
 
-impl Compile for Src<Statement> {
+impl Compile for Node<Statement> {
     fn compile<W: Write>(&self, f: &mut W) -> Result {
-        match &self.node {
+        match self.this() {
             Statement::DeclarationStatement {
                 destination,
                 value,
@@ -290,31 +285,29 @@ impl Compile for Src<Statement> {
     }
 }
 
-impl Compile for Src<BinaryOperator> {
+impl Compile for Node<BinaryOperator> {
     fn compile<W: Write>(&self, f: &mut W) -> Result {
-        f.write_str(self.node.into())
+        f.write_str(self.this().into())
     }
 }
 
-impl Compile for Src<ArrayLiteralEntry> {
+impl Compile for Node<ArrayLiteralEntry> {
     fn compile<W: Write>(&self, f: &mut W) -> Result {
-        match &self.node {
+        match self.this() {
             ArrayLiteralEntry::Spread(spread) => {
                 f.write_str("...")?;
                 f.write_str(spread.0.as_str())
             }
-            ArrayLiteralEntry::Element(element) => Src {
-                src: self.src.clone(),
-                node: element.clone(),
+            ArrayLiteralEntry::Element(element) => {
+                element.clone().with_slice(self.slice.clone()).compile(f)
             }
-            .compile(f),
         }
     }
 }
 
-impl Compile for Src<ObjectLiteralEntry> {
+impl Compile for Node<ObjectLiteralEntry> {
     fn compile<W: Write>(&self, f: &mut W) -> Result {
-        match &self.node {
+        match self.this() {
             ObjectLiteralEntry::Variable(x) => x.compile(f),
             ObjectLiteralEntry::Spread(spread) => {
                 f.write_str("...")?;
@@ -341,9 +334,9 @@ impl Compile for PlainIdentifier {
     }
 }
 
-impl Compile for Src<TypeExpression> {
+impl Compile for Node<TypeExpression> {
     fn compile<W: Write>(&self, f: &mut W) -> Result {
-        match &self.node {
+        match self.this() {
             TypeExpression::UnknownType => f.write_str("unknown"),
             TypeExpression::NilType => f.write_str("null | undefined"),
             TypeExpression::BooleanType => f.write_str("boolean"),
@@ -401,7 +394,7 @@ impl Compile for Src<TypeExpression> {
 impl Compile for IdentifierOrExpression {
     fn compile<W: Write>(&self, f: &mut W) -> Result {
         todo!()
-        // match &self.node {
+        // match self.this() {
         //     IdentifierOrExpression::PlainIdentifier(x) => f.write_str(x.0.as_str()),
         //     IdentifierOrExpression::Expression(x) => {
         //         f.write_char('[')?;
@@ -416,8 +409,8 @@ impl Compile for IdentifierOrExpression {
 fn compile_function<W: Write, B: Compile>(
     f: &mut W,
     name: Option<&str>,
-    args: &Vec<Src<Arg>>,
-    return_type: Option<&Src<TypeExpression>>,
+    args: &Vec<Node<Arg>>,
+    return_type: Option<&Node<TypeExpression>>,
     body: &B,
 ) -> Result {
     f.write_str("function ")?;
@@ -429,14 +422,11 @@ fn compile_function<W: Write, B: Compile>(
 
     f.write_char('(')?;
 
-    for Src {
-        src: _,
-        node: Arg {
-            name,
-            type_annotation,
-            optional,
-        },
-    } in args.iter()
+    for Arg {
+        name,
+        type_annotation,
+        optional,
+    } in args.iter().map(|n| n.this())
     {
         f.write_str(name.0.as_str())?;
         if *optional {
@@ -459,7 +449,7 @@ fn compile_function<W: Write, B: Compile>(
 
 fn compile_type_annotation<W: Write>(
     f: &mut W,
-    type_annotation: Option<&Src<TypeExpression>>,
+    type_annotation: Option<&Node<TypeExpression>>,
 ) -> Result {
     if let Some(type_annotation) = type_annotation {
         f.write_str(": ")?;

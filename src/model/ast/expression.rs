@@ -3,7 +3,7 @@ use strum_macros::{EnumString, IntoStaticStr};
 
 use crate::model::slice::Slice;
 
-use super::{FuncType, PlainIdentifier, ProcType, Src, Statement, TypeExpression};
+use super::{FuncType, Node, PlainIdentifier, ProcType, Statement, TypeExpression};
 
 #[derive(Clone, Debug, PartialEq, EnumVariantType)]
 pub enum Expression {
@@ -19,7 +19,7 @@ pub enum Expression {
     #[evt(derive(Debug, Clone, PartialEq))]
     StringLiteral {
         tag: Option<PlainIdentifier>,
-        segments: Vec<Src<StringLiteralSegment>>,
+        segments: Vec<Node<StringLiteralSegment>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
@@ -29,36 +29,36 @@ pub enum Expression {
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    ArrayLiteral(Vec<Src<ArrayLiteralEntry>>),
+    ArrayLiteral(Vec<Node<ArrayLiteralEntry>>),
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    ObjectLiteral(Vec<Src<ObjectLiteralEntry>>),
+    ObjectLiteral(Vec<Node<ObjectLiteralEntry>>),
 
     #[evt(derive(Debug, Clone, PartialEq))]
     BinaryOperation {
-        left: Box<Src<Expression>>,
-        op: Src<BinaryOperator>,
-        right: Box<Src<Expression>>,
+        left: Node<Expression>,
+        op: Node<BinaryOperator>,
+        right: Node<Expression>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    NegationOperation(Box<Src<Expression>>),
+    NegationOperation(Node<Expression>),
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    Parenthesis(Box<Src<Expression>>),
+    Parenthesis(Node<Expression>),
 
     #[evt(derive(Debug, Clone, PartialEq))]
     LocalIdentifier(Slice),
 
     #[evt(derive(Debug, Clone, PartialEq))]
     InlineConstGroup {
-        declarations: Vec<Src<InlineConstDeclaration>>,
-        inner: Box<Src<Expression>>,
+        declarations: Vec<Node<InlineConstDeclaration>>,
+        inner: Node<Expression>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     Func {
-        type_annotation: Src<FuncType>, // TODO:  | GenericFuncType
+        type_annotation: Node<FuncType>, // TODO:  | GenericFuncType
         is_async: bool,
         is_pure: bool,
         body: FuncBody,
@@ -66,7 +66,7 @@ pub enum Expression {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     Proc {
-        type_annotation: Src<ProcType>, // TODO:  | GenericProcType
+        type_annotation: Node<ProcType>, // TODO:  | GenericProcType
         is_async: bool,
         is_pure: bool,
         body: ProcBody,
@@ -77,79 +77,79 @@ pub enum Expression {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     RangeExpression {
-        start: Box<Src<Expression>>,
-        end: Box<Src<Expression>>,
+        start: Node<Expression>,
+        end: Node<Expression>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     Invocation {
-        subject: Box<Src<Expression>>,
+        subject: Node<Expression>,
         args: Vec<Expression>,
-        spread_args: Option<Box<Src<Expression>>>,
-        type_args: Vec<Src<TypeExpression>>,
+        spread_args: Option<Node<Expression>>,
+        type_args: Vec<Node<TypeExpression>>,
         bubbles: bool,
-        awaited_or_detached: Option<Src<AwaitOrDetach>>,
+        awaited_or_detached: Option<Node<AwaitOrDetach>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     PropertyAccessor {
-        subject: Box<Src<Expression>>,
-        property: Box<Src<IdentifierOrExpression>>,
+        subject: Node<Expression>,
+        property: Node<IdentifierOrExpression>,
         optional: bool,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     IfElseExpression {
-        cases: Vec<(Src<Expression>, Src<Expression>)>,
-        default_case: Option<Box<Src<Expression>>>,
+        cases: Vec<Node<(Node<Expression>, Node<Expression>)>>,
+        default_case: Option<Node<Expression>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     SwitchExpression {
-        value: Box<Src<Expression>>,
-        cases: Vec<(Src<TypeExpression>, Src<Expression>)>,
-        default_case: Option<Box<Src<Expression>>>,
+        value: Node<Expression>,
+        cases: Vec<(Node<TypeExpression>, Node<Expression>)>,
+        default_case: Option<Node<Expression>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ElementTag {
         tag_name: PlainIdentifier,
-        attributes: Vec<Src<ObjectLiteralEntry>>,
-        children: Vec<Src<Expression>>,
+        attributes: Vec<Node<ObjectLiteralEntry>>,
+        children: Vec<Node<Expression>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     AsCast {
-        inner: Box<Src<Expression>>,
-        as_type: Box<Src<TypeExpression>>,
+        inner: Node<Expression>,
+        as_type: Node<TypeExpression>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     InstanceOf {
-        inner: Box<Src<Expression>>,
-        possible_type: Box<Src<TypeExpression>>,
+        inner: Node<Expression>,
+        possible_type: Node<TypeExpression>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    ErrorExpression(Box<Src<Expression>>),
+    ErrorExpression(Node<Expression>),
 
     #[evt(derive(Debug, Clone, PartialEq))]
     RegularExpression {
         expr: String,
-        flags: Vec<Src<RegularExpressionFlag>>,
+        flags: Vec<Node<RegularExpressionFlag>>,
     },
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum FuncBody {
-    Expression(Box<Src<Expression>>),
-    Js(String),
+    Expression(Node<Expression>),
+    Js(Node<String>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ProcBody {
-    Statements(Vec<Src<Statement>>),
-    Js(String),
+    Statements(Vec<Node<Statement>>),
+    Js(Node<String>),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -172,7 +172,7 @@ pub enum AwaitOrDetach {
 #[derive(Clone, Debug, PartialEq)]
 pub enum StringLiteralSegment {
     String(Slice),
-    Expression(Src<Expression>),
+    Expression(Node<Expression>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -185,20 +185,20 @@ pub enum ArrayLiteralEntry {
 pub enum ObjectLiteralEntry {
     Variable(LocalIdentifier),
     Spread(LocalIdentifier),
-    KeyAndValue(IdentifierOrExpression, Src<Expression>),
+    KeyAndValue(IdentifierOrExpression, Node<Expression>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum IdentifierOrExpression {
     PlainIdentifier(PlainIdentifier),
-    Expression(Src<Expression>),
+    Expression(Node<Expression>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct InlineConstDeclaration {
     pub name: PlainIdentifier,
-    pub type_annotation: Option<Src<TypeExpression>>,
-    pub value: Box<Src<Expression>>,
+    pub type_annotation: Option<Node<TypeExpression>>,
+    pub value: Node<Expression>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]

@@ -1,7 +1,6 @@
 use std::fmt::{Display, Write};
 
 use enum_variant_type::EnumVariantType;
-use lazy_static::lazy_static;
 
 use crate::{
     model::ast::Mutability,

@@ -40,10 +40,10 @@ impl<'a> From<ResolveContext<'a>> for InferTypeContext<'a> {
     }
 }
 
-impl<'a> Src<Expression> {
+impl<'a> Node<Expression> {
     pub fn infer_type(&self, ctx: InferTypeContext<'a>) -> Type {
-        match &self.node {
-            Expression::BinaryOperation { left, op, right } => match op.node {
+        match self.this() {
+            Expression::BinaryOperation { left, op, right } => match op.this() {
                 BinaryOperator::NullishCoalescing => todo!(),
                 BinaryOperator::Or => todo!(),
                 BinaryOperator::And => todo!(),
@@ -83,10 +83,12 @@ impl<'a> Src<Expression> {
             },
             Expression::Parenthesis(inner) => inner.infer_type(ctx),
             Expression::LocalIdentifier(name) => {
-                let resolved = ctx.current_module.resolve_symbol(name.as_str(), &self.src);
+                let resolved = ctx
+                    .current_module
+                    .resolve_symbol(name.as_str(), &self.slice);
 
                 if let Some(Binding::Declaration(binding)) = resolved {
-                    if let Some((value, type_annotation)) = binding.node.get_type_and_value() {
+                    if let Some((value, type_annotation)) = binding.this().get_value_and_type() {
                         return type_annotation
                             .map(|x| x.resolve(ctx.into()))
                             .unwrap_or(value.infer_type(ctx));
@@ -149,8 +151,8 @@ impl<'a> Src<Expression> {
             } => Type::UnionType(
                 cases
                     .iter()
-                    .map(|case| &case.1)
-                    .chain(default_case.iter().map(|c| c.as_ref()))
+                    .map(|case| &case.this().1)
+                    .chain(default_case.iter())
                     .map(|expr| expr.infer_type(ctx))
                     .collect(),
             ),

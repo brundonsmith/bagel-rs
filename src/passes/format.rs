@@ -35,15 +35,15 @@ impl Format for Module {
     }
 }
 
-impl Display for Src<Declaration> {
+impl Display for Node<Declaration> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         self.format(f, FormatOptions::DEFAULT)
     }
 }
 
-impl Format for Src<Declaration> {
+impl Format for Node<Declaration> {
     fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
-        match &self.node {
+        match self.this() {
             Declaration::ImportAllDeclaration { name, path } => todo!(),
             Declaration::ImportDeclaration { imports, path } => todo!(),
             Declaration::TypeDeclaration {
@@ -99,15 +99,15 @@ impl Format for Src<Declaration> {
     }
 }
 
-impl Display for Src<Expression> {
+impl Display for Node<Expression> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         self.format(f, FormatOptions::DEFAULT)
     }
 }
 
-impl Format for Src<Expression> {
+impl Format for Node<Expression> {
     fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
-        match &self.node {
+        match self.this() {
             Expression::NilLiteral => f.write_str("nil")?,
             Expression::BooleanLiteral(value) => f.write_str(match value {
                 true => "true",
@@ -216,36 +216,36 @@ impl Format for Src<Expression> {
     }
 }
 
-impl Format for Src<Func> {
+impl Format for Node<Func> {
     fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
         f.write_char('(')?;
-        for arg in &self.node.type_annotation.node.args {
+        for arg in &self.this().type_annotation.this().args {
             arg.format(f, opts)?;
         }
-        if let Some(spread) = &self.node.type_annotation.node.args_spread {
+        if let Some(spread) = &self.this().type_annotation.this().args_spread {
             f.write_str("...")?;
             spread.format(f, opts)?;
         }
         f.write_char(')')?;
-        if let Some(return_type) = &self.node.type_annotation.node.returns {
+        if let Some(return_type) = &self.this().type_annotation.this().returns {
             f.write_str(": ")?;
             return_type.format(f, opts)?;
         }
         f.write_str(" => ")?;
 
-        match &self.node.body {
+        match &self.this().body {
             FuncBody::Expression(expr) => expr.format(f, opts),
             FuncBody::Js(_) => todo!(),
         }
     }
 }
 
-impl Format for Src<Arg> {
+impl Format for Node<Arg> {
     fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
-        f.write_str(&self.node.name.0.as_str())?;
+        f.write_str(self.this().name.0.as_str())?;
 
-        if let Some(type_annotation) = &self.node.type_annotation {
-            if self.node.optional {
+        if let Some(type_annotation) = &self.this().type_annotation {
+            if self.this().optional {
                 f.write_char('?')?;
             }
 
@@ -257,49 +257,48 @@ impl Format for Src<Arg> {
     }
 }
 
-impl Display for Src<BinaryOperator> {
+impl Display for Node<BinaryOperator> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         self.format(f, FormatOptions::DEFAULT)
     }
 }
 
-impl Format for Src<BinaryOperator> {
+impl Format for Node<BinaryOperator> {
     fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
-        f.write_str(self.node.into())
+        f.write_str(self.this().into())
     }
 }
 
-impl Display for Src<ArrayLiteralEntry> {
+impl Display for Node<ArrayLiteralEntry> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         self.format(f, FormatOptions::DEFAULT)
     }
 }
 
-impl Format for Src<ArrayLiteralEntry> {
+impl Format for Node<ArrayLiteralEntry> {
     fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
-        match &self.node {
+        match self.this() {
             ArrayLiteralEntry::Spread(spread) => {
                 f.write_str("...")?;
                 f.write_str(spread.0.as_str())
             }
-            ArrayLiteralEntry::Element(element) => Src {
-                src: self.src.clone(),
-                node: element.clone(),
-            }
-            .format(f, opts),
+            ArrayLiteralEntry::Element(element) => element
+                .clone()
+                .with_slice(self.slice.clone())
+                .format(f, opts),
         }
     }
 }
 
-impl Display for Src<ObjectLiteralEntry> {
+impl Display for Node<ObjectLiteralEntry> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         self.format(f, FormatOptions::DEFAULT)
     }
 }
 
-impl Format for Src<ObjectLiteralEntry> {
+impl Format for Node<ObjectLiteralEntry> {
     fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
-        match &self.node {
+        match self.this() {
             ObjectLiteralEntry::Variable(x) => x.format(f, opts),
             ObjectLiteralEntry::Spread(spread) => {
                 f.write_str("...")?;
@@ -338,7 +337,7 @@ impl Format for PlainIdentifier {
     }
 }
 
-impl Display for Src<Statement> {
+impl Display for Node<Statement> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         self.format(f, FormatOptions::DEFAULT)
     }
@@ -350,9 +349,9 @@ impl Format for IdentifierOrExpression {
     }
 }
 
-impl Format for Src<Statement> {
+impl Format for Node<Statement> {
     fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
-        match &self.node {
+        match self.this() {
             Statement::DeclarationStatement {
                 destination,
                 value,
@@ -388,15 +387,15 @@ impl Format for Src<Statement> {
     }
 }
 
-impl Display for Src<TypeExpression> {
+impl Display for Node<TypeExpression> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         self.format(f, FormatOptions::DEFAULT)
     }
 }
 
-impl Format for Src<TypeExpression> {
+impl Format for Node<TypeExpression> {
     fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
-        match &self.node {
+        match self.this() {
             TypeExpression::UnionType(members) => {
                 for (index, member) in members.iter().enumerate() {
                     if index > 0 {
