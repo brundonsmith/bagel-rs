@@ -1,71 +1,53 @@
 use crate::model::{ast::*, module::Module};
-
 use std::fmt::{Display, Formatter, Result, Write};
 
-pub trait Format {
-    fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result;
-
-    fn to_string(&self) -> String {
-        let mut buf = String::new();
-        self.format(&mut buf, FormatOptions::DEFAULT).unwrap();
-        buf
+impl Module {
+    pub fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
+        self.ast.format(f, opts)
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct FormatOptions {}
-
-impl FormatOptions {
-    pub const DEFAULT: FormatOptions = FormatOptions {};
-}
-
-impl Display for Module {
+impl Display for AST {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         self.format(f, FormatOptions::DEFAULT)
     }
 }
 
-impl Format for Module {
-    fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
-        for decl in &self.declarations {
-            decl.format(f, opts)?;
-        }
+impl AST {
+    pub fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
+        match self.details() {
+            ASTDetails::Module { declarations } => {
+                for decl in declarations {
+                    decl.format(f, opts)?;
+                    f.write_str("\n\n")?;
+                }
 
-        Ok(())
-    }
-}
-
-impl Display for Node<Declaration> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        self.format(f, FormatOptions::DEFAULT)
-    }
-}
-
-impl Format for Node<Declaration> {
-    fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
-        match self.this() {
-            Declaration::ImportAllDeclaration { name, path } => todo!(),
-            Declaration::ImportDeclaration { imports, path } => todo!(),
-            Declaration::TypeDeclaration {
+                Ok(())
+            }
+            ASTDetails::ImportAllDeclaration { name, path } => todo!(),
+            ASTDetails::ImportDeclaration { imports, path } => todo!(),
+            ASTDetails::ImportItem { name, alias } => todo!(),
+            ASTDetails::TypeDeclaration {
                 name,
                 declared_type,
                 exported,
             } => todo!(),
-            Declaration::FuncDeclaration {
+            ASTDetails::FuncDeclaration {
                 name,
                 func,
                 exported,
                 platforms,
                 decorators,
             } => todo!(),
-            Declaration::ProcDeclaration {
+            ASTDetails::ProcDeclaration {
                 name,
                 proc,
                 exported,
                 platforms,
                 decorators,
             } => todo!(),
-            Declaration::ValueDeclaration {
+            ASTDetails::Decorator { name } => todo!(),
+            ASTDetails::ValueDeclaration {
                 name,
                 type_annotation,
                 value,
@@ -84,43 +66,29 @@ impl Format for Node<Declaration> {
                     type_annotation.format(f, opts)?;
                 }
                 f.write_str(" = ")?;
-                value.format(f, opts)?;
+                value.format(f, opts)
             }
-            Declaration::TestExprDeclaration { name, expr } => todo!(),
-            Declaration::TestBlockDeclaration { name, block } => todo!(),
-            Declaration::TestTypeDeclaration {
+            ASTDetails::TestExprDeclaration { name, expr } => todo!(),
+            ASTDetails::TestBlockDeclaration { name, block } => todo!(),
+            ASTDetails::TestTypeDeclaration {
                 name,
                 destination_type,
                 value_type,
             } => todo!(),
-        };
-
-        Ok(())
-    }
-}
-
-impl Display for Node<Expression> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        self.format(f, FormatOptions::DEFAULT)
-    }
-}
-
-impl Format for Node<Expression> {
-    fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
-        match self.this() {
-            Expression::NilLiteral => f.write_str("nil")?,
-            Expression::BooleanLiteral(value) => f.write_str(match value {
+            ASTDetails::NilLiteral => f.write_str("nil"),
+            ASTDetails::BooleanLiteral(value) => f.write_str(match value {
                 true => "true",
                 false => "false",
-            })?,
-            Expression::NumberLiteral(value) => f.write_str(value.as_str())?,
-            Expression::StringLiteral { tag, segments } => todo!(),
-            Expression::ExactStringLiteral { tag, value } => {
+            }),
+            ASTDetails::NumberLiteral(value) => f.write_str(value.as_str()),
+            ASTDetails::StringLiteral { tag, segments } => todo!(),
+            ASTDetails::StringLiteralRawSegment(_) => todo!(),
+            ASTDetails::ExactStringLiteral { tag, value } => {
                 f.write_str("\"")?;
                 f.write_str(value.as_str())?;
-                f.write_str("\"")?;
+                f.write_str("\"")
             }
-            Expression::ArrayLiteral(entries) => {
+            ASTDetails::ArrayLiteral(entries) => {
                 f.write_char('[')?;
                 for (index, entry) in entries.iter().enumerate() {
                     if index > 0 {
@@ -130,9 +98,9 @@ impl Format for Node<Expression> {
                     f.write_char(' ')?;
                     entry.format(f, opts)?;
                 }
-                f.write_str(" ]")?;
+                f.write_str(" ]")
             }
-            Expression::ObjectLiteral(entries) => {
+            ASTDetails::ObjectLiteral(entries) => {
                 f.write_char('{')?;
                 for (index, entry) in entries.iter().enumerate() {
                     if index > 0 {
@@ -142,41 +110,64 @@ impl Format for Node<Expression> {
                     f.write_char(' ')?;
                     entry.format(f, opts)?;
                 }
-                f.write_str(" }")?;
+                f.write_str(" }")
             }
-            Expression::BinaryOperation { left, op, right } => {
+            ASTDetails::Spread(_) => todo!(),
+            ASTDetails::KeyValue { key, value } => todo!(),
+            ASTDetails::BinaryOperation { left, op, right } => {
                 left.format(f, opts)?;
                 f.write_char(' ')?;
                 op.format(f, opts)?;
                 f.write_char(' ')?;
-                right.format(f, opts)?;
+                right.format(f, opts)
             }
-            Expression::NegationOperation(inner) => todo!(),
-            Expression::Parenthesis(inner) => {
+            ASTDetails::BinaryOperator(op) => f.write_str(op.into()),
+            ASTDetails::NegationOperation(_) => todo!(),
+            ASTDetails::Parenthesis(inner) => {
                 f.write_char('(')?;
                 inner.format(f, opts)?;
-                f.write_char(')')?;
+                f.write_char(')')
             }
-            Expression::LocalIdentifier(name) => f.write_str(name.as_str())?,
-            Expression::InlineConstGroup {
+            ASTDetails::LocalIdentifier(name) => f.write_str(name.as_str()),
+            ASTDetails::InlineConstGroup {
                 declarations,
                 inner,
             } => todo!(),
-            Expression::Func {
+            ASTDetails::Func {
+                type_annotation,
+                is_async,
+                is_pure,
+                body,
+            } => {
+                let type_annotation = type_annotation.expect::<FuncType>();
+
+                f.write_char('(')?;
+                type_annotation.args.format(f, opts)?;
+                f.write_char(')')?;
+                if let Some(return_type) = type_annotation.returns {
+                    f.write_str(": ")?;
+                    return_type.format(f, opts)?;
+                }
+                f.write_str(" => ")?;
+
+                body.format(f, opts)
+            }
+            ASTDetails::Proc {
                 type_annotation,
                 is_async,
                 is_pure,
                 body,
             } => todo!(),
-            Expression::Proc {
+            ASTDetails::Block(_) => todo!(),
+            ASTDetails::ArgsSeries(_) => todo!(),
+            ASTDetails::Arg {
+                name,
                 type_annotation,
-                is_async,
-                is_pure,
-                body,
+                optional,
             } => todo!(),
-            Expression::JavascriptEscapeExpression(_) => todo!(),
-            Expression::RangeExpression { start, end } => todo!(),
-            Expression::Invocation {
+            ASTDetails::JavascriptEscapeExpression(_) => todo!(),
+            ASTDetails::RangeExpression { start, end } => todo!(),
+            ASTDetails::Invocation {
                 subject,
                 args,
                 spread_args,
@@ -184,219 +175,38 @@ impl Format for Node<Expression> {
                 bubbles,
                 awaited_or_detached,
             } => todo!(),
-            Expression::PropertyAccessor {
+            ASTDetails::PropertyAccessor {
                 subject,
                 property,
                 optional,
             } => todo!(),
-            Expression::IfElseExpression {
+            ASTDetails::IfElseExpression {
                 cases,
                 default_case,
             } => todo!(),
-            Expression::SwitchExpression {
+            ASTDetails::IfElseExpressionCase { condition, outcome } => todo!(),
+            ASTDetails::SwitchExpression {
                 value,
                 cases,
                 default_case,
             } => todo!(),
-            Expression::ElementTag {
+            ASTDetails::SwitchExpressionCase {
+                type_filter,
+                outcome,
+            } => todo!(),
+            ASTDetails::ElementTag {
                 tag_name,
                 attributes,
                 children,
             } => todo!(),
-            Expression::AsCast { inner, as_type } => todo!(),
-            Expression::InstanceOf {
+            ASTDetails::AsCast { inner, as_type } => todo!(),
+            ASTDetails::InstanceOf {
                 inner,
                 possible_type,
             } => todo!(),
-            Expression::ErrorExpression(inner) => todo!(),
-            Expression::RegularExpression { expr, flags } => todo!(),
-        };
-
-        Ok(())
-    }
-}
-
-impl Format for Node<Func> {
-    fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
-        f.write_char('(')?;
-        for arg in &self.this().type_annotation.this().args {
-            arg.format(f, opts)?;
-        }
-        if let Some(spread) = &self.this().type_annotation.this().args_spread {
-            f.write_str("...")?;
-            spread.format(f, opts)?;
-        }
-        f.write_char(')')?;
-        if let Some(return_type) = &self.this().type_annotation.this().returns {
-            f.write_str(": ")?;
-            return_type.format(f, opts)?;
-        }
-        f.write_str(" => ")?;
-
-        match &self.this().body {
-            FuncBody::Expression(expr) => expr.format(f, opts),
-            FuncBody::Js(_) => todo!(),
-        }
-    }
-}
-
-impl Format for Node<Arg> {
-    fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
-        f.write_str(self.this().name.0.as_str())?;
-
-        if let Some(type_annotation) = &self.this().type_annotation {
-            if self.this().optional {
-                f.write_char('?')?;
-            }
-
-            f.write_str(": ")?;
-            type_annotation.format(f, opts)?;
-        }
-
-        Ok(())
-    }
-}
-
-impl Display for Node<BinaryOperator> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        self.format(f, FormatOptions::DEFAULT)
-    }
-}
-
-impl Format for Node<BinaryOperator> {
-    fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
-        f.write_str(self.this().into())
-    }
-}
-
-impl Display for Node<ArrayLiteralEntry> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        self.format(f, FormatOptions::DEFAULT)
-    }
-}
-
-impl Format for Node<ArrayLiteralEntry> {
-    fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
-        match self.this() {
-            ArrayLiteralEntry::Spread(spread) => {
-                f.write_str("...")?;
-                f.write_str(spread.0.as_str())
-            }
-            ArrayLiteralEntry::Element(element) => element
-                .clone()
-                .with_slice(self.slice.clone())
-                .format(f, opts),
-        }
-    }
-}
-
-impl Display for Node<ObjectLiteralEntry> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        self.format(f, FormatOptions::DEFAULT)
-    }
-}
-
-impl Format for Node<ObjectLiteralEntry> {
-    fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
-        match self.this() {
-            ObjectLiteralEntry::Variable(x) => x.format(f, opts),
-            ObjectLiteralEntry::Spread(spread) => {
-                f.write_str("...")?;
-                f.write_str(spread.0.as_str())
-            }
-            ObjectLiteralEntry::KeyAndValue(key, value) => {
-                key.format(f, opts)?;
-                f.write_str(": ")?;
-                value.format(f, opts)
-            }
-        }
-    }
-}
-
-impl Display for LocalIdentifier {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        self.format(f, FormatOptions::DEFAULT)
-    }
-}
-
-impl Format for LocalIdentifier {
-    fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
-        f.write_str(self.0.as_str())
-    }
-}
-
-impl Display for PlainIdentifier {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        self.format(f, FormatOptions::DEFAULT)
-    }
-}
-
-impl Format for PlainIdentifier {
-    fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
-        f.write_str(self.0.as_str())
-    }
-}
-
-impl Display for Node<Statement> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        self.format(f, FormatOptions::DEFAULT)
-    }
-}
-
-impl Format for IdentifierOrExpression {
-    fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
-        todo!()
-    }
-}
-
-impl Format for Node<Statement> {
-    fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
-        match self.this() {
-            Statement::DeclarationStatement {
-                destination,
-                value,
-                awaited,
-                is_const,
-            } => todo!(),
-            Statement::IfElseStatement {
-                cases,
-                default_case,
-            } => todo!(),
-            Statement::ForLoop {
-                item_identifier,
-                iterator,
-                body,
-            } => todo!(),
-            Statement::WhileLoop { condition, body } => todo!(),
-            Statement::Assignment {
-                target,
-                value,
-                operator,
-            } => todo!(),
-            Statement::TryCatch {
-                try_block,
-                error_identifier,
-                catch_block,
-            } => todo!(),
-            Statement::ThrowStatement { error_expression } => todo!(),
-            Statement::Autorun { effect, until } => todo!(),
-            Statement::InvocationStatement(_) => todo!(),
-        };
-
-        Ok(())
-    }
-}
-
-impl Display for Node<TypeExpression> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        self.format(f, FormatOptions::DEFAULT)
-    }
-}
-
-impl Format for Node<TypeExpression> {
-    fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
-        match self.this() {
-            TypeExpression::UnionType(members) => {
+            ASTDetails::ErrorExpression(_) => todo!(),
+            ASTDetails::RegularExpression { expr, flags } => todo!(),
+            ASTDetails::UnionType(members) => {
                 for (index, member) in members.iter().enumerate() {
                     if index > 0 {
                         f.write_str(" | ")?;
@@ -404,58 +214,108 @@ impl Format for Node<TypeExpression> {
 
                     member.format(f, opts)?;
                 }
+
+                Ok(())
             }
-            TypeExpression::MaybeType(inner) => todo!(),
-            TypeExpression::NamedType(name) => todo!(),
-            TypeExpression::GenericParamType { name, extends } => todo!(),
-            TypeExpression::ProcType {
+            ASTDetails::MaybeType(_) => todo!(),
+            ASTDetails::NamedType(_) => todo!(),
+            ASTDetails::GenericParamType { name, extends } => todo!(),
+            ASTDetails::ProcType {
                 args,
                 args_spread,
                 is_pure,
                 is_async,
                 throws,
             } => todo!(),
-            TypeExpression::FuncType {
+            ASTDetails::FuncType {
                 args,
                 args_spread,
                 is_pure,
                 returns,
             } => todo!(),
-            TypeExpression::GenericType { type_params, inner } => todo!(),
-            TypeExpression::BoundGenericType { type_args, generic } => todo!(),
-            TypeExpression::ObjectType(entries) => todo!(),
-            TypeExpression::InterfaceType(entries) => todo!(),
-            TypeExpression::RecordType {
+            ASTDetails::GenericType { type_params, inner } => todo!(),
+            ASTDetails::TypeParam { name, extends } => todo!(),
+            ASTDetails::BoundGenericType { type_args, generic } => todo!(),
+            ASTDetails::ObjectType(_) => todo!(),
+            ASTDetails::InterfaceType(_) => todo!(),
+            ASTDetails::SpreadType(_) => todo!(),
+            ASTDetails::KeyValueType { key, value } => todo!(),
+            ASTDetails::RecordType {
                 key_type,
                 value_type,
             } => todo!(),
-            TypeExpression::ArrayType(element) => todo!(),
-            TypeExpression::TupleType(members) => todo!(),
-            TypeExpression::ReadonlyType(inner) => todo!(),
-            TypeExpression::StringType => f.write_str("string")?,
-            TypeExpression::NumberType => f.write_str("number")?,
-            TypeExpression::BooleanType => f.write_str("boolean")?,
-            TypeExpression::NilType => f.write_str("nil")?,
-            TypeExpression::LiteralType(value) => todo!(),
-            TypeExpression::IteratorType(inner) => todo!(),
-            TypeExpression::PlanType(inner) => todo!(),
-            TypeExpression::ErrorType(inner) => todo!(),
-            TypeExpression::ParenthesizedType(inner) => todo!(),
-            TypeExpression::TypeofType(expression) => todo!(),
-            TypeExpression::KeyofType(inner) => todo!(),
-            TypeExpression::ValueofType(inner) => todo!(),
-            TypeExpression::ElementofType(inner) => todo!(),
-            TypeExpression::UnknownType => todo!(),
-            TypeExpression::PoisonedType => todo!(),
-            TypeExpression::AnyType => todo!(),
-            TypeExpression::RegularExpressionType {} => todo!(),
-            TypeExpression::PropertyType {
+            ASTDetails::ArrayType(_) => todo!(),
+            ASTDetails::TupleType(_) => todo!(),
+            ASTDetails::ReadonlyType(_) => todo!(),
+            ASTDetails::StringLiteralType(value) => {
+                f.write_char('\'')?;
+                f.write_str(value.as_str())?;
+                f.write_char('\'')
+            }
+            ASTDetails::NumberLiteralType(value) => f.write_str(value.as_str()),
+            ASTDetails::BooleanLiteralType(value) => f.write_str(match value {
+                true => "true",
+                false => "false",
+            }),
+            ASTDetails::StringType => f.write_str("string"),
+            ASTDetails::NumberType => f.write_str("number"),
+            ASTDetails::BooleanType => f.write_str("boolean"),
+            ASTDetails::NilType => f.write_str("nil"),
+            ASTDetails::IteratorType(_) => todo!(),
+            ASTDetails::PlanType(_) => todo!(),
+            ASTDetails::ErrorType(_) => todo!(),
+            ASTDetails::ParenthesizedType(_) => todo!(),
+            ASTDetails::TypeofType(_) => todo!(),
+            ASTDetails::KeyofType(_) => todo!(),
+            ASTDetails::ValueofType(_) => todo!(),
+            ASTDetails::ElementofType(_) => todo!(),
+            ASTDetails::UnknownType => todo!(),
+            ASTDetails::RegularExpressionType => todo!(),
+            ASTDetails::PropertyType {
                 subject,
                 property,
                 optional,
             } => todo!(),
-        };
-
-        Ok(())
+            ASTDetails::DeclarationStatement {
+                destination,
+                value,
+                awaited,
+                is_const,
+            } => todo!(),
+            ASTDetails::IfElseStatement {
+                cases,
+                default_case,
+            } => todo!(),
+            ASTDetails::IfElseStatementCase { condition, outcome } => todo!(),
+            ASTDetails::ForLoop {
+                item_identifier,
+                iterator,
+                body,
+            } => todo!(),
+            ASTDetails::WhileLoop { condition, body } => todo!(),
+            ASTDetails::Assignment {
+                target,
+                value,
+                operator,
+            } => todo!(),
+            ASTDetails::TryCatch {
+                try_block,
+                error_identifier,
+                catch_block,
+            } => todo!(),
+            ASTDetails::ThrowStatement { error_expression } => todo!(),
+            ASTDetails::Autorun {
+                effect_block,
+                until,
+            } => todo!(),
+            ASTDetails::PlainIdentifier(_) => todo!(),
+        }
     }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct FormatOptions {}
+
+impl FormatOptions {
+    pub const DEFAULT: FormatOptions = FormatOptions {};
 }

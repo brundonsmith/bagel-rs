@@ -5,7 +5,7 @@ use enum_variant_type::EnumVariantType;
 
 use crate::{model::ast::LocalIdentifier, model::bgl_type::SubsumationIssue, model::slice::Slice};
 
-use super::module::ModuleID;
+use super::{ast::AST, module::ModuleID};
 
 #[derive(Debug, Clone, PartialEq, EnumVariantType)]
 pub enum BagelError {
@@ -29,7 +29,7 @@ pub enum BagelError {
     #[evt(derive(Debug, Clone, PartialEq))]
     NotFoundError {
         module_id: ModuleID,
-        identifier: LocalIdentifier,
+        identifier: AST,
     },
 }
 
@@ -92,20 +92,20 @@ impl BagelError {
                 error_heading(
                     f,
                     &module_id,
-                    &identifier.0,
+                    identifier.slice(),
                     "unknown identifier error",
                     None,
                 )?;
 
                 f.write_fmt(format_args!(
                     " Couldn't resolve identifier {} in this scope",
-                    identifier.0.as_str().blue().to_string()
+                    identifier.slice().as_str().blue().to_string()
                 ));
 
                 f.write_char('\n')?;
                 f.write_char('\n')?;
 
-                code_block_highlighted(f, &identifier.0)?;
+                code_block_highlighted(f, identifier.slice())?;
             }
         };
 

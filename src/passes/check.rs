@@ -1,34 +1,21 @@
-use std::time::SystemTime;
-
 use crate::{
-    model::ast::*,
-    model::bgl_type::Type,
     model::{
+        ast::BinaryOperatorOp,
         errors::BagelError,
         module::{Module, ModulesStore},
     },
-    passes::resolve::Resolve,
+    model::{ast::*, bgl_type::Type},
     passes::typeinfer::InferTypeContext,
     DEBUG_MODE,
 };
+use std::fmt::Debug;
+use std::time::SystemTime;
 
-#[derive(Clone, Copy, Debug)]
-pub struct CheckContext<'a> {
-    pub modules: &'a ModulesStore,
-    pub current_module: &'a Module,
-}
-
-pub trait Check<'a> {
-    fn check<F: FnMut(BagelError)>(&self, ctx: CheckContext<'a>, report_error: &mut F);
-}
-
-impl<'a> Check<'a> for Module {
-    fn check<F: FnMut(BagelError)>(&self, ctx: CheckContext<'a>, report_error: &mut F) {
+impl Module {
+    pub fn check<'a, F: FnMut(BagelError)>(&self, ctx: CheckContext<'a>, report_error: &mut F) {
         let start = SystemTime::now();
 
-        for decl in &self.declarations {
-            decl.check(ctx, report_error);
-        }
+        self.ast.check(ctx, report_error);
 
         if DEBUG_MODE {
             println!(
@@ -40,10 +27,38 @@ impl<'a> Check<'a> for Module {
     }
 }
 
-impl<'a> Check<'a> for Node<Declaration> {
-    fn check<F: FnMut(BagelError)>(&self, ctx: CheckContext<'a>, report_error: &mut F) {
-        match self.this() {
-            Declaration::ValueDeclaration {
+impl AST {
+    pub fn check<'a, F: FnMut(BagelError)>(&self, ctx: CheckContext<'a>, report_error: &mut F) {
+        match self.details() {
+            ASTDetails::Module { declarations } => {
+                for decl in declarations {
+                    decl.check(ctx, report_error);
+                }
+            }
+            ASTDetails::ImportAllDeclaration { name, path } => todo!(),
+            ASTDetails::ImportDeclaration { imports, path } => todo!(),
+            ASTDetails::ImportItem { name, alias } => todo!(),
+            ASTDetails::TypeDeclaration {
+                name,
+                declared_type,
+                exported,
+            } => todo!(),
+            ASTDetails::FuncDeclaration {
+                name,
+                func,
+                exported,
+                platforms,
+                decorators,
+            } => todo!(),
+            ASTDetails::ProcDeclaration {
+                name,
+                proc,
+                exported,
+                platforms,
+                decorators,
+            } => todo!(),
+            ASTDetails::Decorator { name } => todo!(),
+            ASTDetails::ValueDeclaration {
                 name,
                 type_annotation,
                 value,
@@ -58,67 +73,45 @@ impl<'a> Check<'a> for Node<Declaration> {
 
                     let value_type = value.infer_type(ctx.into());
                     let issues = type_annotation
-                        .resolve(ctx.into())
+                        .resolve_type(ctx.into())
                         .subsumation_issues(ctx.into(), &value_type);
 
                     if let Some(issues) = issues {
                         report_error(BagelError::AssignmentError {
                             module_id: ctx.current_module.module_id.clone(),
-                            src: value.slice.clone(),
+                            src: value.slice().clone(),
                             issues,
                         });
                     }
                 }
             }
-            Declaration::ImportAllDeclaration { name, path } => todo!(),
-            Declaration::ImportDeclaration { imports, path } => todo!(),
-            Declaration::TypeDeclaration {
-                name,
-                declared_type,
-                exported,
-            } => todo!(),
-            Declaration::FuncDeclaration {
-                name,
-                func,
-                exported,
-                platforms,
-                decorators,
-            } => todo!(),
-            Declaration::ProcDeclaration {
-                name,
-                proc,
-                exported,
-                platforms,
-                decorators,
-            } => todo!(),
-            Declaration::TestExprDeclaration { name, expr } => todo!(),
-            Declaration::TestBlockDeclaration { name, block } => todo!(),
-            Declaration::TestTypeDeclaration {
+            ASTDetails::TestExprDeclaration { name, expr } => todo!(),
+            ASTDetails::TestBlockDeclaration { name, block } => todo!(),
+            ASTDetails::TestTypeDeclaration {
                 name,
                 destination_type,
                 value_type,
             } => todo!(),
-        }
-    }
-}
-
-impl<'a> Check<'a> for Node<Expression> {
-    fn check<F: FnMut(BagelError)>(&self, ctx: CheckContext<'a>, report_error: &mut F) {
-        match self.this() {
-            Expression::BinaryOperation { left, op, right } => {
+            ASTDetails::StringLiteral { tag, segments } => todo!(),
+            ASTDetails::StringLiteralRawSegment(_) => todo!(),
+            ASTDetails::ArrayLiteral(_) => todo!(),
+            ASTDetails::ObjectLiteral(_) => todo!(),
+            ASTDetails::Spread(_) => todo!(),
+            ASTDetails::KeyValue { key, value } => todo!(),
+            ASTDetails::BinaryOperation { left, op, right } => {
                 let ctx: InferTypeContext = ctx.into();
                 let left_type = left.infer_type(ctx);
                 let right_type = right.infer_type(ctx);
 
                 let number_or_string = Type::ANY_NUMBER.union(Type::ANY_STRING);
 
-                if op.this() == &BinaryOperator::Plus {
+                if op.details() == &ASTDetails::BinaryOperator(BinaryOperatorOp::Plus) {
                     if let Some(issues) =
                         number_or_string.subsumation_issues(ctx.into(), &left_type)
                     {
                         report_error(BagelError::AssignmentError {
                             module_id: ctx.current_module.module_id.clone(),
-                            src: left.slice.clone(),
+                            src: left.slice().clone(),
                             issues,
                         })
                     }
@@ -128,20 +121,20 @@ impl<'a> Check<'a> for Node<Expression> {
                     {
                         report_error(BagelError::AssignmentError {
                             module_id: ctx.current_module.module_id.clone(),
-                            src: right.slice.clone(),
+                            src: right.slice().clone(),
                             issues,
                         })
                     }
-                } else if op.this() == &BinaryOperator::Minus
-                    || op.this() == &BinaryOperator::Times
-                    || op.this() == &BinaryOperator::Divide
+                } else if op.details() == &ASTDetails::BinaryOperator(BinaryOperatorOp::Minus)
+                    || op.details() == &ASTDetails::BinaryOperator(BinaryOperatorOp::Times)
+                    || op.details() == &ASTDetails::BinaryOperator(BinaryOperatorOp::Divide)
                 {
                     if let Some(issues) =
                         Type::ANY_NUMBER.subsumation_issues(ctx.into(), &left_type)
                     {
                         report_error(BagelError::AssignmentError {
                             module_id: ctx.current_module.module_id.clone(),
-                            src: left.slice.clone(),
+                            src: left.slice().clone(),
                             issues,
                         })
                     }
@@ -151,7 +144,7 @@ impl<'a> Check<'a> for Node<Expression> {
                     {
                         report_error(BagelError::AssignmentError {
                             module_id: ctx.current_module.module_id.clone(),
-                            src: right.slice.clone(),
+                            src: right.slice().clone(),
                             issues,
                         })
                     }
@@ -170,20 +163,18 @@ impl<'a> Check<'a> for Node<Expression> {
                 //     BinaryOperator::InstanceOf => todo!(),
                 // }
             }
-            Expression::Parenthesis(inner) => inner.check(ctx, report_error),
-            Expression::LocalIdentifier(name) => {
-                if ctx
-                    .current_module
-                    .resolve_symbol(name.as_str(), &self.slice)
-                    .is_none()
-                {
+            ASTDetails::BinaryOperator(_) => todo!(),
+            ASTDetails::NegationOperation(_) => todo!(),
+            ASTDetails::Parenthesis(inner) => inner.check(ctx, report_error),
+            ASTDetails::LocalIdentifier(name) => {
+                if self.resolve_symbol(name.as_str()).is_none() {
                     report_error(BagelError::NotFoundError {
                         module_id: ctx.current_module.module_id.clone(),
-                        identifier: LocalIdentifier(name.clone()),
+                        identifier: self.clone(),
                     });
                 }
             }
-            Expression::InlineConstGroup {
+            ASTDetails::InlineConstGroup {
                 declarations,
                 inner,
             } => {
@@ -193,26 +184,28 @@ impl<'a> Check<'a> for Node<Expression> {
 
                 inner.check(ctx, report_error);
             }
-
-            Expression::StringLiteral { tag, segments } => todo!(),
-            Expression::ArrayLiteral(entries) => todo!(),
-            Expression::ObjectLiteral(entries) => todo!(),
-            Expression::NegationOperation(inner) => todo!(),
-            Expression::Func {
+            ASTDetails::Func {
                 type_annotation,
                 is_async,
                 is_pure,
                 body,
             } => todo!(),
-            Expression::Proc {
+            ASTDetails::Proc {
                 type_annotation,
                 is_async,
                 is_pure,
                 body,
             } => todo!(),
-            Expression::JavascriptEscapeExpression(_) => todo!(),
-            Expression::RangeExpression { start, end } => todo!(),
-            Expression::Invocation {
+            ASTDetails::Block(_) => todo!(),
+            ASTDetails::ArgsSeries(_) => todo!(),
+            ASTDetails::Arg {
+                name,
+                type_annotation,
+                optional,
+            } => todo!(),
+            ASTDetails::JavascriptEscapeExpression(_) => todo!(),
+            ASTDetails::RangeExpression { start, end } => todo!(),
+            ASTDetails::Invocation {
                 subject,
                 args,
                 spread_args,
@@ -220,18 +213,21 @@ impl<'a> Check<'a> for Node<Expression> {
                 bubbles,
                 awaited_or_detached,
             } => todo!(),
-            Expression::PropertyAccessor {
+            ASTDetails::PropertyAccessor {
                 subject,
                 property,
                 optional,
             } => todo!(),
-            Expression::IfElseExpression {
+            ASTDetails::IfElseExpression {
                 cases,
                 default_case,
             } => {
                 let truthiness_safe = Type::get_truthiness_safe_types();
 
-                for (condition, outcome) in cases.iter().map(|case| case.this()) {
+                for case in cases {
+                    let IfElseExpressionCase { condition, outcome } =
+                        case.expect::<IfElseExpressionCase>();
+
                     let condition_type = condition.infer_type(ctx.into());
 
                     if let Some(issues) =
@@ -239,7 +235,7 @@ impl<'a> Check<'a> for Node<Expression> {
                     {
                         report_error(BagelError::AssignmentError {
                             module_id: ctx.current_module.module_id.clone(),
-                            src: condition.slice.clone(),
+                            src: condition.slice().clone(),
                             issues,
                         });
                     }
@@ -252,104 +248,129 @@ impl<'a> Check<'a> for Node<Expression> {
                     default_case.check(ctx, report_error);
                 }
             }
-            Expression::SwitchExpression {
+            ASTDetails::IfElseExpressionCase { condition, outcome } => todo!(),
+            ASTDetails::SwitchExpression {
                 value,
                 cases,
                 default_case,
             } => todo!(),
-            Expression::ElementTag {
+            ASTDetails::SwitchExpressionCase {
+                type_filter,
+                outcome,
+            } => todo!(),
+            ASTDetails::ElementTag {
                 tag_name,
                 attributes,
                 children,
             } => todo!(),
-            Expression::AsCast { inner, as_type } => todo!(),
-            Expression::InstanceOf {
+            ASTDetails::AsCast { inner, as_type } => todo!(),
+            ASTDetails::InstanceOf {
                 inner,
                 possible_type,
             } => todo!(),
-            Expression::ErrorExpression(inner) => todo!(),
-            Expression::RegularExpression { expr, flags } => todo!(),
-
-            // intentionally have nothing to check
-            Expression::NilLiteral => {}
-            Expression::NumberLiteral(_) => {}
-            Expression::BooleanLiteral(value) => {}
-            Expression::ExactStringLiteral { tag: _, value: _ } => {}
-        };
-    }
-}
-
-impl<'a> Check<'a> for Node<InlineConstDeclaration> {
-    fn check<F: FnMut(BagelError)>(&self, ctx: CheckContext<'a>, report_error: &mut F) {
-        if let Some(type_annotation) = &self.this().type_annotation {
-            type_annotation.check(ctx, report_error);
-        }
-
-        self.this().value.check(ctx, report_error);
-    }
-}
-
-impl<'a, T: Clone + Check<'a>> Check<'a> for Node<T> {
-    fn check<F: FnMut(BagelError)>(&self, ctx: CheckContext<'a>, report_error: &mut F) {
-        self.this().check(ctx, report_error)
-    }
-}
-
-impl<'a> Check<'a> for Node<TypeExpression> {
-    fn check<F: FnMut(BagelError)>(&self, ctx: CheckContext<'a>, report_error: &mut F) {
-        match self.this() {
-            TypeExpression::NamedType(name) => todo!(),
-            TypeExpression::GenericParamType { name, extends } => todo!(),
-            TypeExpression::ProcType {
+            ASTDetails::ErrorExpression(_) => todo!(),
+            ASTDetails::RegularExpression { expr, flags } => todo!(),
+            ASTDetails::UnionType(_) => todo!(),
+            ASTDetails::MaybeType(_) => todo!(),
+            ASTDetails::NamedType(_) => todo!(),
+            ASTDetails::GenericParamType { name, extends } => todo!(),
+            ASTDetails::ProcType {
                 args,
                 args_spread,
                 is_pure,
                 is_async,
                 throws,
             } => todo!(),
-            TypeExpression::FuncType {
+            ASTDetails::FuncType {
                 args,
                 args_spread,
                 is_pure,
                 returns,
             } => todo!(),
-            TypeExpression::GenericType { type_params, inner } => todo!(),
-            TypeExpression::BoundGenericType { type_args, generic } => todo!(),
-            TypeExpression::ObjectType(entries) => todo!(),
-            TypeExpression::InterfaceType(entries) => todo!(),
-            TypeExpression::RecordType {
+            ASTDetails::GenericType { type_params, inner } => todo!(),
+            ASTDetails::TypeParam { name, extends } => todo!(),
+            ASTDetails::BoundGenericType { type_args, generic } => todo!(),
+            ASTDetails::ObjectType(_) => todo!(),
+            ASTDetails::InterfaceType(_) => todo!(),
+            ASTDetails::SpreadType(_) => todo!(),
+            ASTDetails::KeyValueType { key, value } => todo!(),
+            ASTDetails::RecordType {
                 key_type,
                 value_type,
             } => todo!(),
-            TypeExpression::ArrayType(element) => todo!(),
-            TypeExpression::TupleType(members) => todo!(),
-            TypeExpression::ReadonlyType(inner) => todo!(),
-            TypeExpression::IteratorType(inner) => todo!(),
-            TypeExpression::PlanType(inner) => todo!(),
-            TypeExpression::ErrorType(inner) => todo!(),
-            TypeExpression::ParenthesizedType(inner) => todo!(),
-            TypeExpression::TypeofType(expression) => todo!(),
-            TypeExpression::KeyofType(inner) => todo!(),
-            TypeExpression::ValueofType(inner) => todo!(),
-            TypeExpression::ElementofType(inner) => todo!(),
-            TypeExpression::RegularExpressionType {} => todo!(),
-            TypeExpression::PropertyType {
+            ASTDetails::ArrayType(_) => todo!(),
+            ASTDetails::TupleType(_) => todo!(),
+            ASTDetails::ReadonlyType(_) => todo!(),
+            ASTDetails::IteratorType(_) => todo!(),
+            ASTDetails::PlanType(_) => todo!(),
+            ASTDetails::ErrorType(_) => todo!(),
+            ASTDetails::ParenthesizedType(_) => todo!(),
+            ASTDetails::TypeofType(_) => todo!(),
+            ASTDetails::KeyofType(_) => todo!(),
+            ASTDetails::ValueofType(_) => todo!(),
+            ASTDetails::ElementofType(_) => todo!(),
+            ASTDetails::PropertyType {
                 subject,
                 property,
                 optional,
             } => todo!(),
+            ASTDetails::DeclarationStatement {
+                destination,
+                value,
+                awaited,
+                is_const,
+            } => todo!(),
+            ASTDetails::IfElseStatement {
+                cases,
+                default_case,
+            } => todo!(),
+            ASTDetails::IfElseStatementCase { condition, outcome } => todo!(),
+            ASTDetails::ForLoop {
+                item_identifier,
+                iterator,
+                body,
+            } => todo!(),
+            ASTDetails::WhileLoop { condition, body } => todo!(),
+            ASTDetails::Assignment {
+                target,
+                value,
+                operator,
+            } => todo!(),
+            ASTDetails::TryCatch {
+                try_block,
+                error_identifier,
+                catch_block,
+            } => todo!(),
+            ASTDetails::ThrowStatement { error_expression } => todo!(),
+            ASTDetails::Autorun {
+                effect_block,
+                until,
+            } => todo!(),
+            ASTDetails::PlainIdentifier(_) => todo!(),
 
             // intentionally have nothing to check
-            TypeExpression::LiteralType(value) => {}
-            TypeExpression::StringType => {}
-            TypeExpression::NumberType => {}
-            TypeExpression::BooleanType => {}
-            TypeExpression::NilType => {}
-            TypeExpression::UnionType(members) => {}
-            TypeExpression::MaybeType(inner) => {}
-            TypeExpression::UnknownType => {}
-            TypeExpression::PoisonedType => {}
-            TypeExpression::AnyType => {}
+            ASTDetails::NilLiteral => {}
+            ASTDetails::NumberLiteral(_) => {}
+            ASTDetails::BooleanLiteral(_) => {}
+            ASTDetails::ExactStringLiteral { tag: _, value: _ } => {}
+
+            ASTDetails::RegularExpressionType => {}
+            ASTDetails::StringLiteralType(_) => {}
+            ASTDetails::NumberLiteralType(_) => {}
+            ASTDetails::BooleanLiteralType(_) => {}
+            ASTDetails::StringType => {}
+            ASTDetails::NumberType => {}
+            ASTDetails::BooleanType => {}
+            ASTDetails::NilType => {}
+            ASTDetails::UnionType(members) => {}
+            ASTDetails::MaybeType(inner) => {}
+            ASTDetails::UnknownType => {}
         }
     }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct CheckContext<'a> {
+    pub modules: &'a ModulesStore,
+    pub current_module: &'a Module,
 }

@@ -1,6 +1,14 @@
 use std::{collections::HashMap, ops::Add, path::PathBuf, rc::Rc};
 
-use crate::{gather_errors, model::module::ModuleID, passes::parse::parse, print_errors};
+use crate::{
+    gather_errors,
+    model::{
+        module::{Module, ModuleID},
+        slice::Slice,
+    },
+    passes::parse::parse,
+    print_errors,
+};
 
 #[test]
 fn Basic_constant() {
@@ -3861,11 +3869,19 @@ fn Pure_procs_fail_3() {
 
 fn test_check(bgl: &str, should_fail: bool) {
     let module_id = ModuleID::try_from(PathBuf::from("/foo/bar.bgl").as_path()).unwrap();
+    let bgl_rc = Rc::new(bgl.to_owned() + " ");
 
-    let parsed = parse(module_id.clone(), Rc::new(bgl.to_owned() + " ")).unwrap();
+    let parsed = parse(module_id.clone(), bgl_rc.clone()).unwrap();
 
     let mut modules_store = HashMap::new();
-    modules_store.insert(module_id, Ok(parsed));
+    modules_store.insert(
+        module_id.clone(),
+        Ok(Module {
+            module_id,
+            src: Slice::new(bgl_rc.clone()),
+            ast: parsed,
+        }),
+    );
     let modules_store = modules_store.into();
 
     let errors = gather_errors(&modules_store);

@@ -1,117 +1,106 @@
+use crate::model::{ast::*, module::Module};
+use core::ops::Deref;
 use std::fmt::{Result, Write};
 
-use crate::model::{ast::*, module::Module};
-
-pub trait Compile {
-    fn compile<W: Write>(&self, f: &mut W) -> Result;
-}
-
-impl Compile for Module {
-    fn compile<W: Write>(&self, f: &mut W) -> Result {
-        for decl in &self.declarations {
-            decl.compile(f)?;
-        }
-
-        Ok(())
+impl Module {
+    pub fn compile<W: Write>(&self, f: &mut W) -> Result {
+        self.ast.compile(f)
     }
 }
 
-impl Compile for Node<Declaration> {
-    fn compile<W: Write>(&self, f: &mut W) -> Result {
-        match self.this() {
-            Declaration::ImportAllDeclaration { name, path } => todo!(),
-            Declaration::ImportDeclaration { imports, path } => todo!(),
-            Declaration::TypeDeclaration {
+impl AST {
+    pub fn compile<W: Write>(&self, f: &mut W) -> Result {
+        match self.details() {
+            ASTDetails::Module { declarations } => todo!(),
+            ASTDetails::ImportAllDeclaration { name, path } => todo!(),
+            ASTDetails::ImportDeclaration { imports, path } => todo!(),
+            ASTDetails::ImportItem { name, alias } => todo!(),
+            ASTDetails::TypeDeclaration {
                 name,
                 declared_type,
                 exported,
             } => todo!(),
-            Declaration::ValueDeclaration {
+            ASTDetails::FuncDeclaration {
+                name,
+                func,
+                exported,
+                platforms,
+                decorators,
+            } => {
+                let func = func.expect::<Func>();
+                let type_annotation = func.type_annotation.expect::<FuncType>();
+
+                if *exported {
+                    f.write_str("export ")?;
+                }
+                f.write_str("const ")?;
+                f.write_str(name.slice().as_str())?;
+                f.write_str(" = ")?;
+                compile_function(
+                    f,
+                    Some(name.slice().as_str()),
+                    &type_annotation.args,
+                    type_annotation.returns.as_ref(),
+                    &func.body,
+                )?;
+                f.write_str(";")
+            }
+            ASTDetails::ProcDeclaration {
+                name,
+                proc,
+                exported,
+                platforms,
+                decorators,
+            } => {
+                let proc = proc.expect::<Func>();
+                let type_annotation = proc.type_annotation.expect::<ProcType>();
+
+                if *exported {
+                    f.write_str("export ")?;
+                }
+                f.write_str("const ")?;
+                f.write_str(name.slice().as_str())?;
+                f.write_str(" = ")?;
+                compile_function(f, None, &type_annotation.args, None, &proc.body)?;
+                f.write_str(";")
+            }
+            ASTDetails::Decorator { name } => todo!(),
+            ASTDetails::ValueDeclaration {
                 name,
                 type_annotation,
                 value,
                 is_const,
                 exported,
-                platforms: _,
+                platforms,
             } => {
                 if *exported {
                     f.write_str("export ")?;
                 }
                 f.write_str("const ")?;
-                f.write_str(name.0.as_str())?;
+                f.write_str(name.slice().as_str())?;
                 compile_type_annotation(f, type_annotation.as_ref())?;
                 f.write_str(" = ")?;
                 value.compile(f)?;
                 f.write_str(";")
             }
-            Declaration::FuncDeclaration {
-                name,
-                func,
-                exported,
-                platforms: _,
-                decorators,
-            } => {
-                if *exported {
-                    f.write_str("export ")?;
-                }
-                f.write_str("const ")?;
-                f.write_str(name.0.as_str())?;
-                f.write_str(" = ")?;
-                compile_function(
-                    f,
-                    Some(name.0.as_str()),
-                    &func.this().type_annotation.this().args,
-                    func.this().type_annotation.this().returns.as_ref(),
-                    &func.this().body,
-                )?;
-                f.write_str(";")
-            }
-            Declaration::ProcDeclaration {
-                name,
-                proc,
-                exported,
-                platforms: _,
-                decorators,
-            } => {
-                if *exported {
-                    f.write_str("export ")?;
-                }
-                f.write_str("const ")?;
-                f.write_str(name.0.as_str())?;
-                f.write_str(" = ")?;
-                compile_function(
-                    f,
-                    None,
-                    &proc.this().type_annotation.this().args,
-                    None,
-                    &proc.this().body,
-                )?;
-                f.write_str(";")
-            }
-            Declaration::TestExprDeclaration { name, expr } => todo!(),
-            Declaration::TestBlockDeclaration { name, block } => todo!(),
-            Declaration::TestTypeDeclaration {
+            ASTDetails::TestExprDeclaration { name, expr } => todo!(),
+            ASTDetails::TestBlockDeclaration { name, block } => todo!(),
+            ASTDetails::TestTypeDeclaration {
                 name,
                 destination_type,
                 value_type,
             } => todo!(),
-        }
-    }
-}
-
-impl Compile for Node<Expression> {
-    fn compile<W: Write>(&self, f: &mut W) -> Result {
-        match self.this() {
-            Expression::NilLiteral => f.write_str("undefined")?,
-            Expression::BooleanLiteral(value) => todo!(),
-            Expression::NumberLiteral(value) => f.write_str(value.as_str())?,
-            Expression::StringLiteral { tag, segments } => todo!(),
-            Expression::ExactStringLiteral { tag, value } => {
+            ASTDetails::NilLiteral => f.write_str("undefined"),
+            ASTDetails::BooleanLiteral(_) => todo!(),
+            ASTDetails::NumberLiteral(value) => f.write_str(value.as_str()),
+            ASTDetails::StringLiteral { tag, segments } => todo!(),
+            ASTDetails::StringLiteralRawSegment(_) => todo!(),
+            ASTDetails::ExactStringLiteral { tag, value } => {
                 f.write_char('`')?;
                 f.write_str(value.as_str())?;
-                f.write_char('`')?;
+                f.write_char('`')
             }
-            Expression::ArrayLiteral(entries) => {
+            ASTDetails::ArrayLiteral(entries) => {
                 f.write_char('[')?;
                 for (index, entry) in entries.iter().enumerate() {
                     if index > 0 {
@@ -121,9 +110,9 @@ impl Compile for Node<Expression> {
                     f.write_char(' ')?;
                     entry.compile(f)?;
                 }
-                f.write_str(" ]")?;
+                f.write_str(" ]")
             }
-            Expression::ObjectLiteral(entries) => {
+            ASTDetails::ObjectLiteral(entries) => {
                 f.write_char('{')?;
                 for (index, entry) in entries.iter().enumerate() {
                     if index > 0 {
@@ -133,51 +122,63 @@ impl Compile for Node<Expression> {
                     f.write_char(' ')?;
                     entry.compile(f)?;
                 }
-                f.write_str(" }")?;
+                f.write_str(" }")
             }
-            Expression::BinaryOperation { left, op, right } => {
+            ASTDetails::Spread(_) => todo!(),
+            ASTDetails::KeyValue { key, value } => todo!(),
+            ASTDetails::BinaryOperation { left, op, right } => {
                 f.write_char('(')?;
                 left.compile(f)?;
                 f.write_char(' ')?;
                 op.compile(f)?;
                 f.write_char(' ')?;
                 right.compile(f)?;
-                f.write_char(')')?;
+                f.write_char(')')
             }
-            Expression::Parenthesis(inner) => {
+            ASTDetails::BinaryOperator(op) => f.write_str(op.into()),
+            ASTDetails::NegationOperation(_) => todo!(),
+            ASTDetails::Parenthesis(inner) => {
                 f.write_char('(')?;
                 inner.compile(f)?;
-                f.write_char(')')?;
+                f.write_char(')')
             }
-            Expression::LocalIdentifier(name) => f.write_str(name.as_str())?,
-            Expression::InlineConstGroup {
+            ASTDetails::LocalIdentifier(name) => f.write_str(name.as_str()),
+            ASTDetails::InlineConstGroup {
                 declarations,
                 inner,
             } => todo!(),
-            Expression::NegationOperation(inner) => todo!(),
-            Expression::Func {
+            ASTDetails::Func {
                 type_annotation,
                 is_async,
                 is_pure,
                 body,
             } => {
+                let type_annotation = type_annotation.expect::<FuncType>();
+
                 compile_function(
                     f,
                     None,
-                    &type_annotation.this().args,
-                    type_annotation.this().returns.as_ref(),
+                    &type_annotation.args,
+                    type_annotation.returns.as_ref(),
                     body,
-                )?;
+                )
             }
-            Expression::Proc {
+            ASTDetails::Proc {
                 type_annotation,
                 is_async,
                 is_pure,
                 body,
             } => todo!(),
-            Expression::JavascriptEscapeExpression(_) => todo!(),
-            Expression::RangeExpression { start, end } => todo!(),
-            Expression::Invocation {
+            ASTDetails::Block(_) => todo!(),
+            ASTDetails::ArgsSeries(_) => todo!(),
+            ASTDetails::Arg {
+                name,
+                type_annotation,
+                optional,
+            } => todo!(),
+            ASTDetails::JavascriptEscapeExpression(_) => todo!(),
+            ASTDetails::RangeExpression { start, end } => todo!(),
+            ASTDetails::Invocation {
                 subject,
                 args,
                 spread_args,
@@ -185,233 +186,138 @@ impl Compile for Node<Expression> {
                 bubbles,
                 awaited_or_detached,
             } => todo!(),
-            Expression::PropertyAccessor {
+            ASTDetails::PropertyAccessor {
                 subject,
                 property,
                 optional,
             } => todo!(),
-            Expression::IfElseExpression {
+            ASTDetails::IfElseExpression {
                 cases,
                 default_case,
             } => todo!(),
-            Expression::SwitchExpression {
+            ASTDetails::IfElseExpressionCase { condition, outcome } => todo!(),
+            ASTDetails::SwitchExpression {
                 value,
                 cases,
                 default_case,
             } => todo!(),
-            Expression::ElementTag {
+            ASTDetails::SwitchExpressionCase {
+                type_filter,
+                outcome,
+            } => todo!(),
+            ASTDetails::ElementTag {
                 tag_name,
                 attributes,
                 children,
             } => todo!(),
-            Expression::AsCast { inner, as_type } => todo!(),
-            Expression::InstanceOf {
+            ASTDetails::AsCast { inner, as_type } => todo!(),
+            ASTDetails::InstanceOf {
                 inner,
                 possible_type,
             } => todo!(),
-            Expression::ErrorExpression(inner) => todo!(),
-            Expression::RegularExpression { expr, flags } => todo!(),
-        };
-
-        Ok(())
-    }
-}
-
-pub const INT: &str = "___";
-pub const INT_FN: &str = "___fn_";
-
-impl Compile for FuncBody {
-    fn compile<W: Write>(&self, f: &mut W) -> Result {
-        match self {
-            FuncBody::Expression(expr) => {
-                f.write_str(" return ")?;
-                expr.compile(f)?;
-                f.write_char(' ')
-            }
-            FuncBody::Js(js) => f.write_str(js.this()),
-        }
-    }
-}
-
-impl Compile for ProcBody {
-    fn compile<W: Write>(&self, f: &mut W) -> Result {
-        match self {
-            ProcBody::Statements(stmts) => {
-                for statement in stmts {
-                    statement.compile(f)?;
-                    f.write_str(";\n")?;
-                }
-
-                Ok(())
-            }
-            ProcBody::Js(js) => f.write_str(js.this()),
-        }
-    }
-}
-
-impl Compile for Node<Statement> {
-    fn compile<W: Write>(&self, f: &mut W) -> Result {
-        match self.this() {
-            Statement::DeclarationStatement {
-                destination,
-                value,
-                awaited,
-                is_const,
-            } => todo!(),
-            Statement::IfElseStatement {
-                cases,
-                default_case,
-            } => todo!(),
-            Statement::ForLoop {
-                item_identifier,
-                iterator,
-                body,
-            } => todo!(),
-            Statement::WhileLoop { condition, body } => todo!(),
-            Statement::Assignment {
-                target,
-                value,
-                operator,
-            } => todo!(),
-            Statement::TryCatch {
-                try_block,
-                error_identifier,
-                catch_block,
-            } => todo!(),
-            Statement::ThrowStatement { error_expression } => todo!(),
-            Statement::Autorun { effect, until } => todo!(),
-            Statement::InvocationStatement(_) => todo!(),
-        }
-    }
-}
-
-impl Compile for Node<BinaryOperator> {
-    fn compile<W: Write>(&self, f: &mut W) -> Result {
-        f.write_str(self.this().into())
-    }
-}
-
-impl Compile for Node<ArrayLiteralEntry> {
-    fn compile<W: Write>(&self, f: &mut W) -> Result {
-        match self.this() {
-            ArrayLiteralEntry::Spread(spread) => {
-                f.write_str("...")?;
-                f.write_str(spread.0.as_str())
-            }
-            ArrayLiteralEntry::Element(element) => {
-                element.clone().with_slice(self.slice.clone()).compile(f)
-            }
-        }
-    }
-}
-
-impl Compile for Node<ObjectLiteralEntry> {
-    fn compile<W: Write>(&self, f: &mut W) -> Result {
-        match self.this() {
-            ObjectLiteralEntry::Variable(x) => x.compile(f),
-            ObjectLiteralEntry::Spread(spread) => {
-                f.write_str("...")?;
-                f.write_str(spread.0.as_str())
-            }
-            ObjectLiteralEntry::KeyAndValue(key, value) => {
-                key.compile(f)?;
-                f.write_str(": ")?;
-                value.compile(f)
-            }
-        }
-    }
-}
-
-impl Compile for LocalIdentifier {
-    fn compile<W: Write>(&self, f: &mut W) -> Result {
-        f.write_str(self.0.as_str())
-    }
-}
-
-impl Compile for PlainIdentifier {
-    fn compile<W: Write>(&self, f: &mut W) -> Result {
-        f.write_str(self.0.as_str())
-    }
-}
-
-impl Compile for Node<TypeExpression> {
-    fn compile<W: Write>(&self, f: &mut W) -> Result {
-        match self.this() {
-            TypeExpression::UnknownType => f.write_str("unknown"),
-            TypeExpression::NilType => f.write_str("null | undefined"),
-            TypeExpression::BooleanType => f.write_str("boolean"),
-            TypeExpression::NumberType => f.write_str("number"),
-            TypeExpression::StringType => f.write_str("string"),
-            TypeExpression::UnionType(members) => todo!(),
-            TypeExpression::MaybeType(inner) => todo!(),
-            TypeExpression::NamedType(name) => todo!(),
-            TypeExpression::GenericParamType { name, extends } => todo!(),
-            TypeExpression::ProcType {
+            ASTDetails::ErrorExpression(_) => todo!(),
+            ASTDetails::RegularExpression { expr, flags } => todo!(),
+            ASTDetails::UnionType(_) => todo!(),
+            ASTDetails::MaybeType(_) => todo!(),
+            ASTDetails::NamedType(_) => todo!(),
+            ASTDetails::GenericParamType { name, extends } => todo!(),
+            ASTDetails::ProcType {
                 args,
                 args_spread,
                 is_pure,
                 is_async,
                 throws,
             } => todo!(),
-            TypeExpression::FuncType {
+            ASTDetails::FuncType {
                 args,
                 args_spread,
                 is_pure,
                 returns,
             } => todo!(),
-            TypeExpression::GenericType { type_params, inner } => todo!(),
-            TypeExpression::BoundGenericType { type_args, generic } => todo!(),
-            TypeExpression::ObjectType(entries) => todo!(),
-            TypeExpression::InterfaceType(entries) => todo!(),
-            TypeExpression::RecordType {
+            ASTDetails::GenericType { type_params, inner } => todo!(),
+            ASTDetails::TypeParam { name, extends } => todo!(),
+            ASTDetails::BoundGenericType { type_args, generic } => todo!(),
+            ASTDetails::ObjectType(_) => todo!(),
+            ASTDetails::InterfaceType(_) => todo!(),
+            ASTDetails::SpreadType(_) => todo!(),
+            ASTDetails::KeyValueType { key, value } => todo!(),
+            ASTDetails::RecordType {
                 key_type,
                 value_type,
             } => todo!(),
-            TypeExpression::ArrayType(element) => todo!(),
-            TypeExpression::TupleType(members) => todo!(),
-            TypeExpression::ReadonlyType(inner) => todo!(),
-            TypeExpression::LiteralType(value) => todo!(),
-            TypeExpression::IteratorType(inner) => todo!(),
-            TypeExpression::PlanType(inner) => todo!(),
-            TypeExpression::ErrorType(inner) => todo!(),
-            TypeExpression::ParenthesizedType(inner) => todo!(),
-            TypeExpression::TypeofType(expression) => todo!(),
-            TypeExpression::KeyofType(inner) => todo!(),
-            TypeExpression::ValueofType(inner) => todo!(),
-            TypeExpression::ElementofType(inner) => todo!(),
-            TypeExpression::PoisonedType => todo!(),
-            TypeExpression::AnyType => todo!(),
-            TypeExpression::RegularExpressionType {} => todo!(),
-            TypeExpression::PropertyType {
+            ASTDetails::ArrayType(_) => todo!(),
+            ASTDetails::TupleType(_) => todo!(),
+            ASTDetails::ReadonlyType(_) => todo!(),
+            ASTDetails::StringLiteralType(_) => todo!(),
+            ASTDetails::NumberLiteralType(_) => todo!(),
+            ASTDetails::BooleanLiteralType(_) => todo!(),
+            ASTDetails::StringType => f.write_str("string"),
+            ASTDetails::NumberType => f.write_str("number"),
+            ASTDetails::BooleanType => f.write_str("boolean"),
+            ASTDetails::NilType => f.write_str("null | undefined"),
+            ASTDetails::IteratorType(_) => todo!(),
+            ASTDetails::PlanType(_) => todo!(),
+            ASTDetails::ErrorType(_) => todo!(),
+            ASTDetails::ParenthesizedType(_) => todo!(),
+            ASTDetails::TypeofType(_) => todo!(),
+            ASTDetails::KeyofType(_) => todo!(),
+            ASTDetails::ValueofType(_) => todo!(),
+            ASTDetails::ElementofType(_) => todo!(),
+            ASTDetails::UnknownType => f.write_str("unknown"),
+            ASTDetails::RegularExpressionType => todo!(),
+            ASTDetails::PropertyType {
                 subject,
                 property,
                 optional,
             } => todo!(),
+            ASTDetails::DeclarationStatement {
+                destination,
+                value,
+                awaited,
+                is_const,
+            } => todo!(),
+            ASTDetails::IfElseStatement {
+                cases,
+                default_case,
+            } => todo!(),
+            ASTDetails::IfElseStatementCase { condition, outcome } => todo!(),
+            ASTDetails::ForLoop {
+                item_identifier,
+                iterator,
+                body,
+            } => todo!(),
+            ASTDetails::WhileLoop { condition, body } => todo!(),
+            ASTDetails::Assignment {
+                target,
+                value,
+                operator,
+            } => todo!(),
+            ASTDetails::TryCatch {
+                try_block,
+                error_identifier,
+                catch_block,
+            } => todo!(),
+            ASTDetails::ThrowStatement { error_expression } => todo!(),
+            ASTDetails::Autorun {
+                effect_block,
+                until,
+            } => todo!(),
+            ASTDetails::PlainIdentifier(name) => f.write_str(name.as_str()),
         }
     }
 }
 
-impl Compile for IdentifierOrExpression {
-    fn compile<W: Write>(&self, f: &mut W) -> Result {
-        todo!()
-        // match self.this() {
-        //     IdentifierOrExpression::PlainIdentifier(x) => f.write_str(x.0.as_str()),
-        //     IdentifierOrExpression::Expression(x) => {
-        //         f.write_char('[')?;
-        //         let expr: Src<Expression> = x.with_opt_src(self.src);
-        //         expr.compile(f)?;
-        //         f.write_char(']')
-        //     }
-        // }
-    }
-}
+pub const INT: &str = "___";
+pub const INT_FN: &str = "___fn_";
 
-fn compile_function<W: Write, B: Compile>(
+// --- Util functions ---
+
+fn compile_function<W: Write>(
     f: &mut W,
     name: Option<&str>,
-    args: &Vec<Node<Arg>>,
-    return_type: Option<&Node<TypeExpression>>,
-    body: &B,
+    args: &AST,
+    return_type: Option<&AST>,
+    body: &AST,
 ) -> Result {
     f.write_str("function ")?;
 
@@ -421,20 +327,7 @@ fn compile_function<W: Write, B: Compile>(
     }
 
     f.write_char('(')?;
-
-    for Arg {
-        name,
-        type_annotation,
-        optional,
-    } in args.iter().map(|n| n.this())
-    {
-        f.write_str(name.0.as_str())?;
-        if *optional {
-            f.write_char('?')?;
-        }
-        compile_type_annotation(f, type_annotation.as_ref())?;
-    }
-
+    args.compile(f)?;
     f.write_char(')')?;
 
     compile_type_annotation(f, return_type)?;
@@ -447,10 +340,7 @@ fn compile_function<W: Write, B: Compile>(
     Ok(())
 }
 
-fn compile_type_annotation<W: Write>(
-    f: &mut W,
-    type_annotation: Option<&Node<TypeExpression>>,
-) -> Result {
+fn compile_type_annotation<W: Write>(f: &mut W, type_annotation: Option<&AST>) -> Result {
     if let Some(type_annotation) = type_annotation {
         f.write_str(": ")?;
         type_annotation.compile(f)?;

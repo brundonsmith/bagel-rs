@@ -3,7 +3,6 @@ use std::fmt::{Display, Write};
 use enum_variant_type::EnumVariantType;
 
 use crate::{
-    model::ast::Mutability,
     passes::{check::CheckContext, typeinfer::InferTypeContext},
     ModulesStore,
 };
@@ -393,6 +392,25 @@ impl Display for Type {
             Type::PoisonedType => f.write_str("unknown"),
             Type::AnyType => f.write_str("any"),
             Type::RegularExpressionType {} => f.write_str("RegExp"),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Mutability {
+    Constant,
+    Readonly,
+    Mutable,
+    Literal,
+}
+
+impl Mutability {
+    pub fn is_mutable(&self) -> bool {
+        match self {
+            Mutability::Constant => false,
+            Mutability::Readonly => false,
+            Mutability::Mutable => true,
+            Mutability::Literal => true,
         }
     }
 }

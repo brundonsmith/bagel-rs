@@ -14,12 +14,9 @@ use cli::Command;
 use colored::Color;
 use glob::glob;
 use model::module::{ModuleID, ModulesStore};
+use passes::check::CheckContext;
 
-use crate::{
-    model::errors::BagelError,
-    passes::check::{Check, CheckContext},
-    utils::cli_label,
-};
+use crate::{model::errors::BagelError, utils::cli_label};
 
 pub const DEBUG_MODE: bool = true;
 

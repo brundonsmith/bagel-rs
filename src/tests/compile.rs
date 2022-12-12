@@ -1,6 +1,6 @@
 use std::{path::PathBuf, rc::Rc};
 
-use crate::{model::module::ModuleID, passes::compile::Compile, passes::parse::parse};
+use crate::{model::module::ModuleID, passes::parse::parse};
 
 #[test]
 fn Simple_func_declaration() {

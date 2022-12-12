@@ -31,14 +31,6 @@ impl Slice {
         self.start <= other.start && self.end >= other.end
     }
 
-    pub fn contains_index(&self, index: usize) -> bool {
-        index >= self.start && index <= self.end
-    }
-
-    pub fn overlaps(&self, other: &Slice) -> bool {
-        self.contains(other) || self.contains_index(other.start) != self.contains_index(other.end)
-    }
-
     pub fn spanning(self, other: &Slice) -> Slice {
         Self {
             full_string: self.full_string,

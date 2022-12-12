@@ -1,16 +1,14 @@
-use std::fmt::Display;
-use std::path::Path;
-use std::{collections::HashMap, path::PathBuf, rc::Rc};
-
+use super::ast::{ASTDetails, AST};
+use super::errors::ParseError;
+use super::slice::Slice;
+use crate::passes::parse::parse;
+use crate::utils::cli_label;
 use colored::Color;
 use memoize::memoize;
 use reqwest::Url;
-
-use crate::passes::parse::parse;
-use crate::utils::cli_label;
-
-use super::ast::{Declaration, Node};
-use super::errors::ParseError;
+use std::fmt::Display;
+use std::path::Path;
+use std::{collections::HashMap, path::PathBuf, rc::Rc};
 
 #[derive(Debug)]
 pub struct ModulesStore {
@@ -27,24 +25,43 @@ impl ModulesStore {
     pub fn load_module_and_dependencies(&mut self, module_id: ModuleID, clean: bool) {
         if let Some(mut bgl) = module_id.load(clean) {
             bgl.push('\n'); // https://github.com/Geal/nom/issues/1573
+            let bgl_rc = Rc::new(bgl);
 
-            let parsed = parse(module_id.clone(), Rc::new(bgl));
-            self.modules.insert(module_id.clone(), parsed);
+            let parsed = parse(module_id.clone(), bgl_rc.clone());
+            self.modules.insert(
+                module_id.clone(),
+                parsed.map(|ast| Module {
+                    module_id: module_id.clone(),
+                    src: Slice::new(bgl_rc.clone()),
+                    ast,
+                }),
+            );
 
-            if let Some(Ok(parsed)) = self.modules.get(&module_id) {
-                let imported: Vec<String> = parsed
-                    .declarations
+            if let Some(Ok(ASTDetails::Module { declarations })) = self
+                .modules
+                .get(&module_id)
+                .map(|res| res.as_ref().map(|module| module.ast.details()))
+            {
+                let imported: Vec<String> = declarations
                     .iter()
-                    .filter_map(|decl| {
-                        if let Declaration::ImportAllDeclaration { name: _, path } = decl.this() {
-                            Some(path.this().value.as_str().to_owned())
-                        } else if let Declaration::ImportDeclaration { imports: _, path } =
-                            decl.this()
-                        {
-                            Some(path.this().value.as_str().to_owned())
-                        } else {
-                            None
+                    .filter_map(|decl| match decl.details() {
+                        ASTDetails::ImportAllDeclaration { name: _, path } => {
+                            match path.details() {
+                                ASTDetails::ExactStringLiteral { tag: _, value } => {
+                                    Some(value.as_str().to_owned())
+                                }
+                                _ => None,
+                            }
                         }
+                        ASTDetails::ImportDeclaration { imports: _, path } => {
+                            match path.details() {
+                                ASTDetails::ExactStringLiteral { tag: _, value } => {
+                                    Some(value.as_str().to_owned())
+                                }
+                                _ => None,
+                            }
+                        }
+                        _ => None,
                     })
                     .collect();
 
@@ -189,6 +206,6 @@ impl From<Url> for ModuleID {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Module {
     pub module_id: ModuleID,
-    pub src: Rc<String>,
-    pub declarations: Vec<Node<Declaration>>,
+    pub src: Slice,
+    pub ast: AST,
 }
