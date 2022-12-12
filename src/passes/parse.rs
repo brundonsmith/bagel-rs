@@ -136,10 +136,17 @@ fn import_all_declaration(i: Slice) -> ParseResult {
                 preceded(whitespace, tag("as")),
                 preceded(whitespace, plain_identifier),
             )),
-            |(start, path, _, name)| {
-                let src = start.spanning(name.slice());
+            |(start, mut path, _, mut name)| {
+                let this = ASTDetails::ImportAllDeclaration {
+                    path: path.clone(),
+                    name: name.clone(),
+                }
+                .with_slice(start.spanning(name.slice()));
 
-                ASTDetails::ImportAllDeclaration { path, name }.with_slice(src)
+                path.set_parent(&this);
+                name.set_parent(&this);
+
+                this
             },
         ),
     )(i)
@@ -157,8 +164,19 @@ fn import_declaration(i: Slice) -> ParseResult {
                 separated_list0(preceded(whitespace, tag(",")), import_item),
                 preceded(whitespace, tag("}")),
             )),
-            |(start, path, _, _, imports, end)| {
-                ASTDetails::ImportDeclaration { path, imports }.with_slice(start.spanning(&end))
+            |(start, mut path, _, _, mut imports, end)| {
+                let this = ASTDetails::ImportDeclaration {
+                    path: path.clone(),
+                    imports: imports.clone(),
+                }
+                .with_slice(start.spanning(&end));
+
+                path.set_parent(&this);
+                for import in imports.iter_mut() {
+                    import.set_parent(&this);
+                }
+
+                this
             },
         ),
     )(i)
@@ -176,15 +194,26 @@ fn import_item(i: Slice) -> ParseResult {
                 |(_, alias)| alias,
             )),
         ),
-        |(name, alias)| {
-            let src = name.slice().clone().spanning(
-                alias
-                    .as_ref()
-                    .map(|alias| alias.slice())
-                    .unwrap_or(name.slice()),
+        |(mut name, mut alias)| {
+            let this = ASTDetails::ImportItem {
+                name: name.clone(),
+                alias: alias.clone(),
+            }
+            .with_slice(
+                name.slice().clone().spanning(
+                    alias
+                        .as_ref()
+                        .map(|alias| alias.slice())
+                        .unwrap_or(name.slice()),
+                ),
             );
 
-            ASTDetails::ImportItem { name, alias }.with_slice(src)
+            name.set_parent(&this);
+            if let Some(alias) = &mut alias {
+                alias.set_parent(&this);
+            }
+
+            this
         },
     )(i)
 }
@@ -200,16 +229,18 @@ fn type_declaration(i: Slice) -> ParseResult {
                 preceded(whitespace, tag("=")),
                 preceded(whitespace, type_expression(0)),
             )),
-            |(export, keyword, name, _, declared_type)| {
-                let exported = export.is_some();
-                let src = export.unwrap_or(keyword).spanning(&declared_type.slice());
-
-                ASTDetails::TypeDeclaration {
-                    name,
-                    declared_type,
-                    exported,
+            |(export, keyword, mut name, _, mut declared_type)| {
+                let this = ASTDetails::TypeDeclaration {
+                    name: name.clone(),
+                    declared_type: declared_type.clone(),
+                    exported: export.is_some(),
                 }
-                .with_slice(src)
+                .with_slice(export.unwrap_or(keyword).spanning(&declared_type.slice()));
+
+                name.set_parent(&this);
+                declared_type.set_parent(&this);
+
+                this
             },
         ),
     )(i)
@@ -230,36 +261,49 @@ fn func_declaration(i: Slice) -> ParseResult {
                 preceded(whitespace, tag("=>")),
                 preceded(whitespace, expression(0)),
             )),
-            |(export, pure, asyn, keyword, name, args, returns, _, body)| {
-                let exported = export.is_some();
-                let is_async = asyn.is_some();
-                let is_pure = pure.is_some();
+            |(export, pure, asyn, keyword, mut name, mut args, mut returns, _, mut body)| {
                 let src = export
-                    .unwrap_or(pure.unwrap_or(asyn.unwrap_or(keyword)))
+                    .as_ref()
+                    .unwrap_or(pure.as_ref().unwrap_or(asyn.as_ref().unwrap_or(&keyword)))
+                    .clone()
                     .spanning(body.slice());
-                let args_start = args.slice();
 
-                ASTDetails::FuncDeclaration {
-                    name,
-                    func: ASTDetails::Func {
-                        type_annotation: ASTDetails::FuncType {
-                            args: args.clone(),
-                            args_spread: None, // TODO
-                            is_pure,
-                            returns,
-                        }
-                        .with_slice(args_start.clone().spanning(body.slice())),
+                let mut type_annotation = ASTDetails::FuncType {
+                    args: args.clone(),
+                    args_spread: None, // TODO
+                    is_pure: pure.is_some(),
+                    returns: returns.clone(),
+                }
+                .with_slice(args.slice().clone().spanning(body.slice()));
 
-                        is_async,
-                        is_pure,
-                        body,
-                    }
-                    .with_slice(src.clone()),
-                    exported,
+                args.set_parent(&type_annotation);
+                if let Some(returns) = &mut returns {
+                    returns.set_parent(&type_annotation);
+                }
+
+                let mut func = ASTDetails::Func {
+                    type_annotation: type_annotation.clone(),
+                    is_async: asyn.is_some(),
+                    is_pure: pure.is_some(),
+                    body,
+                }
+                .with_slice(src.clone());
+
+                type_annotation.set_parent(&func);
+
+                let this = ASTDetails::FuncDeclaration {
+                    name: name.clone(),
+                    func: func.clone(),
+                    exported: export.is_some(),
                     platforms: PlatformSet::all(), // TODO
                     decorators: vec![],            // TODO
                 }
-                .with_slice(src)
+                .with_slice(src);
+
+                name.set_parent(&this);
+                func.set_parent(&this);
+
+                this
             },
         ),
     )(i)
