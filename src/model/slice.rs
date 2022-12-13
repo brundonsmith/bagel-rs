@@ -176,8 +176,6 @@ impl<'a> Compare<&'a str> for Slice {
     }
 }
 
-impl Loggable for Slice {}
-
 #[test]
 fn take_split() {
     let code = Rc::new(String::from("ksjdfg"));
