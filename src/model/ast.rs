@@ -41,6 +41,35 @@ impl AST {
     }
 }
 
+pub trait Parentable {
+    fn set_parent(&mut self, parent: &AST);
+}
+
+impl Parentable for AST {
+    fn set_parent(&mut self, parent: &AST) {
+        self.0
+            .as_ref()
+            .parent
+            .replace(Some(Rc::downgrade(&parent.0)));
+    }
+}
+
+impl Parentable for Option<AST> {
+    fn set_parent(&mut self, parent: &AST) {
+        if let Some(s) = self {
+            s.set_parent(parent);
+        }
+    }
+}
+
+impl Parentable for Vec<AST> {
+    fn set_parent(&mut self, parent: &AST) {
+        for ast in self.iter_mut() {
+            ast.set_parent(parent);
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ASTInner {
     parent: RefCell<Option<Weak<ASTInner>>>,

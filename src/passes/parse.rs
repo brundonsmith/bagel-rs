@@ -15,7 +15,7 @@ use nom::{
     bytes::complete::{escaped, tag, take_while, take_while1},
     character::complete::{char, one_of},
     combinator::{complete, map, opt},
-    error::{context, ErrorKind},
+    error::ErrorKind,
     multi::{many0, separated_list0, separated_list1},
     sequence::{pair, preceded, separated_pair, terminated, tuple},
     IResult, Parser,
@@ -26,6 +26,36 @@ use std::{rc::Rc, time::SystemTime};
 macro_rules! seq {
     ($( $s:expr ),* $(,)?) => {
         tuple(( $(preceded(whitespace, $s)),* ))
+    };
+}
+
+macro_rules! make_node {
+    ($kind:ident, $src:expr, $( $prop:ident ),* $(,)?) => {
+        {
+            let this = ASTDetails::$kind {
+                $($prop: $prop.clone(),)*
+            }
+            .with_slice($src);
+
+            $($prop.set_parent(&this);)*
+
+            this
+        }
+    };
+}
+
+macro_rules! make_node_tuple {
+    ($kind:ident, $src:expr, $( $prop:ident ),* $(,)?) => {
+        {
+            let this = ASTDetails::$kind(
+                $($prop.clone()),*
+            )
+            .with_slice($src);
+
+            $($prop.set_parent(&this);)*
+
+            this
+        }
     };
 }
 
@@ -90,29 +120,20 @@ macro_rules! parse_level {
     };
 }
 
-fn module(i: Slice) -> ParseResult {
+fn module(i: Slice) -> ParseResult<AST> {
     map(
         complete(terminated(many0(w(declaration)), whitespace)),
         |mut declarations| {
             let src = covering(&declarations).unwrap_or(i.clone().slice_range(0, Some(0)));
 
-            let this = ASTDetails::Module {
-                declarations: declarations.clone(),
-            }
-            .with_slice(src);
-
-            for declaration in declarations.iter_mut() {
-                declaration.set_parent(&this);
-            }
-
-            this
+            make_node!(Module, src, declarations)
         },
     )(i.clone())
 }
 
 // --- Declaration
 
-fn declaration(i: Slice) -> ParseResult {
+fn declaration(i: Slice) -> ParseResult<AST> {
     alt((
         import_all_declaration,
         import_declaration,
@@ -126,184 +147,147 @@ fn declaration(i: Slice) -> ParseResult {
     ))(i)
 }
 
-fn import_all_declaration(i: Slice) -> ParseResult {
-    context(
-        "import-all declaration",
-        map(
-            seq!(
-                tag("import"),
-                exact_string_literal,
-                tag("as"),
-                plain_identifier,
-            ),
-            |(start, mut path, _, mut name)| {
-                let this = ASTDetails::ImportAllDeclaration {
-                    path: path.clone(),
-                    name: name.clone(),
-                }
-                .with_slice(start.spanning(name.slice()));
-
-                path.set_parent(&this);
-                name.set_parent(&this);
-
-                this
-            },
+fn import_all_declaration(i: Slice) -> ParseResult<AST> {
+    map(
+        seq!(
+            tag("import"),
+            exact_string_literal,
+            tag("as"),
+            plain_identifier,
         ),
+        |(start, mut path, _, mut name)| {
+            make_node!(
+                ImportAllDeclaration,
+                start.spanning(name.slice()),
+                path,
+                name
+            )
+        },
     )(i)
 }
 
-fn import_declaration(i: Slice) -> ParseResult {
-    context(
-        "import declaration",
-        map(
-            seq!(
-                tag("from"),
-                exact_string_literal,
-                tag("import"),
-                tag("{"),
-                separated_list0(w(tag(",")), import_item),
-                tag("}"),
-            ),
-            |(start, mut path, _, _, mut imports, end)| {
-                let this = ASTDetails::ImportDeclaration {
-                    path: path.clone(),
-                    imports: imports.clone(),
-                }
-                .with_slice(start.spanning(&end));
-
-                path.set_parent(&this);
-                for import in imports.iter_mut() {
-                    import.set_parent(&this);
-                }
-
-                this
-            },
+fn import_declaration(i: Slice) -> ParseResult<AST> {
+    map(
+        seq!(
+            tag("from"),
+            exact_string_literal,
+            tag("import"),
+            tag("{"),
+            separated_list0(w(tag(",")), import_item),
+            tag("}"),
         ),
+        |(start, mut path, _, _, mut imports, end)| {
+            make_node!(ImportDeclaration, start.spanning(&end), path, imports)
+        },
     )(i)
 }
 
-fn import_item(i: Slice) -> ParseResult {
+fn import_item(i: Slice) -> ParseResult<AST> {
     map(
         pair(
             plain_identifier,
             opt(map(seq!(tag("as"), plain_identifier), |(_, alias)| alias)),
         ),
         |(mut name, mut alias)| {
-            let this = ASTDetails::ImportItem {
-                name: name.clone(),
-                alias: alias.clone(),
-            }
-            .with_slice(
+            make_node!(
+                ImportItem,
                 name.slice().clone().spanning(
                     alias
                         .as_ref()
                         .map(|alias| alias.slice())
                         .unwrap_or(name.slice()),
                 ),
-            );
+                name,
+                alias
+            )
+        },
+    )(i)
+}
+
+fn type_declaration(i: Slice) -> ParseResult<AST> {
+    map(
+        seq!(
+            opt(tag("export")),
+            tag("type"),
+            plain_identifier,
+            tag("="),
+            type_expression(0),
+        ),
+        |(export, keyword, mut name, _, mut declared_type)| {
+            let this = ASTDetails::TypeDeclaration {
+                name: name.clone(),
+                declared_type: declared_type.clone(),
+                exported: export.is_some(),
+            }
+            .with_slice(export.unwrap_or(keyword).spanning(&declared_type.slice()));
 
             name.set_parent(&this);
-            if let Some(alias) = &mut alias {
-                alias.set_parent(&this);
-            }
+            declared_type.set_parent(&this);
 
             this
         },
     )(i)
 }
 
-fn type_declaration(i: Slice) -> ParseResult {
-    context(
-        "type declaration",
-        map(
-            seq!(
-                opt(tag("export")),
-                tag("type"),
-                plain_identifier,
-                tag("="),
-                type_expression(0),
-            ),
-            |(export, keyword, mut name, _, mut declared_type)| {
-                let this = ASTDetails::TypeDeclaration {
-                    name: name.clone(),
-                    declared_type: declared_type.clone(),
-                    exported: export.is_some(),
-                }
-                .with_slice(export.unwrap_or(keyword).spanning(&declared_type.slice()));
-
-                name.set_parent(&this);
-                declared_type.set_parent(&this);
-
-                this
-            },
+fn func_declaration(i: Slice) -> ParseResult<AST> {
+    map(
+        seq!(
+            opt(tag("export")),
+            opt(tag("pure")),
+            opt(tag("async")),
+            tag("func"),
+            plain_identifier,
+            args,
+            opt(type_annotation),
+            tag("=>"),
+            expression(0),
         ),
+        |(export, pure, asyn, keyword, mut name, mut args, mut returns, _, mut body)| {
+            let src = export
+                .as_ref()
+                .unwrap_or(pure.as_ref().unwrap_or(asyn.as_ref().unwrap_or(&keyword)))
+                .clone()
+                .spanning(body.slice());
+
+            let mut type_annotation = ASTDetails::FuncType {
+                args: args.clone(),
+                args_spread: None, // TODO
+                is_pure: pure.is_some(),
+                returns: returns.clone(),
+            }
+            .with_slice(args.slice().clone().spanning(body.slice()));
+
+            args.set_parent(&type_annotation);
+            returns.set_parent(&type_annotation);
+
+            let mut func = ASTDetails::Func {
+                type_annotation: type_annotation.clone(),
+                is_async: asyn.is_some(),
+                is_pure: pure.is_some(),
+                body,
+            }
+            .with_slice(src.clone());
+
+            type_annotation.set_parent(&func);
+
+            let this = ASTDetails::FuncDeclaration {
+                name: name.clone(),
+                func: func.clone(),
+                exported: export.is_some(),
+                platforms: PlatformSet::all(), // TODO
+                decorators: vec![],            // TODO
+            }
+            .with_slice(src);
+
+            name.set_parent(&this);
+            func.set_parent(&this);
+
+            this
+        },
     )(i)
 }
 
-fn func_declaration(i: Slice) -> ParseResult {
-    context(
-        "func declaration",
-        map(
-            seq!(
-                opt(tag("export")),
-                opt(tag("pure")),
-                opt(tag("async")),
-                tag("func"),
-                plain_identifier,
-                args,
-                opt(type_annotation),
-                tag("=>"),
-                expression(0),
-            ),
-            |(export, pure, asyn, keyword, mut name, mut args, mut returns, _, mut body)| {
-                let src = export
-                    .as_ref()
-                    .unwrap_or(pure.as_ref().unwrap_or(asyn.as_ref().unwrap_or(&keyword)))
-                    .clone()
-                    .spanning(body.slice());
-
-                let mut type_annotation = ASTDetails::FuncType {
-                    args: args.clone(),
-                    args_spread: None, // TODO
-                    is_pure: pure.is_some(),
-                    returns: returns.clone(),
-                }
-                .with_slice(args.slice().clone().spanning(body.slice()));
-
-                args.set_parent(&type_annotation);
-                if let Some(returns) = &mut returns {
-                    returns.set_parent(&type_annotation);
-                }
-
-                let mut func = ASTDetails::Func {
-                    type_annotation: type_annotation.clone(),
-                    is_async: asyn.is_some(),
-                    is_pure: pure.is_some(),
-                    body,
-                }
-                .with_slice(src.clone());
-
-                type_annotation.set_parent(&func);
-
-                let this = ASTDetails::FuncDeclaration {
-                    name: name.clone(),
-                    func: func.clone(),
-                    exported: export.is_some(),
-                    platforms: PlatformSet::all(), // TODO
-                    decorators: vec![],            // TODO
-                }
-                .with_slice(src);
-
-                name.set_parent(&this);
-                func.set_parent(&this);
-
-                this
-            },
-        ),
-    )(i)
-}
-
-fn args(i: Slice) -> ParseResult {
+fn args(i: Slice) -> ParseResult<AST> {
     alt((
         map(plain_identifier, |name| {
             ASTDetails::ArgsSeries(vec![ASTDetails::Arg {
@@ -349,103 +333,94 @@ fn args(i: Slice) -> ParseResult {
     ))(i)
 }
 
-fn proc_declaration(i: Slice) -> ParseResult {
-    context(
-        "proc declaration",
-        map(
-            seq!(
-                opt(tag("export")),
-                opt(tag("pure")),
-                opt(tag("async")),
-                tag("proc"),
-                plain_identifier,
-                args,
-                block,
-            ),
-            |(export, pure, asyn, keyword, name, args, body)| {
-                let exported = export.is_some();
-                let is_async = asyn.is_some();
-                let is_pure = pure.is_some();
-                let src = export
-                    .unwrap_or(pure.unwrap_or(asyn.unwrap_or(keyword)))
-                    .spanning(body.slice());
-                let args_start = args.slice();
-
-                ASTDetails::ProcDeclaration {
-                    name,
-                    proc: ASTDetails::Proc {
-                        type_annotation: ASTDetails::ProcType {
-                            args: args.clone(),
-                            args_spread: None, // TODO
-                            is_pure,
-                            is_async,
-                            throws: None, // TODO
-                        }
-                        .with_slice(args_start.clone().spanning(body.slice())),
-
-                        is_async,
-                        is_pure,
-                        body,
-                    }
-                    .with_slice(src.clone()),
-                    exported,
-                    platforms: PlatformSet::all(), // TODO
-                    decorators: vec![],            // TODO
-                }
-                .with_slice(src)
-            },
+fn proc_declaration(i: Slice) -> ParseResult<AST> {
+    map(
+        seq!(
+            opt(tag("export")),
+            opt(tag("pure")),
+            opt(tag("async")),
+            tag("proc"),
+            plain_identifier,
+            args,
+            block,
         ),
+        |(export, pure, asyn, keyword, name, args, body)| {
+            let exported = export.is_some();
+            let is_async = asyn.is_some();
+            let is_pure = pure.is_some();
+            let src = export
+                .unwrap_or(pure.unwrap_or(asyn.unwrap_or(keyword)))
+                .spanning(body.slice());
+            let args_start = args.slice();
+
+            ASTDetails::ProcDeclaration {
+                name,
+                proc: ASTDetails::Proc {
+                    type_annotation: ASTDetails::ProcType {
+                        args: args.clone(),
+                        args_spread: None, // TODO
+                        is_pure,
+                        is_async,
+                        throws: None, // TODO
+                    }
+                    .with_slice(args_start.clone().spanning(body.slice())),
+
+                    is_async,
+                    is_pure,
+                    body,
+                }
+                .with_slice(src.clone()),
+                exported,
+                platforms: PlatformSet::all(), // TODO
+                decorators: vec![],            // TODO
+            }
+            .with_slice(src)
+        },
     )(i)
 }
 
-fn block(i: Slice) -> ParseResult {
+fn block(i: Slice) -> ParseResult<AST> {
     map(
         seq!(tag("{"), many0(statement), tag("}")),
-        |(open, statements, close)| ASTDetails::Block(statements).with_slice(open.spanning(&close)),
+        |(open, mut statements, close)| make_node_tuple!(Block, open.spanning(&close), statements),
     )(i)
 }
 
-fn value_declaration(i: Slice) -> ParseResult {
-    context(
-        "value declaration",
-        map(
-            seq!(
-                opt(tag("export")),
-                alt((tag("const"), tag("let"))),
-                plain_identifier,
-                opt(type_annotation),
-                tag("="),
-                expression(0),
-            ),
-            |(export, keyword, mut name, mut type_annotation, _, mut value)| {
-                let exported = export.is_some();
-                let is_const = keyword.as_str() == "const";
-                let src = export.unwrap_or(keyword).spanning(value.slice());
-
-                let this = ASTDetails::ValueDeclaration {
-                    name: name.clone(),
-                    type_annotation: type_annotation.clone(),
-                    value: value.clone(),
-                    is_const,
-                    exported,
-                    platforms: PlatformSet::all(), // TODO
-                }
-                .with_slice(src);
-
-                name.set_parent(&this);
-                if let Some(type_annotation) = &mut type_annotation {
-                    type_annotation.set_parent(&this);
-                }
-                value.set_parent(&this);
-
-                this
-            },
+fn value_declaration(i: Slice) -> ParseResult<AST> {
+    map(
+        seq!(
+            opt(tag("export")),
+            alt((tag("const"), tag("let"))),
+            plain_identifier,
+            opt(type_annotation),
+            tag("="),
+            expression(0),
         ),
+        |(export, keyword, mut name, mut type_annotation, _, mut value)| {
+            let exported = export.is_some();
+            let is_const = keyword.as_str() == "const";
+            let src = export.unwrap_or(keyword).spanning(value.slice());
+
+            let this = ASTDetails::ValueDeclaration {
+                name: name.clone(),
+                type_annotation: type_annotation.clone(),
+                value: value.clone(),
+                is_const,
+                exported,
+                platforms: PlatformSet::all(), // TODO
+            }
+            .with_slice(src);
+
+            name.set_parent(&this);
+            type_annotation.set_parent(&this);
+            value.set_parent(&this);
+
+            this
+        },
     )(i)
-    .log()
 }
 
-fn test_expr_declaration(i: Slice) -> ParseResult {
+fn test_expr_declaration(i: Slice) -> ParseResult<AST> {
     map(
         seq!(
             tag("test"),
@@ -454,49 +429,51 @@ fn test_expr_declaration(i: Slice) -> ParseResult {
             tag("=>"),
             expression(0),
         ),
-        |(start, _, name, _, expr)| {
-            let src = start.spanning(expr.slice());
-
-            ASTDetails::TestExprDeclaration { name, expr }.with_slice(src)
+        |(start, _, mut name, _, mut expr)| {
+            make_node!(
+                TestExprDeclaration,
+                start.spanning(expr.slice()),
+                name,
+                expr
+            )
         },
     )(i)
 }
 
-fn test_block_declaration(i: Slice) -> ParseResult {
+fn test_block_declaration(i: Slice) -> ParseResult<AST> {
     map(
         seq!(tag("test"), tag("block"), exact_string_literal, block),
-        |(start, _, name, block)| {
-            ASTDetails::TestBlockDeclaration {
-                name: name.clone(),
-                block: block.clone(),
-            }
-            .with_slice(start.spanning(block.slice()))
+        |(start, _, mut name, mut block)| {
+            make_node!(
+                TestBlockDeclaration,
+                start.spanning(block.slice()),
+                name,
+                block
+            )
         },
     )(i)
 }
 
-fn test_type_declaration(i: Slice) -> ParseResult {
+fn test_type_declaration(i: Slice) -> ParseResult<AST> {
     todo!()
 }
 
-fn type_annotation(i: Slice) -> ParseResult {
+fn type_annotation(i: Slice) -> ParseResult<AST> {
     preceded(tag(":"), w(type_expression(0)))(i)
 }
 
 // --- TypeExpression ---
 
-fn type_expression(l: usize) -> impl Fn(Slice) -> ParseResult {
-    move |i: Slice| -> ParseResult {
+fn type_expression(l: usize) -> impl Fn(Slice) -> ParseResult<AST> {
+    move |i: Slice| -> ParseResult<AST> {
         let mut tl = 0;
 
         parse_level!(
             l,
             tl,
             i,
-            map(seq!(tag("typeof"), expression(0)), |(keyword, expr)| {
-                let src = keyword.clone().spanning(expr.slice());
-
-                ASTDetails::TypeofType(expr).with_slice(src)
+            map(seq!(tag("typeof"), expression(0)), |(keyword, mut expr)| {
+                make_node_tuple!(TypeofType, keyword.clone().spanning(expr.slice()), expr)
             })
         );
 
@@ -514,17 +491,16 @@ fn type_expression(l: usize) -> impl Fn(Slice) -> ParseResult {
                     )),
                     type_expression(0)
                 ),
-                |(keyword, inner)| {
+                |(keyword, mut inner)| {
                     let src = keyword.clone().spanning(inner.slice());
 
                     match keyword.as_str() {
-                        "keyof" => ASTDetails::KeyofType(inner),
-                        "valueof" => ASTDetails::ValueofType(inner),
-                        "elementof" => ASTDetails::ElementofType(inner),
-                        "readonly" => ASTDetails::ReadonlyType(inner),
+                        "keyof" => make_node_tuple!(KeyofType, src, inner),
+                        "valueof" => make_node_tuple!(ValueofType, src, inner),
+                        "elementof" => make_node_tuple!(ElementofType, src, inner),
+                        "readonly" => make_node_tuple!(ReadonlyType, src, inner),
                         _ => unreachable!(),
                     }
-                    .with_slice(src)
                 }
             )
         );
@@ -537,11 +513,7 @@ fn type_expression(l: usize) -> impl Fn(Slice) -> ParseResult {
             i,
             map(
                 separated_list2(w(tag("|")), w(type_expression(tl + 1))),
-                |members| {
-                    let src = covering(&members).unwrap();
-
-                    ASTDetails::UnionType(members).with_slice(src)
-                }
+                |mut members| { make_node_tuple!(UnionType, covering(&members).unwrap(), members) }
             )
         );
 
@@ -549,11 +521,12 @@ fn type_expression(l: usize) -> impl Fn(Slice) -> ParseResult {
             l,
             tl,
             i,
-            map(seq!(type_expression(tl + 1), tag("?")), |(inner, end)| {
-                let src = inner.slice().clone().spanning(&end);
-
-                ASTDetails::MaybeType(inner).with_slice(src)
-            })
+            map(
+                seq!(type_expression(tl + 1), tag("?")),
+                |(mut inner, end)| {
+                    make_node_tuple!(MaybeType, inner.slice().clone().spanning(&end), inner)
+                }
+            )
         );
 
         // boundGenericType
@@ -564,10 +537,8 @@ fn type_expression(l: usize) -> impl Fn(Slice) -> ParseResult {
             i,
             map(
                 seq!(type_expression(tl + 1), tag("[]")),
-                |(element, end)| {
-                    let src = element.slice().clone().spanning(&end);
-
-                    ASTDetails::ArrayType(element).with_slice(src)
+                |(mut element, end)| {
+                    make_node_tuple!(ArrayType, element.slice().clone().spanning(&end), element)
                 }
             )
         );
@@ -584,8 +555,8 @@ fn type_expression(l: usize) -> impl Fn(Slice) -> ParseResult {
                 tuple_type,
                 map(
                     seq!(tag("("), type_expression(tl + 1), tag(")")),
-                    |(open, inner, close)| {
-                        ASTDetails::ParenthesizedType(inner).with_slice(open.spanning(&close))
+                    |(open, mut inner, close)| {
+                        make_node_tuple!(ParenthesizedType, open.spanning(&close), inner)
                     }
                 ),
                 map(
@@ -621,10 +592,8 @@ fn type_expression(l: usize) -> impl Fn(Slice) -> ParseResult {
             l,
             tl,
             i,
-            map(plain_identifier, |name| {
-                let src = name.slice().clone();
-
-                ASTDetails::NamedType(name).with_slice(src)
+            map(plain_identifier, |mut name| {
+                make_node_tuple!(NamedType, name.slice().clone(), name)
             })
         );
 
@@ -636,7 +605,7 @@ fn type_expression(l: usize) -> impl Fn(Slice) -> ParseResult {
 }
 
 #[memoize]
-fn func_type(i: Slice) -> ParseResult {
+fn func_type(i: Slice) -> ParseResult<AST> {
     map(
         seq!(args, tag("=>"), type_expression(0)),
         |(args, _, returns)| {
@@ -655,7 +624,7 @@ fn func_type(i: Slice) -> ParseResult {
 }
 
 #[memoize]
-fn proc_type(i: Slice) -> ParseResult {
+fn proc_type(i: Slice) -> ParseResult<AST> {
     map(
         seq!(args, tag("("), tag(")"), tag("{"), tag("}")),
         |(args, _, _, _, close)| {
@@ -675,7 +644,7 @@ fn proc_type(i: Slice) -> ParseResult {
 }
 
 #[memoize]
-fn record_type(i: Slice) -> ParseResult {
+fn record_type(i: Slice) -> ParseResult<AST> {
     map(
         seq!(
             tag("{"),
@@ -686,18 +655,14 @@ fn record_type(i: Slice) -> ParseResult {
             type_expression(0),
             tag("}"),
         ),
-        |(open, _, key_type, _, _, value_type, close)| {
-            ASTDetails::RecordType {
-                key_type,
-                value_type,
-            }
-            .with_slice(open.spanning(&close))
+        |(open, _, mut key_type, _, _, mut value_type, close)| {
+            make_node!(RecordType, open.spanning(&close), key_type, value_type)
         },
     )(i)
 }
 
 #[memoize]
-fn object_or_interface_type(i: Slice) -> ParseResult {
+fn object_or_interface_type(i: Slice) -> ParseResult<AST> {
     map(
         seq!(
             opt(tag("interface")),
@@ -705,43 +670,44 @@ fn object_or_interface_type(i: Slice) -> ParseResult {
             separated_list0(w(tag(",")), w(key_value_type)),
             tag("}"),
         ),
-        |(interface, open, entries, close)| {
+        |(interface, open, mut entries, close)| {
             if let Some(interface) = interface {
-                ASTDetails::InterfaceType(entries).with_slice(interface.spanning(&close))
+                make_node_tuple!(InterfaceType, interface.spanning(&close), entries)
             } else {
-                ASTDetails::ObjectType(entries).with_slice(open.spanning(&close))
+                make_node_tuple!(ObjectType, open.spanning(&close), entries)
             }
         },
     )(i)
 }
 
-fn key_value_type(i: Slice) -> ParseResult {
+fn key_value_type(i: Slice) -> ParseResult<AST> {
     map(
         separated_pair(plain_identifier, tag(":"), type_expression(0)),
-        |(key, value)| {
-            ASTDetails::KeyValueType {
-                key: key.clone(),
-                value: value.clone(),
-            }
-            .with_slice(key.slice().clone().spanning(value.slice()))
+        |(mut key, mut value)| {
+            make_node!(
+                KeyValueType,
+                key.slice().clone().spanning(value.slice()),
+                key,
+                value
+            )
         },
     )(i)
 }
 
-fn tuple_type(i: Slice) -> ParseResult {
+fn tuple_type(i: Slice) -> ParseResult<AST> {
     map(
         seq!(
             tag("["),
             separated_list0(w(tag(",")), w(type_expression(0))),
             tag("]"),
         ),
-        |(open, members, close)| ASTDetails::TupleType(members).with_slice(open.spanning(&close)),
+        |(open, mut members, close)| make_node_tuple!(TupleType, open.spanning(&close), members),
     )(i)
 }
 
 // --- Statement ---
 
-fn statement(i: Slice) -> ParseResult {
+fn statement(i: Slice) -> ParseResult<AST> {
     alt((
         // map(declaration_statement, |x| x.map(ASTDetails::from)),
         if_else_statement,
@@ -755,11 +721,11 @@ fn statement(i: Slice) -> ParseResult {
     ))(i)
 }
 
-fn declaration_statement(i: Slice) -> ParseResult {
+fn declaration_statement(i: Slice) -> ParseResult<AST> {
     todo!()
 }
 
-fn if_else_statement(i: Slice) -> ParseResult {
+fn if_else_statement(i: Slice) -> ParseResult<AST> {
     map(
         seq!(
             separated_list1(w(tag("else")), w(if_else_statement_case)),
@@ -768,38 +734,31 @@ fn if_else_statement(i: Slice) -> ParseResult {
             },)),
         ),
         |(mut cases, mut default_case)| {
-            let src = covering(&cases).unwrap();
-
-            let this = ASTDetails::IfElseStatement {
-                cases: cases.clone(),
-                default_case: default_case.clone(),
-            }
-            .with_slice(src);
-
-            for case in cases.iter_mut() {
-                case.set_parent(&this);
-            }
-            if let Some(default_case) = &mut default_case {
-                default_case.set_parent(&this);
-            }
-
-            this
+            make_node!(
+                IfElseStatement,
+                covering(&cases).unwrap(),
+                cases,
+                default_case
+            )
         },
     )(i)
 }
 
-fn if_else_statement_case(i: Slice) -> ParseResult {
+fn if_else_statement_case(i: Slice) -> ParseResult<AST> {
     map(
         seq!(tag("if"), expression(0), block),
-        |(start, condition, outcome)| {
-            let src = start.spanning(outcome.slice());
-
-            ASTDetails::IfElseExpressionCase { condition, outcome }.with_slice(src)
+        |(start, mut condition, mut outcome)| {
+            make_node!(
+                IfElseExpressionCase,
+                start.spanning(outcome.slice()),
+                condition,
+                outcome
+            )
         },
     )(i)
 }
 
-fn for_loop(i: Slice) -> ParseResult {
+fn for_loop(i: Slice) -> ParseResult<AST> {
     map(
         seq!(
             tag("for"),
@@ -809,66 +768,45 @@ fn for_loop(i: Slice) -> ParseResult {
             block,
         ),
         |(start, mut item_identifier, _, mut iterator, mut body)| {
-            let this = ASTDetails::ForLoop {
-                item_identifier: item_identifier.clone(),
-                iterator: iterator.clone(),
-                body: body.clone(),
-            }
-            .with_slice(start.spanning(body.slice()));
-
-            item_identifier.set_parent(&this);
-            iterator.set_parent(&this);
-            body.set_parent(&this);
-
-            this
+            make_node!(
+                ForLoop,
+                start.spanning(body.slice()),
+                item_identifier,
+                iterator,
+                body
+            )
         },
     )(i)
 }
 
-fn while_loop(i: Slice) -> ParseResult {
+fn while_loop(i: Slice) -> ParseResult<AST> {
     map(
         seq!(tag("while"), expression(0), block),
         |(start, mut condition, mut body)| {
-            let this = ASTDetails::WhileLoop {
-                condition: condition.clone(),
-                body: body.clone(),
-            }
-            .with_slice(start.spanning(body.slice()));
-
-            condition.set_parent(&this);
-            body.set_parent(&this);
-
-            this
+            make_node!(WhileLoop, start.spanning(body.slice()), condition, body)
         },
     )(i)
 }
 
-fn assignment(i: Slice) -> ParseResult {
+fn assignment(i: Slice) -> ParseResult<AST> {
     todo!()
 }
 
-fn try_catch(i: Slice) -> ParseResult {
+fn try_catch(i: Slice) -> ParseResult<AST> {
     todo!()
 }
 
-fn throw_statement(i: Slice) -> ParseResult {
+fn throw_statement(i: Slice) -> ParseResult<AST> {
     map(
         seq!(tag("throw"), expression(0), tag(";")),
         |(start, mut error_expression, end)| {
-            let this = ASTDetails::ThrowStatement {
-                error_expression: error_expression.clone(),
-            }
-            .with_slice(start.spanning(&end));
-
-            error_expression.set_parent(&this);
-
-            this
+            make_node!(ThrowStatement, start.spanning(&end), error_expression)
         },
     )(i)
 }
 
 #[memoize]
-fn autorun(i: Slice) -> ParseResult {
+fn autorun(i: Slice) -> ParseResult<AST> {
     map(
         seq!(
             tag("autorun"),
@@ -883,30 +821,19 @@ fn autorun(i: Slice) -> ParseResult {
             tag(";"),
         ),
         |(start, mut effect_block, mut until, end)| {
-            let this = ASTDetails::Autorun {
-                effect_block: effect_block.clone(),
-                until: until.clone(),
-            }
-            .with_slice(start.spanning(&end));
-
-            effect_block.set_parent(&this);
-            if let Some(until) = &mut until {
-                until.set_parent(&this);
-            }
-
-            this
+            make_node!(Autorun, start.spanning(&end), effect_block, until)
         },
     )(i)
 }
 
-fn invocation_statement(i: Slice) -> ParseResult {
+fn invocation_statement(i: Slice) -> ParseResult<AST> {
     todo!()
 }
 
 // --- Expression ---
 
-fn expression(l: usize) -> impl Fn(Slice) -> ParseResult {
-    move |i: Slice| -> ParseResult {
+fn expression(l: usize) -> impl Fn(Slice) -> ParseResult<AST> {
+    move |i: Slice| -> ParseResult<AST> {
         let mut tl = 0;
 
         // parse_level!(level, this_level, i, ); // debug, javascriptEscape, elementTag
@@ -974,7 +901,7 @@ fn expression(l: usize) -> impl Fn(Slice) -> ParseResult {
 
 macro_rules! parse_binary_operation {
     ($level:expr, $parser:expr) => {
-        move |i: Slice| -> ParseResult {
+        move |i: Slice| -> ParseResult<AST> {
             map(
                 seq!(expression($level + 1), $parser, expression($level + 1),),
                 |(mut left, op, mut right)| {
@@ -985,25 +912,14 @@ macro_rules! parse_binary_operation {
                     )
                     .with_slice(op);
 
-                    let this = ASTDetails::BinaryOperation {
-                        left: left.clone(),
-                        op: op.clone(),
-                        right: right.clone(),
-                    }
-                    .with_slice(src);
-
-                    left.set_parent(&this);
-                    op.set_parent(&this);
-                    right.set_parent(&this);
-
-                    this
+                    make_node!(BinaryOperation, src, left, op, right)
                 },
             )(i.clone())
         }
     };
 }
 
-fn binary_operator_1(level: usize, a: &'static str) -> impl Fn(Slice) -> ParseResult {
+fn binary_operator_1(level: usize, a: &'static str) -> impl Fn(Slice) -> ParseResult<AST> {
     parse_binary_operation!(level, tag(a))
 }
 
@@ -1011,7 +927,7 @@ fn binary_operator_2(
     level: usize,
     a: &'static str,
     b: &'static str,
-) -> impl Fn(Slice) -> ParseResult {
+) -> impl Fn(Slice) -> ParseResult<AST> {
     parse_binary_operation!(level, alt((tag(a), tag(b))))
 }
 
@@ -1021,68 +937,56 @@ fn binary_operator_4(
     b: &'static str,
     c: &'static str,
     d: &'static str,
-) -> impl Fn(Slice) -> ParseResult {
+) -> impl Fn(Slice) -> ParseResult<AST> {
     parse_binary_operation!(level, alt((tag(a), tag(b), tag(c), tag(d))))
 }
 
-fn regular_expression(i: Slice) -> ParseResult {
+fn regular_expression(i: Slice) -> ParseResult<AST> {
     todo!()
 }
 
-fn error_expression(i: Slice) -> ParseResult {
+fn error_expression(i: Slice) -> ParseResult<AST> {
     todo!()
 }
 
-fn instance_of(level: usize) -> impl Fn(Slice) -> ParseResult {
-    move |i: Slice| -> ParseResult {
+fn instance_of(level: usize) -> impl Fn(Slice) -> ParseResult<AST> {
+    move |i: Slice| -> ParseResult<AST> {
         map(
             seq!(expression(level + 1), tag("instanceof"), type_expression(0)),
             |(mut inner, _, mut possible_type)| {
-                let src = inner.slice().clone().spanning(possible_type.slice());
-
-                let this = ASTDetails::InstanceOf {
-                    inner: inner.clone(),
-                    possible_type: possible_type.clone(),
-                }
-                .with_slice(src);
-
-                inner.set_parent(&this);
-                possible_type.set_parent(&this);
-
-                this
+                make_node!(
+                    InstanceOf,
+                    inner.slice().clone().spanning(possible_type.slice()),
+                    inner,
+                    possible_type
+                )
             },
         )(i)
     }
 }
 
-fn as_cast(level: usize) -> impl Fn(Slice) -> ParseResult {
-    move |i: Slice| -> ParseResult {
+fn as_cast(level: usize) -> impl Fn(Slice) -> ParseResult<AST> {
+    move |i: Slice| -> ParseResult<AST> {
         map(
             seq!(expression(level + 1), tag("as"), type_expression(0)),
             |(mut inner, _, mut as_type)| {
-                let src = inner.slice().clone().spanning(as_type.slice());
-
-                let this = ASTDetails::AsCast {
-                    inner: inner.clone(),
-                    as_type: as_type.clone(),
-                }
-                .with_slice(src);
-
-                inner.set_parent(&this);
-                as_type.set_parent(&this);
-
-                this
+                make_node!(
+                    AsCast,
+                    inner.slice().clone().spanning(as_type.slice()),
+                    inner,
+                    as_type
+                )
             },
         )(i)
     }
 }
 
-fn element_tag(i: Slice) -> ParseResult {
+fn element_tag(i: Slice) -> ParseResult<AST> {
     todo!()
 }
 
 #[memoize]
-fn if_else_expression(i: Slice) -> ParseResult {
+fn if_else_expression(i: Slice) -> ParseResult<AST> {
     map(
         seq!(
             separated_list1(w(tag("else")), w(if_else_expression_case)),
@@ -1092,37 +996,32 @@ fn if_else_expression(i: Slice) -> ParseResult {
             )),
         ),
         |(mut cases, mut default_case)| {
-            let src = covering(&cases).unwrap();
-
-            let this = ASTDetails::IfElseExpression {
-                cases: cases.clone(),
-                default_case: default_case.clone(),
-            }
-            .with_slice(src);
-
-            for case in cases.iter_mut() {
-                case.set_parent(&this);
-            }
-            if let Some(default_case) = &mut default_case {
-                default_case.set_parent(&this);
-            }
-
-            this
+            make_node!(
+                IfElseExpression,
+                covering(&cases).unwrap(),
+                cases,
+                default_case
+            )
         },
     )(i)
 }
 
-fn if_else_expression_case(i: Slice) -> ParseResult {
+fn if_else_expression_case(i: Slice) -> ParseResult<AST> {
     map(
         seq!(tag("if"), expression(0), tag("{"), expression(0), tag("}"),),
-        |(start, condition, _, outcome, end)| {
-            ASTDetails::IfElseExpressionCase { condition, outcome }.with_slice(start.spanning(&end))
+        |(start, mut condition, _, mut outcome, end)| {
+            make_node!(
+                IfElseExpressionCase,
+                start.spanning(&end),
+                condition,
+                outcome
+            )
         },
     )(i)
 }
 
 #[memoize]
-fn switch_expression(i: Slice) -> ParseResult {
+fn switch_expression(i: Slice) -> ParseResult<AST> {
     map(
         seq!(
             tag("switch"),
@@ -1148,56 +1047,41 @@ fn switch_expression(i: Slice) -> ParseResult {
             tag("}"),
         ),
         |(start, mut value, _, mut cases, mut default_case, end)| {
-            let this = ASTDetails::SwitchExpression {
-                value: value.clone(),
-                cases: cases.clone(),
-                default_case: default_case.clone(),
-            }
-            .with_slice(start.spanning(&end));
-
-            value.set_parent(&this);
-            for case in cases.iter_mut() {
-                case.set_parent(&this);
-            }
-            if let Some(default_case) = &mut default_case {
-                default_case.set_parent(&this);
-            }
-
-            this
+            make_node!(
+                SwitchExpression,
+                start.spanning(&end),
+                value,
+                cases,
+                default_case
+            )
         },
     )(i)
 }
 
-fn range_expression(i: Slice) -> ParseResult {
+fn range_expression(i: Slice) -> ParseResult<AST> {
     map(
         seq!(number_literal, tag(".."), number_literal),
         |(mut start, _, mut end)| {
-            let src = start.slice().clone().spanning(end.slice());
-
-            let this = ASTDetails::RangeExpression {
-                start: start.clone(),
-                end: end.clone(),
-            }
-            .with_slice(src);
-
-            start.set_parent(&this);
-            end.set_parent(&this);
-
-            this
+            make_node!(
+                RangeExpression,
+                start.slice().clone().spanning(end.slice()),
+                start,
+                end
+            )
         },
     )(i)
 }
 
-fn javascript_escape_expression(i: Slice) -> ParseResult {
+fn javascript_escape_expression(i: Slice) -> ParseResult<AST> {
     todo!()
 }
 
-fn proc(i: Slice) -> ParseResult {
+fn proc(i: Slice) -> ParseResult<AST> {
     todo!()
 }
 
 #[memoize]
-fn func(i: Slice) -> ParseResult {
+fn func(i: Slice) -> ParseResult<AST> {
     map(
         seq!(
             opt(tag("pure")),
@@ -1238,147 +1122,111 @@ fn func(i: Slice) -> ParseResult {
     )(i)
 }
 
-fn inline_const_group(i: Slice) -> ParseResult {
+fn inline_const_group(i: Slice) -> ParseResult<AST> {
     todo!()
 }
 
-fn negation_operation(level: usize) -> impl Fn(Slice) -> ParseResult {
-    move |i: Slice| -> ParseResult {
+fn negation_operation(level: usize) -> impl Fn(Slice) -> ParseResult<AST> {
+    move |i: Slice| -> ParseResult<AST> {
         map(
             seq!(tag("!"), expression(level + 1)),
             |(start, mut expr)| {
-                let src = start.spanning(expr.slice());
-                let this = ASTDetails::NegationOperation(expr.clone()).with_slice(src);
-
-                expr.set_parent(&this);
-
-                this
+                make_node_tuple!(NegationOperation, start.spanning(expr.slice()), expr)
             },
         )(i)
     }
 }
 
-fn parenthesis(level: usize) -> impl Fn(Slice) -> ParseResult {
-    move |i: Slice| -> ParseResult {
-        context(
-            "parenthesized expression",
-            map(
-                seq!(tag("("), expression(level + 1), tag(")")),
-                |(open_paren, mut inner, close_paren)| {
-                    let this = ASTDetails::Parenthesis(inner.clone())
-                        .with_slice(open_paren.spanning(&close_paren));
-
-                    inner.set_parent(&this);
-
-                    this
-                },
-            ),
+fn parenthesis(level: usize) -> impl Fn(Slice) -> ParseResult<AST> {
+    move |i: Slice| -> ParseResult<AST> {
+        map(
+            seq!(tag("("), expression(level + 1), tag(")")),
+            |(open_paren, mut inner, close_paren)| {
+                make_node_tuple!(Parenthesis, open_paren.spanning(&close_paren), inner)
+            },
         )(i)
     }
 }
 
 #[memoize]
-fn object_literal(i: Slice) -> ParseResult {
-    context(
-        "object",
-        map(
-            seq!(
-                tag("{"),
-                separated_list0(w(char(',')), w(key_value_expression)),
-                tag("}"),
-            ),
-            |(open_bracket, mut entries, close_bracket)| {
-                let this = ASTDetails::ObjectLiteral(entries.clone())
-                    .with_slice(open_bracket.spanning(&close_bracket));
-
-                for entry in entries.iter_mut() {
-                    entry.set_parent(&this);
-                }
-
-                this
-            },
+fn object_literal(i: Slice) -> ParseResult<AST> {
+    map(
+        seq!(
+            tag("{"),
+            separated_list0(w(char(',')), w(key_value_expression)),
+            tag("}"),
         ),
+        |(open_bracket, mut entries, close_bracket)| {
+            make_node_tuple!(
+                ObjectLiteral,
+                open_bracket.spanning(&close_bracket),
+                entries
+            )
+        },
     )(i)
 }
 
-fn key_value_expression(i: Slice) -> ParseResult {
+fn key_value_expression(i: Slice) -> ParseResult<AST> {
     map(
         seq!(plain_identifier, tag(":"), expression(0)),
         |(mut key, _, mut value)| {
-            ASTDetails::KeyValue {
-                key: key.clone(),
-                value: value.clone(),
-            }
-            .with_slice(key.slice().clone().spanning(value.slice()))
+            make_node!(
+                KeyValue,
+                key.slice().clone().spanning(value.slice()),
+                key,
+                value
+            )
         },
     )(i)
 }
 
 #[memoize]
-fn array_literal(i: Slice) -> ParseResult {
-    context(
-        "array",
-        map(
-            seq!(
-                tag("["),
-                separated_list0(w(char(',')), w(expression(0))),
-                tag("]"),
-            ),
-            |(open_bracket, mut entries, close_bracket)| {
-                let this = ASTDetails::ArrayLiteral(entries.clone())
-                    .with_slice(open_bracket.spanning(&close_bracket));
-
-                for entry in entries.iter_mut() {
-                    entry.set_parent(&this);
-                }
-
-                this
-            },
+fn array_literal(i: Slice) -> ParseResult<AST> {
+    map(
+        seq!(
+            tag("["),
+            separated_list0(w(char(',')), w(expression(0))),
+            tag("]"),
         ),
+        |(open_bracket, mut entries, close_bracket)| {
+            make_node_tuple!(ArrayLiteral, open_bracket.spanning(&close_bracket), entries)
+        },
     )(i)
 }
 
 #[memoize]
-fn string_literal(i: Slice) -> ParseResult {
-    context(
-        "string",
-        map(
-            seq!(tag("\'"), many0(string_literal_segment), tag("\'")),
-            |(open_quote, mut segments, close_quote)| {
-                let this = ASTDetails::StringLiteral {
-                    tag: None, // TODO
-                    segments: segments.clone(),
-                }
-                .with_slice(open_quote.spanning(&close_quote));
+fn string_literal(i: Slice) -> ParseResult<AST> {
+    map(
+        seq!(tag("\'"), many0(string_literal_segment), tag("\'")),
+        |(open_quote, mut segments, close_quote)| {
+            let this = ASTDetails::StringLiteral {
+                tag: None, // TODO
+                segments: segments.clone(),
+            }
+            .with_slice(open_quote.spanning(&close_quote));
 
-                for segment in segments.iter_mut() {
-                    segment.set_parent(&this);
-                }
+            segments.set_parent(&this);
 
-                this
-            },
-        ),
+            this
+        },
     )(i)
 }
 
 #[memoize]
-fn exact_string_literal(i: Slice) -> ParseResult {
-    context(
-        "string",
-        map(
-            seq!(tag("\'"), string_contents, tag("\'")),
-            |(open_quote, value, close_quote)| {
-                ASTDetails::ExactStringLiteral {
-                    tag: None, // TODO
-                    value,
-                }
-                .with_slice(open_quote.spanning(&close_quote))
-            },
-        ),
+fn exact_string_literal(i: Slice) -> ParseResult<AST> {
+    map(
+        seq!(tag("\'"), string_contents, tag("\'")),
+        |(open_quote, value, close_quote)| {
+            ASTDetails::ExactStringLiteral {
+                tag: None, // TODO
+                value,
+            }
+            .with_slice(open_quote.spanning(&close_quote))
+        },
     )(i)
 }
 
-fn string_literal_segment(i: Slice) -> ParseResult {
+fn string_literal_segment(i: Slice) -> ParseResult<AST> {
     alt((
         map(seq!(tag("${"), expression(0), tag("}")), |(_, expr, _)| {
             expr
@@ -1389,7 +1237,7 @@ fn string_literal_segment(i: Slice) -> ParseResult {
     ))(i)
 }
 
-fn number_literal(i: Slice) -> ParseResult {
+fn number_literal(i: Slice) -> ParseResult<AST> {
     map(
         seq!(opt(tag("-")), numeric, opt(seq!(tag("."), numeric))),
         |(neg, int, tail)| {
@@ -1402,7 +1250,7 @@ fn number_literal(i: Slice) -> ParseResult {
     )(i)
 }
 
-fn boolean_literal(input: Slice) -> ParseResult {
+fn boolean_literal(input: Slice) -> ParseResult<AST> {
     let parse_true = map(tag("true"), |src: Slice| {
         ASTDetails::BooleanLiteral(true).with_slice(src)
     });
@@ -1414,53 +1262,47 @@ fn boolean_literal(input: Slice) -> ParseResult {
     alt((parse_true, parse_false))(input)
 }
 
-fn nil_literal(input: Slice) -> ParseResult {
+fn nil_literal(input: Slice) -> ParseResult<AST> {
     map(tag("nil"), |src: Slice| {
         ASTDetails::NilLiteral.with_slice(src)
     })(input)
 }
 
-fn local_identifier(i: Slice) -> ParseResult {
-    context(
-        "identifier",
-        map(identifier_like, |name| {
-            ASTDetails::LocalIdentifier(name.clone()).with_slice(name)
-        }),
-    )(i)
+fn local_identifier(i: Slice) -> ParseResult<AST> {
+    map(identifier_like, |name| {
+        ASTDetails::LocalIdentifier(name.clone()).with_slice(name)
+    })(i)
 }
 
-fn plain_identifier(i: Slice) -> ParseResult {
-    context(
-        "identifier",
-        map(identifier_like, |name| {
-            ASTDetails::PlainIdentifier(name.clone()).with_slice(name)
-        }),
-    )(i)
+fn plain_identifier(i: Slice) -> ParseResult<AST> {
+    map(identifier_like, |name| {
+        ASTDetails::PlainIdentifier(name.clone()).with_slice(name)
+    })(i)
 }
 
 // --- Util parsers ---
 
-fn w<O, G>(parser: G) -> impl FnMut(Slice) -> IResult<Slice, O, RawParseError>
+fn w<O, G>(parser: G) -> impl FnMut(Slice) -> ParseResult<O>
 where
     G: Parser<Slice, O, RawParseError>,
 {
     preceded(whitespace, parser)
 }
 
-fn string_contents(i: Slice) -> IResult<Slice, Slice, RawParseError> {
+fn string_contents(i: Slice) -> ParseResult<Slice> {
     escaped(take_while(|ch: char| ch != '\''), '\\', one_of("$\'n\\"))(i)
 }
 
-fn identifier_like(i: Slice) -> IResult<Slice, Slice, RawParseError> {
+fn identifier_like(i: Slice) -> ParseResult<Slice> {
     take_while1(|ch: char| ch.is_alphabetic() || ch == '_' || ch == '$')(i) // TODO: numeric
 }
 
-fn numeric(i: Slice) -> IResult<Slice, Slice, RawParseError> {
+fn numeric(i: Slice) -> ParseResult<Slice> {
     take_while1(|c: char| c.is_numeric())(i)
 }
 
-fn whitespace(i: Slice) -> IResult<Slice, Slice, RawParseError> {
-    take_while(|c| c == ' ' || c == '\n' || c == '\t' || c == '\r')(i)
+fn whitespace(i: Slice) -> ParseResult<Slice> {
+    take_while(|c| c == ' ' || c == '\n' || c == '\t' || c == '\r')(i) // TODO: comments
 }
 
 fn separated_list2<O2, F, G>(
@@ -1489,7 +1331,7 @@ where
 
 // --- Util types ---
 
-type ParseResult = IResult<Slice, AST, RawParseError>;
+type ParseResult<T> = IResult<Slice, T, RawParseError>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct RawParseError {
