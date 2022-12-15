@@ -1,5 +1,7 @@
 use std::{path::PathBuf, rc::Rc};
 
+use reqwest::Url;
+
 use crate::{model::module::ModuleID, passes::compile::Compilable, passes::parse::parse};
 
 #[test]
@@ -767,7 +769,7 @@ fn Comment_test_block() {
 
 fn test_compile(bgl: &str, js: &str) {
     let parsed = parse(
-        ModuleID::try_from(PathBuf::from("/foo/bar.bgl").as_path()).unwrap(),
+        ModuleID::try_from(Url::try_from("https://foo.bar").unwrap()).unwrap(),
         Rc::new(bgl.to_owned() + " "),
     )
     .unwrap();

@@ -1,5 +1,7 @@
 use std::{collections::HashMap, ops::Add, path::PathBuf, rc::Rc};
 
+use reqwest::Url;
+
 use crate::{
     gather_errors,
     model::{
@@ -3868,7 +3870,7 @@ fn Pure_procs_fail_3() {
 }
 
 fn test_check(bgl: &str, should_fail: bool) {
-    let module_id = ModuleID::try_from(PathBuf::from("/foo/bar.bgl").as_path()).unwrap();
+    let module_id = ModuleID::try_from(Url::try_from("https://foo.bar").unwrap()).unwrap();
     let bgl_rc = Rc::new(bgl.to_owned() + " ");
 
     let parsed = parse(module_id.clone(), bgl_rc.clone()).unwrap();
