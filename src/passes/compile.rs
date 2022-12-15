@@ -8,8 +8,12 @@ impl Module {
     }
 }
 
-impl AST {
-    pub fn compile<W: Write>(&self, f: &mut W) -> Result {
+pub trait Compilable {
+    fn compile<W: Write>(&self, f: &mut W) -> Result;
+}
+
+impl Compilable for AST {
+    fn compile<W: Write>(&self, f: &mut W) -> Result {
         match self.details() {
             ASTDetails::Module { declarations } => todo!(),
             ASTDetails::ImportAllDeclaration { name, path } => todo!(),
@@ -94,7 +98,6 @@ impl AST {
             ASTDetails::BooleanLiteral(_) => todo!(),
             ASTDetails::NumberLiteral(value) => f.write_str(value.as_str()),
             ASTDetails::StringLiteral { tag, segments } => todo!(),
-            ASTDetails::StringLiteralRawSegment(_) => todo!(),
             ASTDetails::ExactStringLiteral { tag, value } => {
                 f.write_char('`')?;
                 f.write_str(value.as_str())?;
@@ -118,14 +121,22 @@ impl AST {
                     if index > 0 {
                         f.write_char(',')?;
                     }
-
                     f.write_char(' ')?;
-                    entry.compile(f)?;
+
+                    match entry {
+                        ObjectLiteralEntry::KeyValue(KeyValue { key, value }) => {
+                            key.compile(f)?;
+                            f.write_str(": ")?;
+                            value.compile(f)?;
+                        }
+                        ObjectLiteralEntry::Spread(Spread(expr)) => {
+                            f.write_str("...")?;
+                            expr.compile(f)?;
+                        }
+                    }
                 }
                 f.write_str(" }")
             }
-            ASTDetails::Spread(_) => todo!(),
-            ASTDetails::KeyValue { key, value } => todo!(),
             ASTDetails::BinaryOperation { left, op, right } => {
                 f.write_char('(')?;
                 left.compile(f)?;
@@ -170,13 +181,7 @@ impl AST {
                 body,
             } => todo!(),
             ASTDetails::Block(_) => todo!(),
-            ASTDetails::ArgsSeries(_) => todo!(),
-            ASTDetails::Arg {
-                name,
-                type_annotation,
-                optional,
-            } => todo!(),
-            ASTDetails::JavascriptEscapeExpression(_) => todo!(),
+            ASTDetails::JavascriptEscape(_) => todo!(),
             ASTDetails::RangeExpression { start, end } => todo!(),
             ASTDetails::Invocation {
                 subject,
@@ -232,22 +237,22 @@ impl AST {
                 args,
                 args_spread,
                 is_pure,
+                is_async,
                 returns,
             } => todo!(),
             ASTDetails::GenericType { type_params, inner } => todo!(),
             ASTDetails::TypeParam { name, extends } => todo!(),
             ASTDetails::BoundGenericType { type_args, generic } => todo!(),
-            ASTDetails::ObjectType(_) => todo!(),
-            ASTDetails::InterfaceType(_) => todo!(),
-            ASTDetails::SpreadType(_) => todo!(),
-            ASTDetails::KeyValueType { key, value } => todo!(),
+            ASTDetails::ObjectType {
+                entries,
+                is_interface,
+            } => todo!(),
             ASTDetails::RecordType {
                 key_type,
                 value_type,
             } => todo!(),
             ASTDetails::ArrayType(_) => todo!(),
             ASTDetails::TupleType(_) => todo!(),
-            ASTDetails::ReadonlyType(_) => todo!(),
             ASTDetails::StringLiteralType(_) => todo!(),
             ASTDetails::NumberLiteralType(_) => todo!(),
             ASTDetails::BooleanLiteralType(_) => todo!(),
@@ -255,14 +260,10 @@ impl AST {
             ASTDetails::NumberType => f.write_str("number"),
             ASTDetails::BooleanType => f.write_str("boolean"),
             ASTDetails::NilType => f.write_str("null | undefined"),
-            ASTDetails::IteratorType(_) => todo!(),
-            ASTDetails::PlanType(_) => todo!(),
-            ASTDetails::ErrorType(_) => todo!(),
+            ASTDetails::SpecialType { kind, inner } => todo!(),
             ASTDetails::ParenthesizedType(_) => todo!(),
             ASTDetails::TypeofType(_) => todo!(),
-            ASTDetails::KeyofType(_) => todo!(),
-            ASTDetails::ValueofType(_) => todo!(),
-            ASTDetails::ElementofType(_) => todo!(),
+            ASTDetails::ModifierType { kind, inner } => todo!(),
             ASTDetails::UnknownType => f.write_str("unknown"),
             ASTDetails::RegularExpressionType => todo!(),
             ASTDetails::PropertyType {
@@ -307,6 +308,50 @@ impl AST {
     }
 }
 
+impl Compilable for Arg {
+    fn compile<W: Write>(&self, f: &mut W) -> Result {
+        let Arg {
+            name,
+            type_annotation,
+            optional,
+        } = self;
+
+        name.compile(f)?;
+        if *optional {
+            f.write_char('?')?;
+        }
+        compile_type_annotation(f, type_annotation.as_ref())?;
+
+        Ok(())
+    }
+}
+
+impl<T> Compilable for Option<T>
+where
+    T: Compilable,
+{
+    fn compile<W: Write>(&self, f: &mut W) -> Result {
+        if let Some(sel) = self {
+            sel.compile(f);
+        }
+
+        Ok(())
+    }
+}
+
+impl<T> Compilable for Vec<T>
+where
+    T: Compilable,
+{
+    fn compile<W: Write>(&self, f: &mut W) -> Result {
+        for el in self.iter() {
+            el.compile(f);
+        }
+
+        Ok(())
+    }
+}
+
 pub const INT: &str = "___";
 pub const INT_FN: &str = "___fn_";
 
@@ -315,7 +360,7 @@ pub const INT_FN: &str = "___fn_";
 fn compile_function<W: Write>(
     f: &mut W,
     name: Option<&str>,
-    args: &AST,
+    args: &Vec<Arg>,
     return_type: Option<&AST>,
     body: &AST,
 ) -> Result {
@@ -327,7 +372,15 @@ fn compile_function<W: Write>(
     }
 
     f.write_char('(')?;
-    args.compile(f)?;
+    for Arg {
+        name,
+        type_annotation,
+        optional,
+    } in args
+    {
+        name.compile(f)?;
+        compile_type_annotation(f, type_annotation.as_ref())?;
+    }
     f.write_char(')')?;
 
     compile_type_annotation(f, return_type)?;

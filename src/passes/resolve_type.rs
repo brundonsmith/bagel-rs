@@ -1,5 +1,5 @@
 use crate::model::{
-    ast::{ASTDetails, AST},
+    ast::{ASTDetails, ModifierTypeKind, SpecialTypeKind, AST},
     bgl_type::Type,
     module::{Module, ModulesStore},
 };
@@ -21,13 +21,15 @@ impl AST {
                 args,
                 args_spread,
                 is_pure,
+                is_async,
                 returns,
             } => todo!(),
             ASTDetails::GenericType { type_params, inner } => todo!(),
             ASTDetails::BoundGenericType { type_args, generic } => todo!(),
-            ASTDetails::ObjectType(entries) => todo!(),
-            ASTDetails::InterfaceType(entries) => todo!(),
-            ASTDetails::KeyofType(inner) => Type::KeyofType(Box::new(inner.resolve_type(ctx))),
+            ASTDetails::ObjectType {
+                entries,
+                is_interface,
+            } => todo!(),
             //  match inner.resolve_type(ctx) {
             //     Type::RecordType {
             //         key_type,
@@ -46,9 +48,24 @@ impl AST {
             //     ),
             //     _ => Type::PoisonedType,
             // },
-            ASTDetails::ValueofType(inner) => Type::ValueofType(Box::new(inner.resolve_type(ctx))),
-            ASTDetails::ElementofType(inner) => {
-                Type::ElementofType(Box::new(inner.resolve_type(ctx)))
+            ASTDetails::ModifierType { kind, inner } => {
+                let inner = Box::new(inner.resolve_type(ctx));
+
+                match kind {
+                    ModifierTypeKind::Readonly => Type::ReadonlyType(inner),
+                    ModifierTypeKind::Keyof => Type::KeyofType(inner),
+                    ModifierTypeKind::Valueof => Type::ValueofType(inner),
+                    ModifierTypeKind::Elementof => Type::ElementofType(inner),
+                }
+            }
+            ASTDetails::SpecialType { kind, inner } => {
+                let inner = Box::new(inner.resolve_type(ctx));
+
+                match kind {
+                    SpecialTypeKind::Iterator => Type::IteratorType(inner),
+                    SpecialTypeKind::Plan => Type::PlanType(inner),
+                    SpecialTypeKind::Error => Type::ErrorType(inner),
+                }
             }
             // match inner.resolve_type(ctx) {
             //     Type::ArrayType(element) => element.as_ref().clone(),
@@ -75,9 +92,6 @@ impl AST {
             ASTDetails::TupleType(members) => {
                 Type::TupleType(members.iter().map(|x| x.resolve_type(ctx)).collect())
             }
-            ASTDetails::ReadonlyType(inner) => {
-                Type::ReadonlyType(Box::new(inner.resolve_type(ctx)))
-            }
             ASTDetails::StringType => Type::ANY_STRING,
             ASTDetails::NumberType => Type::ANY_NUMBER,
             ASTDetails::BooleanType => Type::ANY_BOOLEAN,
@@ -90,11 +104,6 @@ impl AST {
                 Type::NumberType { min: n, max: n }
             }
             ASTDetails::BooleanLiteral(value) => todo!(),
-            ASTDetails::IteratorType(inner) => {
-                Type::IteratorType(Box::new(inner.resolve_type(ctx)))
-            }
-            ASTDetails::PlanType(inner) => Type::PlanType(Box::new(inner.resolve_type(ctx))),
-            ASTDetails::ErrorType(inner) => Type::ErrorType(Box::new(inner.resolve_type(ctx))),
             ASTDetails::ParenthesizedType(inner) => inner.resolve_type(ctx),
             ASTDetails::TypeofType(expression) => expression.infer_type(ctx.into()),
             ASTDetails::UnknownType => Type::UnknownType,

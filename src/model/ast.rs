@@ -7,6 +7,42 @@ use std::{
 };
 use strum_macros::{EnumString, IntoStaticStr};
 
+macro_rules! union_type {
+    ($name:ident = $( $s:ident )|*) => {
+        #[derive(Clone, Debug, PartialEq)]
+        pub enum $name {
+            $($s($s)),*
+        }
+
+        $(
+            impl From<$s> for $name {
+                fn from(s: $s) -> Self {
+                    Self::$s(s)
+                }
+            }
+            impl TryFrom<$name> for $s {
+                type Error = ();
+
+                fn try_from(s: $name) -> Result<Self, ()> {
+                    match s {
+                        $name::$s(s) => Ok(s),
+                        _ => Err(())
+                    }
+                }
+            }
+        )*
+    };
+}
+
+macro_rules! simple_enum {
+    ($name:ident = $( $s:ident )|*) => {
+        #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+        pub enum $name {
+            $($s),*
+        }
+    };
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct AST(Rc<ASTInner>);
 
@@ -29,13 +65,6 @@ impl AST {
             .map(AST)
     }
 
-    pub fn set_parent(&mut self, parent: &AST) {
-        self.0
-            .as_ref()
-            .parent
-            .replace(Some(Rc::downgrade(&parent.0)));
-    }
-
     pub fn expect<T: Debug + TryFrom<ASTDetails, Error = impl Debug>>(&self) -> T {
         T::try_from(self.details().clone()).expect("Broken AST")
     }
@@ -54,7 +83,10 @@ impl Parentable for AST {
     }
 }
 
-impl Parentable for Option<AST> {
+impl<T> Parentable for Option<T>
+where
+    T: Parentable,
+{
     fn set_parent(&mut self, parent: &AST) {
         if let Some(s) = self {
             s.set_parent(parent);
@@ -62,10 +94,32 @@ impl Parentable for Option<AST> {
     }
 }
 
-impl Parentable for Vec<AST> {
+impl<T> Parentable for Vec<T>
+where
+    T: Parentable,
+{
     fn set_parent(&mut self, parent: &AST) {
         for ast in self.iter_mut() {
             ast.set_parent(parent);
+        }
+    }
+}
+
+impl Parentable for Arg {
+    fn set_parent(&mut self, parent: &AST) {
+        self.name.set_parent(parent);
+        self.type_annotation.set_parent(parent);
+    }
+}
+
+impl Parentable for ObjectTypeEntry {
+    fn set_parent(&mut self, parent: &AST) {
+        match self {
+            ObjectTypeEntry::KeyValueType(KeyValueType { key, value }) => {
+                key.set_parent(parent);
+                value.set_parent(parent);
+            }
+            ObjectTypeEntry::SpreadType(SpreadType(expr)) => expr.set_parent(parent),
         }
     }
 }
@@ -137,6 +191,7 @@ pub enum ASTDetails {
         decorators: Vec<AST>,
     },
 
+    #[evt(derive(Debug, Clone, PartialEq))]
     Decorator {
         name: AST,
         // TODO: arguments
@@ -183,11 +238,8 @@ pub enum ASTDetails {
     #[evt(derive(Debug, Clone, PartialEq))]
     StringLiteral {
         tag: Option<AST>,
-        segments: Vec<AST>,
+        segments: Vec<StringLiteralSegment>,
     },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    StringLiteralRawSegment(Slice),
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ExactStringLiteral {
@@ -199,16 +251,7 @@ pub enum ASTDetails {
     ArrayLiteral(Vec<AST>),
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    ObjectLiteral(Vec<AST>),
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    Spread(AST),
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    KeyValue {
-        key: AST,
-        value: AST,
-    },
+    ObjectLiteral(Vec<ObjectLiteralEntry>),
 
     #[evt(derive(Debug, Clone, PartialEq))]
     BinaryOperation {
@@ -231,7 +274,7 @@ pub enum ASTDetails {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     InlineConstGroup {
-        declarations: Vec<AST>,
+        declarations: Vec<InlineDeclaration>,
         inner: AST,
     },
 
@@ -255,17 +298,7 @@ pub enum ASTDetails {
     Block(Vec<AST>),
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    ArgsSeries(Vec<AST>),
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    Arg {
-        name: AST,
-        type_annotation: Option<AST>,
-        optional: bool,
-    },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    JavascriptEscapeExpression(String),
+    JavascriptEscape(String),
 
     #[evt(derive(Debug, Clone, PartialEq))]
     RangeExpression {
@@ -280,7 +313,7 @@ pub enum ASTDetails {
         spread_args: Option<AST>,
         type_args: Vec<AST>,
         bubbles: bool,
-        awaited_or_detached: Option<AST>,
+        awaited_or_detached: Option<AwaitOrDetach>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
@@ -318,7 +351,7 @@ pub enum ASTDetails {
     #[evt(derive(Debug, Clone, PartialEq))]
     ElementTag {
         tag_name: AST,
-        attributes: Vec<AST>,
+        attributes: Vec<KeyValue>,
         children: Vec<AST>,
     },
 
@@ -361,7 +394,7 @@ pub enum ASTDetails {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ProcType {
-        args: AST,
+        args: Vec<Arg>,
         args_spread: Option<AST>,
         is_pure: bool,
         is_async: bool,
@@ -370,9 +403,10 @@ pub enum ASTDetails {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     FuncType {
-        args: AST,
+        args: Vec<Arg>,
         args_spread: Option<AST>,
         is_pure: bool,
+        is_async: bool,
         returns: Option<AST>,
     },
 
@@ -395,18 +429,9 @@ pub enum ASTDetails {
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    ObjectType(Vec<AST>),
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    InterfaceType(Vec<AST>),
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    SpreadType(AST),
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    KeyValueType {
-        key: AST,
-        value: AST,
+    ObjectType {
+        entries: Vec<ObjectTypeEntry>,
+        is_interface: bool,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
@@ -422,9 +447,6 @@ pub enum ASTDetails {
     TupleType(Vec<AST>),
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    ReadonlyType(AST),
-
-    #[evt(derive(Debug, Clone, PartialEq))]
     StringLiteralType(Slice),
 
     #[evt(derive(Debug, Clone, PartialEq))]
@@ -432,34 +454,32 @@ pub enum ASTDetails {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     BooleanLiteralType(bool),
+
     StringType,
+
     NumberType,
+
     BooleanType,
+
     NilType,
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    IteratorType(AST),
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    PlanType(AST),
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    ErrorType(AST),
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ParenthesizedType(AST),
 
     #[evt(derive(Debug, Clone, PartialEq))]
+    SpecialType {
+        kind: SpecialTypeKind,
+        inner: AST,
+    },
+
+    #[evt(derive(Debug, Clone, PartialEq))]
+    ModifierType {
+        kind: ModifierTypeKind,
+        inner: AST,
+    },
+
+    #[evt(derive(Debug, Clone, PartialEq))]
     TypeofType(AST),
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    KeyofType(AST),
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    ValueofType(AST),
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    ElementofType(AST),
 
     UnknownType,
 
@@ -534,6 +554,84 @@ pub enum ASTDetails {
     PlainIdentifier(Slice),
 }
 
+// --- Pieces of AST nodes ---
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
+pub enum SpecialTypeKind {
+    Iterator,
+    Plan,
+    Error,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
+pub enum ModifierTypeKind {
+    #[strum(serialize = "readonly")]
+    Readonly,
+    #[strum(serialize = "keyof")]
+    Keyof,
+    #[strum(serialize = "valueof")]
+    Valueof,
+    #[strum(serialize = "elementof")]
+    Elementof,
+}
+
+union_type!(StringLiteralSegment = Slice | AST);
+
+union_type!(ObjectLiteralEntry = KeyValue | Spread);
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KeyValue {
+    pub key: AST,
+    pub value: AST,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Spread(pub AST);
+
+union_type!(ObjectTypeEntry = KeyValueType | SpreadType);
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KeyValueType {
+    pub key: AST,
+    pub value: AST,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SpreadType(pub AST);
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Arg {
+    pub name: AST,
+    pub type_annotation: Option<AST>,
+    pub optional: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct InlineDeclaration {
+    pub destination: DeclarationDestination,
+    pub awaited: bool,
+    pub value: AST,
+}
+
+union_type!(DeclarationDestination = NameAndType | Destructure);
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct NameAndType {
+    pub name: AST,
+    pub type_annotation: Option<AST>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Destructure {
+    pub properties: Vec<AST>,
+    pub spread: Option<AST>,
+    pub destructure_kind: DestructureKind,
+}
+
+simple_enum!(DestructureKind = Array | Object);
+
+// --- Utils ---
+
 pub fn covering(vec: &Vec<AST>) -> Option<Slice> {
     vec.get(0)
         .map(|first| first.slice().clone().spanning(vec[vec.len() - 1].slice()))
@@ -551,22 +649,9 @@ impl ASTDetails {
 
 // --- Misc data ---
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum RegularExpressionFlag {
-    D,
-    G,
-    I,
-    M,
-    S,
-    U,
-    Y,
-}
+simple_enum!(RegularExpressionFlag = D | G | I | M | S | U | Y);
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum AwaitOrDetach {
-    Await,
-    Detach,
-}
+simple_enum!(AwaitOrDetach = Await | Detach);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
 pub enum BinaryOperatorOp {

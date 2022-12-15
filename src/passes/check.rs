@@ -27,8 +27,12 @@ impl Module {
     }
 }
 
-impl AST {
-    pub fn check<'a, F: FnMut(BagelError)>(&self, ctx: CheckContext<'a>, report_error: &mut F) {
+pub trait Checkable {
+    fn check<'a, F: FnMut(BagelError)>(&self, ctx: CheckContext<'a>, report_error: &mut F);
+}
+
+impl Checkable for AST {
+    fn check<'a, F: FnMut(BagelError)>(&self, ctx: CheckContext<'a>, report_error: &mut F) {
         match self.details() {
             ASTDetails::Module { declarations } => {
                 for decl in declarations {
@@ -93,11 +97,8 @@ impl AST {
                 value_type,
             } => todo!(),
             ASTDetails::StringLiteral { tag, segments } => todo!(),
-            ASTDetails::StringLiteralRawSegment(_) => todo!(),
             ASTDetails::ArrayLiteral(_) => todo!(),
             ASTDetails::ObjectLiteral(_) => todo!(),
-            ASTDetails::Spread(_) => todo!(),
-            ASTDetails::KeyValue { key, value } => todo!(),
             ASTDetails::BinaryOperation { left, op, right } => {
                 let ctx: InferTypeContext = ctx.into();
                 let left_type = left.infer_type(ctx);
@@ -178,8 +179,30 @@ impl AST {
                 declarations,
                 inner,
             } => {
-                for decl in declarations {
-                    decl.check(ctx, report_error);
+                for InlineDeclaration {
+                    destination,
+                    awaited,
+                    value,
+                } in declarations
+                {
+                    match destination {
+                        DeclarationDestination::NameAndType(NameAndType {
+                            name,
+                            type_annotation,
+                        }) => {
+                            name.check(ctx, report_error);
+                            type_annotation.check(ctx, report_error);
+                        }
+                        DeclarationDestination::Destructure(Destructure {
+                            properties,
+                            spread,
+                            destructure_kind,
+                        }) => {
+                            properties.check(ctx, report_error);
+                            spread.check(ctx, report_error);
+                        }
+                    }
+                    value.check(ctx, report_error);
                 }
 
                 inner.check(ctx, report_error);
@@ -197,13 +220,7 @@ impl AST {
                 body,
             } => todo!(),
             ASTDetails::Block(_) => todo!(),
-            ASTDetails::ArgsSeries(_) => todo!(),
-            ASTDetails::Arg {
-                name,
-                type_annotation,
-                optional,
-            } => todo!(),
-            ASTDetails::JavascriptEscapeExpression(_) => todo!(),
+            ASTDetails::JavascriptEscape(_) => todo!(),
             ASTDetails::RangeExpression { start, end } => todo!(),
             ASTDetails::Invocation {
                 subject,
@@ -285,30 +302,26 @@ impl AST {
                 args,
                 args_spread,
                 is_pure,
+                is_async,
                 returns,
             } => todo!(),
             ASTDetails::GenericType { type_params, inner } => todo!(),
             ASTDetails::TypeParam { name, extends } => todo!(),
             ASTDetails::BoundGenericType { type_args, generic } => todo!(),
-            ASTDetails::ObjectType(_) => todo!(),
-            ASTDetails::InterfaceType(_) => todo!(),
-            ASTDetails::SpreadType(_) => todo!(),
-            ASTDetails::KeyValueType { key, value } => todo!(),
+            ASTDetails::ObjectType {
+                entries,
+                is_interface,
+            } => todo!(),
             ASTDetails::RecordType {
                 key_type,
                 value_type,
             } => todo!(),
             ASTDetails::ArrayType(_) => todo!(),
             ASTDetails::TupleType(_) => todo!(),
-            ASTDetails::ReadonlyType(_) => todo!(),
-            ASTDetails::IteratorType(_) => todo!(),
-            ASTDetails::PlanType(_) => todo!(),
-            ASTDetails::ErrorType(_) => todo!(),
+            ASTDetails::SpecialType { kind, inner } => todo!(),
+            ASTDetails::ModifierType { kind, inner } => todo!(),
             ASTDetails::ParenthesizedType(_) => todo!(),
             ASTDetails::TypeofType(_) => todo!(),
-            ASTDetails::KeyofType(_) => todo!(),
-            ASTDetails::ValueofType(_) => todo!(),
-            ASTDetails::ElementofType(_) => todo!(),
             ASTDetails::PropertyType {
                 subject,
                 property,
@@ -365,6 +378,28 @@ impl AST {
             ASTDetails::UnionType(members) => {}
             ASTDetails::MaybeType(inner) => {}
             ASTDetails::UnknownType => {}
+        }
+    }
+}
+
+impl<T> Checkable for Option<T>
+where
+    T: Checkable,
+{
+    fn check<'a, F: FnMut(BagelError)>(&self, ctx: CheckContext<'a>, report_error: &mut F) {
+        if let Some(sel) = self {
+            sel.check(ctx, report_error);
+        }
+    }
+}
+
+impl<T> Checkable for Vec<T>
+where
+    T: Checkable,
+{
+    fn check<'a, F: FnMut(BagelError)>(&self, ctx: CheckContext<'a>, report_error: &mut F) {
+        for el in self.iter() {
+            el.check(ctx, report_error);
         }
     }
 }

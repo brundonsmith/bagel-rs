@@ -242,7 +242,7 @@ fn func_declaration(i: Slice) -> ParseResult<AST> {
             tag("=>"),
             expression(0),
         ),
-        |(export, pure, asyn, keyword, mut name, mut args, mut returns, _, mut body)| {
+        |(export, pure, asyn, keyword, mut name, mut args, mut returns, arrow, mut body)| {
             let src = export
                 .as_ref()
                 .unwrap_or(pure.as_ref().unwrap_or(asyn.as_ref().unwrap_or(&keyword)))
@@ -253,9 +253,15 @@ fn func_declaration(i: Slice) -> ParseResult<AST> {
                 args: args.clone(),
                 args_spread: None, // TODO
                 is_pure: pure.is_some(),
+                is_async: asyn.is_some(),
                 returns: returns.clone(),
             }
-            .with_slice(args.slice().clone().spanning(body.slice()));
+            .with_slice(
+                args.get(0)
+                    .map(|arg| arg.name.slice().clone())
+                    .unwrap_or(arrow)
+                    .spanning(body.slice()),
+            );
 
             args.set_parent(&type_annotation);
             returns.set_parent(&type_annotation);
@@ -287,16 +293,14 @@ fn func_declaration(i: Slice) -> ParseResult<AST> {
     )(i)
 }
 
-fn args(i: Slice) -> ParseResult<AST> {
+fn args(i: Slice) -> ParseResult<Vec<Arg>> {
     alt((
         map(plain_identifier, |name| {
-            ASTDetails::ArgsSeries(vec![ASTDetails::Arg {
+            vec![Arg {
                 name: name.clone(),
                 type_annotation: None,
                 optional: false,
-            }
-            .with_slice(name.slice().clone())])
-            .with_slice(name.slice().clone())
+            }]
         }),
         map(
             seq!(
@@ -308,26 +312,15 @@ fn args(i: Slice) -> ParseResult<AST> {
                 tag(")"),
             ),
             |(start, args, end)| {
-                ASTDetails::ArgsSeries(
-                    args.into_iter()
-                        .map(|(name, type_annotation)| {
-                            let src = name.slice().clone().spanning(
-                                &type_annotation
-                                    .as_ref()
-                                    .map(|t| t.slice())
-                                    .unwrap_or(name.slice()),
-                            );
-
-                            ASTDetails::Arg {
-                                name,
-                                type_annotation,
-                                optional: false, // TODO
-                            }
-                            .with_slice(src)
-                        })
-                        .collect(),
-                )
-                .with_slice(start.spanning(&end))
+                args.into_iter()
+                    .map(|(name, type_annotation)| {
+                        Arg {
+                            name,
+                            type_annotation,
+                            optional: false, // TODO
+                        }
+                    })
+                    .collect()
             },
         ),
     ))(i)
@@ -351,7 +344,6 @@ fn proc_declaration(i: Slice) -> ParseResult<AST> {
             let src = export
                 .unwrap_or(pure.unwrap_or(asyn.unwrap_or(keyword)))
                 .spanning(body.slice());
-            let args_start = args.slice();
 
             ASTDetails::ProcDeclaration {
                 name,
@@ -363,7 +355,12 @@ fn proc_declaration(i: Slice) -> ParseResult<AST> {
                         is_async,
                         throws: None, // TODO
                     }
-                    .with_slice(args_start.clone().spanning(body.slice())),
+                    .with_slice(
+                        args.get(0)
+                            .map(|arg| arg.name.slice().clone())
+                            .unwrap_or(body.slice().clone())
+                            .spanning(body.slice()),
+                    ),
 
                     is_async,
                     is_pure,
@@ -494,13 +491,15 @@ fn type_expression(l: usize) -> impl Fn(Slice) -> ParseResult<AST> {
                 |(keyword, mut inner)| {
                     let src = keyword.clone().spanning(inner.slice());
 
-                    match keyword.as_str() {
-                        "keyof" => make_node_tuple!(KeyofType, src, inner),
-                        "valueof" => make_node_tuple!(ValueofType, src, inner),
-                        "elementof" => make_node_tuple!(ElementofType, src, inner),
-                        "readonly" => make_node_tuple!(ReadonlyType, src, inner),
-                        _ => unreachable!(),
+                    let this = ASTDetails::ModifierType {
+                        kind: keyword.as_str().try_into().unwrap(),
+                        inner: inner.clone(),
                     }
+                    .with_slice(src);
+
+                    inner.set_parent(&this);
+
+                    this
                 }
             )
         );
@@ -610,12 +609,17 @@ fn func_type(i: Slice) -> ParseResult<AST> {
         seq!(args, tag("=>"), type_expression(0)),
         |(args, _, returns)| {
             // TODO: func type with 0 arguments will have weird src
-            let src = args.slice().clone().spanning(returns.slice());
+            let src = args
+                .get(0)
+                .map(|arg| arg.name.slice().clone())
+                .unwrap_or(returns.slice().clone())
+                .spanning(returns.slice());
 
             ASTDetails::FuncType {
                 args,
                 args_spread: None, // TODO
                 is_pure: false,    // TODO
+                is_async: false,   // TODO
                 returns: Some(returns),
             }
             .with_slice(src)
@@ -626,10 +630,14 @@ fn func_type(i: Slice) -> ParseResult<AST> {
 #[memoize]
 fn proc_type(i: Slice) -> ParseResult<AST> {
     map(
-        seq!(args, tag("("), tag(")"), tag("{"), tag("}")),
-        |(args, _, _, _, close)| {
+        seq!(args, tag("{"), tag("}")),
+        |(args, open_brace, close)| {
             // TODO: proc type with 0 arguments will have weird src
-            let src = args.slice().clone().spanning(&close);
+            let src = args
+                .get(0)
+                .map(|arg| arg.name.slice().clone())
+                .unwrap_or(open_brace.clone())
+                .spanning(&close);
 
             ASTDetails::ProcType {
                 args,
@@ -671,26 +679,23 @@ fn object_or_interface_type(i: Slice) -> ParseResult<AST> {
             tag("}"),
         ),
         |(interface, open, mut entries, close)| {
-            if let Some(interface) = interface {
-                make_node_tuple!(InterfaceType, interface.spanning(&close), entries)
-            } else {
-                make_node_tuple!(ObjectType, open.spanning(&close), entries)
+            let this = ASTDetails::ObjectType {
+                entries: entries.clone(),
+                is_interface: interface.is_some(),
             }
+            .with_slice(interface.unwrap_or(open).spanning(&close));
+
+            entries.set_parent(&this);
+
+            this
         },
     )(i)
 }
 
-fn key_value_type(i: Slice) -> ParseResult<AST> {
+fn key_value_type(i: Slice) -> ParseResult<ObjectTypeEntry> {
     map(
         separated_pair(plain_identifier, tag(":"), type_expression(0)),
-        |(mut key, mut value)| {
-            make_node!(
-                KeyValueType,
-                key.slice().clone().spanning(value.slice()),
-                key,
-                value
-            )
-        },
+        |(mut key, mut value)| KeyValueType { key, value }.into(),
     )(i)
 }
 
@@ -1091,20 +1096,28 @@ fn func(i: Slice) -> ParseResult<AST> {
             tag("=>"),
             expression(0),
         ),
-        |(pure, asyn, args, returns, _, mut body)| {
+        |(pure, asyn, mut args, mut returns, _, mut body)| {
             let is_async = asyn.is_some();
             let is_pure = pure.is_some();
             let src = pure
-                .unwrap_or(asyn.unwrap_or_else(|| args.slice().clone()))
+                .unwrap_or(asyn.unwrap_or_else(|| {
+                    args.get(0)
+                        .map(|arg| arg.name.slice().clone())
+                        .unwrap_or(body.slice().clone())
+                }))
                 .spanning(body.slice());
 
             let mut type_annotation = ASTDetails::FuncType {
-                args,
+                args: args.clone(),
                 args_spread: None, // TODO
                 is_pure,
-                returns,
+                is_async,
+                returns: returns.clone(),
             }
             .with_slice(src.clone());
+
+            args.set_parent(&type_annotation);
+            returns.set_parent(&type_annotation);
 
             let this = ASTDetails::Func {
                 type_annotation: type_annotation.clone(),
@@ -1157,26 +1170,30 @@ fn object_literal(i: Slice) -> ParseResult<AST> {
             tag("}"),
         ),
         |(open_bracket, mut entries, close_bracket)| {
-            make_node_tuple!(
-                ObjectLiteral,
-                open_bracket.spanning(&close_bracket),
-                entries
-            )
+            let this = ASTDetails::ObjectLiteral(entries.clone())
+                .with_slice(open_bracket.spanning(&close_bracket));
+
+            for entry in entries.iter_mut() {
+                match entry {
+                    ObjectLiteralEntry::KeyValue(KeyValue { key, value }) => {
+                        key.set_parent(&this);
+                        value.set_parent(&this);
+                    }
+                    ObjectLiteralEntry::Spread(Spread(expr)) => {
+                        expr.set_parent(&this);
+                    }
+                }
+            }
+
+            this
         },
     )(i)
 }
 
-fn key_value_expression(i: Slice) -> ParseResult<AST> {
+fn key_value_expression(i: Slice) -> ParseResult<ObjectLiteralEntry> {
     map(
         seq!(plain_identifier, tag(":"), expression(0)),
-        |(mut key, _, mut value)| {
-            make_node!(
-                KeyValue,
-                key.slice().clone().spanning(value.slice()),
-                key,
-                value
-            )
-        },
+        |(mut key, _, mut value)| KeyValue { key, value }.into(),
     )(i)
 }
 
@@ -1205,7 +1222,11 @@ fn string_literal(i: Slice) -> ParseResult<AST> {
             }
             .with_slice(open_quote.spanning(&close_quote));
 
-            segments.set_parent(&this);
+            for segment in segments.iter_mut() {
+                if let StringLiteralSegment::AST(ast) = segment {
+                    ast.set_parent(&this);
+                }
+            }
 
             this
         },
@@ -1226,14 +1247,12 @@ fn exact_string_literal(i: Slice) -> ParseResult<AST> {
     )(i)
 }
 
-fn string_literal_segment(i: Slice) -> ParseResult<AST> {
+fn string_literal_segment(i: Slice) -> ParseResult<StringLiteralSegment> {
     alt((
         map(seq!(tag("${"), expression(0), tag("}")), |(_, expr, _)| {
-            expr
+            expr.into()
         }),
-        map(string_contents, |s| {
-            ASTDetails::StringLiteralRawSegment(s.clone()).with_slice(s)
-        }),
+        map(string_contents, |s| s.into()),
     ))(i)
 }
 

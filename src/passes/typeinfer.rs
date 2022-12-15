@@ -113,7 +113,7 @@ impl AST {
                 is_pure,
                 body,
             } => todo!(),
-            ASTDetails::JavascriptEscapeExpression(_) => todo!(),
+            ASTDetails::JavascriptEscape(_) => Type::AnyType,
             ASTDetails::RangeExpression { start, end } => todo!(),
             ASTDetails::Invocation {
                 subject,

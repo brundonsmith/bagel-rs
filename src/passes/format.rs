@@ -13,8 +13,12 @@ impl Display for AST {
     }
 }
 
-impl AST {
-    pub fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
+pub trait Formattable {
+    fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result;
+}
+
+impl Formattable for AST {
+    fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
         match self.details() {
             ASTDetails::Module { declarations } => {
                 for decl in declarations {
@@ -82,7 +86,6 @@ impl AST {
             }),
             ASTDetails::NumberLiteral(value) => f.write_str(value.as_str()),
             ASTDetails::StringLiteral { tag, segments } => todo!(),
-            ASTDetails::StringLiteralRawSegment(_) => todo!(),
             ASTDetails::ExactStringLiteral { tag, value } => {
                 f.write_str("\"")?;
                 f.write_str(value.as_str())?;
@@ -108,12 +111,21 @@ impl AST {
                     }
 
                     f.write_char(' ')?;
-                    entry.format(f, opts)?;
+
+                    match entry {
+                        ObjectLiteralEntry::KeyValue(KeyValue { key, value }) => {
+                            key.format(f, opts)?;
+                            f.write_str(": ")?;
+                            value.format(f, opts)?;
+                        }
+                        ObjectLiteralEntry::Spread(Spread(expr)) => {
+                            f.write_str("...")?;
+                            expr.format(f, opts)?;
+                        }
+                    }
                 }
                 f.write_str(" }")
             }
-            ASTDetails::Spread(_) => todo!(),
-            ASTDetails::KeyValue { key, value } => todo!(),
             ASTDetails::BinaryOperation { left, op, right } => {
                 left.format(f, opts)?;
                 f.write_char(' ')?;
@@ -144,10 +156,7 @@ impl AST {
                 f.write_char('(')?;
                 type_annotation.args.format(f, opts)?;
                 f.write_char(')')?;
-                if let Some(return_type) = type_annotation.returns {
-                    f.write_str(": ")?;
-                    return_type.format(f, opts)?;
-                }
+                format_type_annotation(f, opts, type_annotation.returns.as_ref())?;
                 f.write_str(" => ")?;
 
                 body.format(f, opts)
@@ -159,13 +168,7 @@ impl AST {
                 body,
             } => todo!(),
             ASTDetails::Block(_) => todo!(),
-            ASTDetails::ArgsSeries(_) => todo!(),
-            ASTDetails::Arg {
-                name,
-                type_annotation,
-                optional,
-            } => todo!(),
-            ASTDetails::JavascriptEscapeExpression(_) => todo!(),
+            ASTDetails::JavascriptEscape(_) => todo!(),
             ASTDetails::RangeExpression { start, end } => todo!(),
             ASTDetails::Invocation {
                 subject,
@@ -231,22 +234,24 @@ impl AST {
                 args,
                 args_spread,
                 is_pure,
+                is_async,
                 returns,
             } => todo!(),
             ASTDetails::GenericType { type_params, inner } => todo!(),
             ASTDetails::TypeParam { name, extends } => todo!(),
             ASTDetails::BoundGenericType { type_args, generic } => todo!(),
-            ASTDetails::ObjectType(_) => todo!(),
-            ASTDetails::InterfaceType(_) => todo!(),
-            ASTDetails::SpreadType(_) => todo!(),
-            ASTDetails::KeyValueType { key, value } => todo!(),
+            ASTDetails::ObjectType {
+                entries,
+                is_interface,
+            } => todo!(),
             ASTDetails::RecordType {
                 key_type,
                 value_type,
             } => todo!(),
             ASTDetails::ArrayType(_) => todo!(),
             ASTDetails::TupleType(_) => todo!(),
-            ASTDetails::ReadonlyType(_) => todo!(),
+            ASTDetails::SpecialType { kind, inner } => todo!(),
+            ASTDetails::ModifierType { kind, inner } => todo!(),
             ASTDetails::StringLiteralType(value) => {
                 f.write_char('\'')?;
                 f.write_str(value.as_str())?;
@@ -261,14 +266,8 @@ impl AST {
             ASTDetails::NumberType => f.write_str("number"),
             ASTDetails::BooleanType => f.write_str("boolean"),
             ASTDetails::NilType => f.write_str("nil"),
-            ASTDetails::IteratorType(_) => todo!(),
-            ASTDetails::PlanType(_) => todo!(),
-            ASTDetails::ErrorType(_) => todo!(),
             ASTDetails::ParenthesizedType(_) => todo!(),
             ASTDetails::TypeofType(_) => todo!(),
-            ASTDetails::KeyofType(_) => todo!(),
-            ASTDetails::ValueofType(_) => todo!(),
-            ASTDetails::ElementofType(_) => todo!(),
             ASTDetails::UnknownType => todo!(),
             ASTDetails::RegularExpressionType => todo!(),
             ASTDetails::PropertyType {
@@ -311,6 +310,63 @@ impl AST {
             ASTDetails::PlainIdentifier(_) => todo!(),
         }
     }
+}
+
+impl Formattable for Arg {
+    fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
+        let Arg {
+            name,
+            type_annotation,
+            optional,
+        } = self;
+
+        name.format(f, opts)?;
+        if *optional {
+            f.write_char('?')?;
+        }
+        format_type_annotation(f, opts, type_annotation.as_ref())?;
+
+        Ok(())
+    }
+}
+
+impl<T> Formattable for Option<T>
+where
+    T: Formattable,
+{
+    fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
+        if let Some(sel) = self {
+            sel.format(f, opts);
+        }
+
+        Ok(())
+    }
+}
+
+impl<T> Formattable for Vec<T>
+where
+    T: Formattable,
+{
+    fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
+        for el in self.iter() {
+            el.format(f, opts);
+        }
+
+        Ok(())
+    }
+}
+
+fn format_type_annotation<W: Write>(
+    f: &mut W,
+    opts: FormatOptions,
+    type_annotation: Option<&AST>,
+) -> Result {
+    if let Some(type_annotation) = type_annotation {
+        f.write_str(": ")?;
+        type_annotation.format(f, opts)?;
+    }
+
+    Ok(())
 }
 
 #[derive(Debug, Clone, Copy)]
