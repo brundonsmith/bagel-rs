@@ -15,7 +15,14 @@ pub trait Compilable {
 impl Compilable for AST {
     fn compile<W: Write>(&self, f: &mut W) -> Result {
         match self.details() {
-            ASTDetails::Module { declarations } => todo!(),
+            ASTDetails::Module { declarations } => {
+                for decl in declarations {
+                    decl.compile(f)?;
+                    f.write_str("\n\n")?;
+                }
+
+                Ok(())
+            }
             ASTDetails::ImportAllDeclaration { name, path } => todo!(),
             ASTDetails::ImportDeclaration { imports, path } => todo!(),
             ASTDetails::ImportItem { name, alias } => todo!(),
@@ -44,6 +51,7 @@ impl Compilable for AST {
                     f,
                     Some(name.slice().as_str()),
                     &type_annotation.args,
+                    false,
                     type_annotation.returns.as_ref(),
                     &func.body,
                 )?;
@@ -56,7 +64,7 @@ impl Compilable for AST {
                 platforms,
                 decorators,
             } => {
-                let proc = proc.expect::<Func>();
+                let proc = proc.expect::<Proc>();
                 let type_annotation = proc.type_annotation.expect::<ProcType>();
 
                 if *exported {
@@ -65,7 +73,14 @@ impl Compilable for AST {
                 f.write_str("const ")?;
                 f.write_str(name.slice().as_str())?;
                 f.write_str(" = ")?;
-                compile_function(f, None, &type_annotation.args, None, &proc.body)?;
+                compile_function(
+                    f,
+                    Some(name.slice().as_str()),
+                    &type_annotation.args,
+                    true,
+                    None,
+                    &proc.body,
+                )?;
                 f.write_str(";")
             }
             ASTDetails::Decorator { name } => todo!(),
@@ -170,6 +185,7 @@ impl Compilable for AST {
                     f,
                     None,
                     &type_annotation.args,
+                    false,
                     type_annotation.returns.as_ref(),
                     body,
                 )
@@ -180,7 +196,13 @@ impl Compilable for AST {
                 is_pure,
                 body,
             } => todo!(),
-            ASTDetails::Block(_) => todo!(),
+            ASTDetails::Block(statements) => {
+                f.write_str("{\n")?;
+                for stmt in statements {
+                    stmt.compile(f)?;
+                }
+                f.write_str("\n}")
+            }
             ASTDetails::JavascriptEscape(_) => todo!(),
             ASTDetails::RangeExpression { start, end } => todo!(),
             ASTDetails::Invocation {
@@ -190,12 +212,46 @@ impl Compilable for AST {
                 type_args,
                 bubbles,
                 awaited_or_detached,
-            } => todo!(),
+            } => {
+                subject.compile(f)?;
+
+                f.write_char('(')?;
+                for (index, arg) in args.iter().enumerate() {
+                    if index > 0 {
+                        f.write_str(", ")?;
+                    }
+
+                    arg.compile(f)?;
+                }
+                f.write_char(')')?;
+
+                Ok(())
+            }
             ASTDetails::PropertyAccessor {
                 subject,
                 property,
                 optional,
-            } => todo!(),
+            } => {
+                f.write_str(INT)?;
+                f.write_str("observe(")?;
+                subject.compile(f)?;
+                f.write_str(", ")?;
+
+                match property.details() {
+                    ASTDetails::PlainIdentifier(_) => {
+                        f.write_char('\'')?;
+                        property.compile(f)?;
+                        f.write_char('\'')?;
+                    }
+                    _ => {
+                        property.compile(f)?;
+                    }
+                }
+
+                f.write_str(")")?;
+
+                Ok(())
+            }
             ASTDetails::IfElseExpression {
                 cases,
                 default_case,
@@ -361,6 +417,7 @@ fn compile_function<W: Write>(
     f: &mut W,
     name: Option<&str>,
     args: &Vec<Arg>,
+    return_type_void: bool, // HACK
     return_type: Option<&AST>,
     body: &AST,
 ) -> Result {
@@ -383,12 +440,21 @@ fn compile_function<W: Write>(
     }
     f.write_char(')')?;
 
-    compile_type_annotation(f, return_type)?;
+    if return_type_void {
+        f.write_str(": void")?;
+    } else {
+        compile_type_annotation(f, return_type)?;
+    }
 
     f.write_char(' ')?;
-    f.write_char('{')?;
-    body.compile(f)?;
-    f.write_char('}')?;
+
+    if let ASTDetails::Block(_) = body.details() {
+        body.compile(f)?;
+    } else {
+        f.write_str("{ return ")?;
+        body.compile(f)?;
+        f.write_str("; }")?;
+    }
 
     Ok(())
 }

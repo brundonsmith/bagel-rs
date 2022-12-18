@@ -1,5 +1,6 @@
-use std::{path::PathBuf, rc::Rc};
+use std::rc::Rc;
 
+use regex::Regex;
 use reqwest::Url;
 
 use crate::{model::module::ModuleID, passes::compile::Compilable, passes::parse::parse};
@@ -30,7 +31,7 @@ fn Func_declaration_with_memo() {
 
 #[test]
 fn Binary_operator() {
-    test_compile("const x = a < b", "const x = (a < b);");
+    test_compile("const x = a < b", "const x = (a <  b);");
 }
 
 #[test]
@@ -129,7 +130,7 @@ fn Chained_if_expression() {
 fn Empty_proc() {
     test_compile(
         "proc foo() { }",
-        "const foo = function ___fn_foo(): void{ };",
+        "const foo = function ___fn_foo(): void { };",
     );
 }
 
@@ -145,7 +146,7 @@ fn Chained_if_statements() {
                   log('other');
                 }
               }",
-        "const foo = function ___fn_foo(): void{ 
+        "const foo = function ___fn_foo(): void { 
           if (true) { 
             log(`true`);
           } else if (false) { 
@@ -196,7 +197,7 @@ fn Indexing_an_array() {
 fn Simple_proc_declaration() {
     test_compile(
         "proc doStuff(a) { }",
-        "const doStuff = function ___fn_doStuff(a): void{ };",
+        "const doStuff = function ___fn_doStuff(a): void { };",
     );
 }
 
@@ -213,7 +214,7 @@ fn Basic_proc_declaration() {
           log(count);
         }",
         "
-        const doStuff = function ___fn_doStuff(items: ___Iter<number>): void{ 
+        const doStuff = function ___fn_doStuff(items: ___Iter<number>): void { 
           const count = { value: 0 };
   
           for (const item of items.inner) {
@@ -246,7 +247,7 @@ fn Proc_declaration_with_statements() {
   
           log(count);
         }", "
-        const doStuff = function ___fn_doStuff(items: ___Iter<number>): void{ 
+        const doStuff = function ___fn_doStuff(items: ___Iter<number>): void { 
           const count = { value: 0 };
   
           for (const item of items.inner) { 
@@ -295,7 +296,7 @@ fn Typed_func_declaration() {
 fn Typed_proc_declaration() {
     test_compile(
         "proc bar(a: string[], b: { foo: number }) { }",
-        "const bar = function ___fn_bar(a: string[], b: {foo: number}): void{ };",
+        "const bar = function ___fn_bar(a: string[], b: {foo: number}): void { };",
     );
 }
 
@@ -371,7 +372,7 @@ fn Comment_test_block() {
 //         setLocalStorage(key, value);
 //       }`,
 //       `
-//       export const setItem = function ___fn_setItem(key: string, value: string): void{
+//       export const setItem = function ___fn_setItem(key: string, value: string): void {
 //         ___invalidate(_localStorage, key, value);
 //         setLocalStorage(key, value);
 //       };`)
@@ -390,7 +391,7 @@ fn Comment_test_block() {
 //         s += ' other';
 //       }`,
 //       `
-//       const foo = function ___fn_foo(): void{
+//       const foo = function ___fn_foo(): void {
 //         const n = { value: 0 };
 //         ___invalidate(n, 'value', n.value * 2);
 
@@ -413,10 +414,10 @@ fn Comment_test_block() {
 //         foo.push(4);
 //       }`,
 //       `
-//       const push = function ___fn_push<T>(arr: T[], el: T): void{
+//       const push = function ___fn_push<T>(arr: T[], el: T): void {
 //       };
 
-//       export const bar = function ___fn_bar(): void{
+//       export const bar = function ___fn_bar(): void {
 //         const foo = { value: [1, 2, 3] };
 //         push(___observe(foo, 'value'), 4);
 //       };`)
@@ -448,7 +449,7 @@ fn Comment_test_block() {
 //       #}
 //       `,
 //       `
-//       const foo = function ___fn_foo(a: {foo: number}, b: number): void{
+//       const foo = function ___fn_foo(a: {foo: number}, b: number): void {
 //         a.foo = b;
 //       };
 //       `)
@@ -465,7 +466,7 @@ fn Comment_test_block() {
 //         }
 //       }`,
 //       `
-//       const foo = function ___fn_foo(): void{
+//       const foo = function ___fn_foo(): void {
 //         while (true) {
 //             log("stuff");
 //         };
@@ -712,7 +713,7 @@ fn Comment_test_block() {
 
 //       const myProcDecorator = function ___fn_myProcDecorator(p: () => void): () => void { return p };
 
-//       const bar = myProcDecorator(function ___fn_bar(): void{
+//       const bar = myProcDecorator(function ___fn_bar(): void {
 //       });
 //       `)
 //     }
@@ -774,14 +775,15 @@ fn test_compile(bgl: &str, js: &str) {
     )
     .unwrap();
 
-    let mut buf = String::new();
-    parsed.compile(&mut buf).unwrap();
+    let mut compiled = String::new();
+    parsed.compile(&mut compiled).unwrap();
 
-    assert_eq!(normalize(&buf), normalize(js));
+    assert_eq!(normalize(&compiled), normalize(js));
 }
 
 fn normalize(js: &str) -> String {
-    js.replace(|ch: char| ch.is_whitespace(), " ")
+    let re = Regex::new(r"[\s]+").unwrap();
+    re.replace_all(js.trim(), " ").to_string()
 }
 
 //   function testCompile(code: string, exp: string) {

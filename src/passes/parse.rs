@@ -739,7 +739,13 @@ fn statement(i: Slice) -> ParseResult<AST> {
         // try_catch,
         throw_statement,
         autorun,
-        // invocation_statement,
+        map(
+            seq!(
+                invocation_accessor_chain(11), // HACK: Has to be kept in sync with expression() function!
+                tag(";")
+            ),
+            |(invocation, _)| invocation,
+        ),
     ))(i)
 }
 
@@ -856,10 +862,6 @@ fn autorun(i: Slice) -> ParseResult<AST> {
     )(i)
 }
 
-fn invocation_statement(i: Slice) -> ParseResult<AST> {
-    todo!()
-}
-
 // --- Expression ---
 
 fn expression(l: usize) -> impl Fn(Slice) -> ParseResult<AST> {
@@ -890,7 +892,7 @@ fn expression(l: usize) -> impl Fn(Slice) -> ParseResult<AST> {
 
         // parse_level!(l, tl, i, error_expression);
 
-        // invocationAccessorChain
+        parse_level!(l, tl, i, invocation_accessor_chain(tl));
 
         parse_level!(l, tl, i, range_expression);
 
@@ -927,6 +929,95 @@ fn expression(l: usize) -> impl Fn(Slice) -> ParseResult<AST> {
             details: RawParseErrorDetails::Kind(ErrorKind::Fail),
         }))
     }
+}
+
+fn invocation_accessor_chain(level: usize) -> impl Fn(Slice) -> ParseResult<AST> {
+    move |i: Slice| -> ParseResult<AST> {
+        map(
+            seq!(
+                expression(level + 1),
+                many1(alt((
+                    invocation_args,
+                    indexer_expression,
+                    dot_property_access,
+                )))
+            ),
+            |(mut base, clauses)| {
+                let mut subject = base;
+
+                for clause in clauses {
+                    let mut old_subject = subject;
+
+                    match clause {
+                        InvocationOrPropertyAccess::InvokingWith(mut args, args_slice) => {
+                            subject = ASTDetails::Invocation {
+                                subject: old_subject.clone(),
+                                args: args.clone(),
+                                spread_args: None,         // TODO
+                                type_args: Vec::new(),     // TODO
+                                bubbles: false,            // TODO
+                                awaited_or_detached: None, // TODO
+                            }
+                            .with_slice(old_subject.slice().clone().spanning(&args_slice));
+
+                            old_subject.set_parent(&subject);
+                            args.set_parent(&subject);
+                        }
+                        InvocationOrPropertyAccess::Accessing(mut property, indexer_slice) => {
+                            subject = ASTDetails::PropertyAccessor {
+                                subject: old_subject.clone(),
+                                property: property.clone(),
+                                optional: false, // TODO
+                            }
+                            .with_slice(old_subject.slice().clone().spanning(&indexer_slice));
+
+                            old_subject.set_parent(&subject);
+                            property.set_parent(&subject);
+                        }
+                    }
+                }
+
+                subject
+            },
+        )(i)
+    }
+}
+
+#[memoize]
+fn invocation_args(i: Slice) -> ParseResult<InvocationOrPropertyAccess> {
+    map(
+        seq!(
+            tag("("),
+            separated_list0(w(tag(",")), w(expression(0))),
+            tag(")")
+        ),
+        |(open, args, close)| InvocationOrPropertyAccess::InvokingWith(args, open.spanning(&close)),
+    )(i)
+}
+
+#[memoize]
+fn indexer_expression(i: Slice) -> ParseResult<InvocationOrPropertyAccess> {
+    map(
+        seq!(tag("["), expression(0), tag("]")),
+        |(open, property, close)| {
+            InvocationOrPropertyAccess::Accessing(property, open.spanning(&close))
+        },
+    )(i)
+}
+
+#[memoize]
+fn dot_property_access(i: Slice) -> ParseResult<InvocationOrPropertyAccess> {
+    map(seq!(tag("."), plain_identifier), |(dot, property)| {
+        let src = dot.spanning(property.slice());
+
+        InvocationOrPropertyAccess::Accessing(property, src)
+    })(i)
+}
+
+#[derive(Debug, Clone)]
+enum InvocationOrPropertyAccess {
+    InvokingWith(Vec<AST>, Slice),
+    Accessing(AST, Slice),
 }
 
 macro_rules! parse_binary_operation {

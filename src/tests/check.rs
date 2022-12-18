@@ -49,6 +49,16 @@ fn Binary_operators_5() {
 }
 
 #[test]
+fn Basic_function_call() {
+    test_check(
+        "
+      func double(n: number) => n * 2
+      const x: 4 = double(2)",
+        false,
+    );
+}
+
+#[test]
 fn Function_as_argument_inference_1() {
     test_check(
         "
