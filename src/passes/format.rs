@@ -236,7 +236,32 @@ impl Formattable for AST {
                 is_pure,
                 is_async,
                 returns,
-            } => todo!(),
+            } => {
+                f.write_char('(')?;
+                for Arg {
+                    name,
+                    type_annotation,
+                    optional,
+                } in args
+                {
+                    name.format(f, opts)?;
+                    if *optional {
+                        f.write_char('?')?;
+                    }
+                    format_type_annotation(f, opts, type_annotation.as_ref())?;
+                }
+                f.write_char(')')?;
+
+                f.write_str(" => ")?;
+
+                if let Some(returns) = returns {
+                    returns.format(f, opts)?;
+                } else {
+                    f.write_str("<none>")?;
+                }
+
+                Ok(())
+            }
             ASTDetails::GenericType { type_params, inner } => todo!(),
             ASTDetails::TypeParam { name, extends } => todo!(),
             ASTDetails::BoundGenericType { type_args, generic } => todo!(),
@@ -307,7 +332,7 @@ impl Formattable for AST {
                 effect_block,
                 until,
             } => todo!(),
-            ASTDetails::PlainIdentifier(_) => todo!(),
+            ASTDetails::PlainIdentifier(name) => f.write_str(name.as_str()),
         }
     }
 }

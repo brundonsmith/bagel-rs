@@ -1,4 +1,4 @@
-use crate::model::ast::{ASTDetails, AST};
+use crate::model::ast::*;
 
 impl AST {
     pub fn resolve_symbol(&self, symbol: &str) -> Option<AST> {
@@ -10,35 +10,53 @@ impl AST {
                         ASTDetails::ImportDeclaration { imports, path } => todo!(),
                         ASTDetails::TypeDeclaration {
                             name,
-                            declared_type,
-                            exported,
-                        } => todo!(),
+                            declared_type: _,
+                            exported: _,
+                        } => {
+                            let name = name.expect::<PlainIdentifier>();
+
+                            if name.0.as_str() == symbol {
+                                return Some(decl.clone());
+                            }
+                        }
                         ASTDetails::FuncDeclaration {
                             name,
-                            func,
-                            exported,
-                            platforms,
-                            decorators,
-                        } => todo!(),
+                            func: _,
+                            exported: _,
+                            platforms: _,
+                            decorators: _,
+                        } => {
+                            let name = name.expect::<PlainIdentifier>();
+
+                            if name.0.as_str() == symbol {
+                                return Some(decl.clone());
+                            }
+                        }
                         ASTDetails::ProcDeclaration {
                             name,
-                            proc,
-                            exported,
-                            platforms,
-                            decorators,
-                        } => todo!(),
+                            proc: _,
+                            exported: _,
+                            platforms: _,
+                            decorators: _,
+                        } => {
+                            let name = name.expect::<PlainIdentifier>();
+
+                            if name.0.as_str() == symbol {
+                                return Some(decl.clone());
+                            }
+                        }
                         ASTDetails::ValueDeclaration {
                             name,
-                            type_annotation,
-                            value,
-                            is_const,
-                            exported,
-                            platforms,
+                            type_annotation: _,
+                            value: _,
+                            is_const: _,
+                            exported: _,
+                            platforms: _,
                         } => {
-                            if let ASTDetails::PlainIdentifier(name) = name.details() {
-                                if name.as_str() == symbol {
-                                    return Some(decl.clone());
-                                }
+                            let name = name.expect::<PlainIdentifier>();
+
+                            if name.0.as_str() == symbol {
+                                return Some(decl.clone());
                             }
                         }
                         _ => {}

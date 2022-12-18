@@ -2,7 +2,7 @@ use crate::{
     model::ast::*,
     model::{
         ast::{ASTDetails, AST},
-        bgl_type::Type,
+        bgl_type::{self, Type},
         module::Module,
     },
     passes::check::CheckContext,
@@ -61,13 +61,31 @@ impl AST {
 
                 if let Some(resolved) = resolved {
                     match resolved.details() {
+                        ASTDetails::ProcDeclaration {
+                            name: _,
+                            proc,
+                            exported: _,
+                            platforms: _,
+                            decorators: _,
+                        } => {
+                            return proc.infer_type(ctx);
+                        }
+                        ASTDetails::FuncDeclaration {
+                            name: _,
+                            func,
+                            exported: _,
+                            platforms: _,
+                            decorators: _,
+                        } => {
+                            return func.infer_type(ctx);
+                        }
                         ASTDetails::ValueDeclaration {
-                            name,
+                            name: _,
                             type_annotation,
                             value,
-                            is_const,
-                            exported,
-                            platforms,
+                            is_const: _,
+                            exported: _,
+                            platforms: _,
                         } => {
                             return type_annotation
                                 .as_ref()
@@ -103,16 +121,68 @@ impl AST {
             ASTDetails::NegationOperation(inner) => todo!(),
             ASTDetails::Func {
                 type_annotation,
-                is_async,
+                is_async: _,
                 is_pure,
                 body,
-            } => todo!(),
+            } => {
+                let type_annotation = type_annotation.expect::<FuncType>();
+
+                Type::FuncType {
+                    args: type_annotation
+                        .args
+                        .into_iter()
+                        .map(|a| bgl_type::Arg {
+                            name: a.name.expect::<PlainIdentifier>().0.as_str().to_owned(),
+                            type_annotation: a.type_annotation.map(|a| a.resolve_type(ctx.into())),
+                            optional: a.optional,
+                        })
+                        .collect(),
+                    args_spread: type_annotation
+                        .args_spread
+                        .map(|a| a.resolve_type(ctx.into()))
+                        .map(Box::new),
+                    is_pure: *is_pure,
+                    returns: Box::new(
+                        type_annotation
+                            .returns
+                            .map(|r| r.resolve_type(ctx.into()))
+                            .unwrap_or_else(|| body.infer_type(ctx)),
+                    ),
+                }
+            }
             ASTDetails::Proc {
                 type_annotation,
                 is_async,
                 is_pure,
                 body,
-            } => todo!(),
+            } => {
+                let type_annotation = type_annotation.expect::<ProcType>();
+
+                Type::ProcType {
+                    args: type_annotation
+                        .args
+                        .into_iter()
+                        .map(|a| bgl_type::Arg {
+                            name: a.name.expect::<PlainIdentifier>().0.as_str().to_owned(),
+                            type_annotation: a.type_annotation.map(|a| a.resolve_type(ctx.into())),
+                            optional: a.optional,
+                        })
+                        .collect(),
+                    args_spread: type_annotation
+                        .args_spread
+                        .map(|a| a.resolve_type(ctx.into()))
+                        .map(Box::new),
+                    is_async: *is_async,
+                    is_pure: *is_pure,
+                    throws: Some(
+                        type_annotation
+                            .throws
+                            .map(|r| r.resolve_type(ctx.into()))
+                            .unwrap_or_else(|| body.infer_type(ctx)),
+                    )
+                    .map(Box::new),
+                }
+            }
             ASTDetails::JavascriptEscape(_) => Type::AnyType,
             ASTDetails::RangeExpression { start, end } => todo!(),
             ASTDetails::Invocation {
@@ -122,7 +192,21 @@ impl AST {
                 type_args,
                 bubbles,
                 awaited_or_detached,
-            } => todo!(),
+            } => {
+                let subject_type = subject.infer_type(ctx);
+
+                if let Type::FuncType {
+                    args: _,
+                    args_spread: _,
+                    is_pure: _,
+                    returns,
+                } = subject_type
+                {
+                    returns.as_ref().clone()
+                } else {
+                    Type::PoisonedType
+                }
+            }
             ASTDetails::PropertyAccessor {
                 subject,
                 property,

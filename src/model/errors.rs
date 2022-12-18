@@ -10,6 +10,12 @@ use super::{ast::AST, module::ModuleID};
 #[derive(Debug, Clone, PartialEq, EnumVariantType)]
 pub enum BagelError {
     #[evt(derive(Debug, Clone, PartialEq))]
+    MiscError {
+        module_id: ModuleID,
+        src: Slice,
+        message: String,
+    },
+    #[evt(derive(Debug, Clone, PartialEq))]
     ParseError {
         module_id: ModuleID,
         src: Slice,
@@ -40,6 +46,17 @@ impl BagelError {
                 module_id,
                 importer_module_id,
             } => todo!(),
+            BagelError::MiscError {
+                src,
+                module_id,
+                message,
+            } => {
+                error_heading(f, &module_id, &src, "", Some(message.as_str()))?;
+
+                f.write_char('\n')?;
+
+                code_block_highlighted(f, &src)?;
+            }
             BagelError::ParseError {
                 src,
                 module_id,
@@ -66,17 +83,17 @@ impl BagelError {
                             }
 
                             f.write_str("Type ")?;
-                            f.write_str(&format!("{}", value).blue().to_string())?;
+                            f.write_str(&blue_string(&format!("{}", value)))?;
                             f.write_str(" is not assignable to type ")?;
-                            f.write_str(&format!("{}", destination).blue().to_string())?;
+                            f.write_str(&blue_string(&format!("{}", destination)))?;
                             f.write_char('\n')?;
                         }
                     }
                     SubsumationIssue::Mutability(destination, value) => {
                         f.write_str("Readonly type ")?;
-                        f.write_str(&format!("{}", value).blue().to_string())?;
+                        f.write_str(&blue_string(&format!("{}", value)))?;
                         f.write_str(" is not assignable to mutable type ")?;
-                        f.write_str(&format!("{}", destination).blue().to_string())?;
+                        f.write_str(&blue_string(&format!("{}", destination)))?;
                         f.write_char('\n')?;
                     }
                 };
@@ -241,4 +258,8 @@ fn line_and_column(slice: &Slice) -> (usize, usize) {
     }
 
     (line, column)
+}
+
+pub fn blue_string(s: &str) -> String {
+    s.blue().to_string()
 }

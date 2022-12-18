@@ -39,7 +39,7 @@ pub enum Type {
         args: Vec<Arg>,
         args_spread: Option<Box<Type>>,
         is_pure: bool,
-        returns: Option<Box<Type>>,
+        returns: Box<Type>,
     },
 
     ObjectType {

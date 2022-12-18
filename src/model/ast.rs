@@ -551,6 +551,7 @@ pub enum ASTDetails {
         until: Option<AST>,
     },
 
+    #[evt(derive(Debug, Clone, PartialEq))]
     PlainIdentifier(Slice),
 }
 

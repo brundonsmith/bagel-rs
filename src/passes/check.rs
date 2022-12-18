@@ -1,10 +1,12 @@
+use boa::syntax::ast::node::spread;
+
 use crate::{
     model::{
         ast::BinaryOperatorOp,
         errors::BagelError,
         module::{Module, ModulesStore},
     },
-    model::{ast::*, bgl_type::Type},
+    model::{ast::*, bgl_type::Type, errors::blue_string, slice::Slice},
     passes::typeinfer::InferTypeContext,
     DEBUG_MODE,
 };
@@ -33,11 +35,24 @@ pub trait Checkable {
 
 impl Checkable for AST {
     fn check<'a, F: FnMut(BagelError)>(&self, ctx: CheckContext<'a>, report_error: &mut F) {
+        let mut check_subsumation =
+            |destination: &Type, value: Type, slice: &Slice, report_error: &mut F| {
+                let issues = destination.subsumation_issues(ctx.into(), &value);
+
+                if let Some(issues) = issues {
+                    report_error(BagelError::AssignmentError {
+                        module_id: ctx.current_module.module_id.clone(),
+                        src: slice.clone(),
+                        issues,
+                    });
+                }
+            };
+
         match self.details() {
             ASTDetails::Module { declarations } => {
-                for decl in declarations {
-                    decl.check(ctx, report_error);
-                }
+                declarations.check(ctx, report_error);
+
+                // todo!("Check for name duplicates");
             }
             ASTDetails::ImportAllDeclaration { name, path } => todo!(),
             ASTDetails::ImportDeclaration { imports, path } => todo!(),
@@ -46,21 +61,32 @@ impl Checkable for AST {
                 name,
                 declared_type,
                 exported,
-            } => todo!(),
+            } => {
+                name.check(ctx, report_error);
+                declared_type.check(ctx, report_error);
+            }
             ASTDetails::FuncDeclaration {
                 name,
                 func,
                 exported,
                 platforms,
                 decorators,
-            } => todo!(),
+            } => {
+                name.check(ctx, report_error);
+                func.check(ctx, report_error);
+                decorators.check(ctx, report_error);
+            }
             ASTDetails::ProcDeclaration {
                 name,
                 proc,
                 exported,
                 platforms,
                 decorators,
-            } => todo!(),
+            } => {
+                name.check(ctx, report_error);
+                proc.check(ctx, report_error);
+                decorators.check(ctx, report_error);
+            }
             ASTDetails::Decorator { name } => todo!(),
             ASTDetails::ValueDeclaration {
                 name,
@@ -70,23 +96,17 @@ impl Checkable for AST {
                 exported,
                 platforms,
             } => {
+                name.check(ctx, report_error);
+                type_annotation.check(ctx, report_error);
                 value.check(ctx, report_error);
 
                 if let Some(type_annotation) = type_annotation {
-                    type_annotation.check(ctx, report_error);
-
-                    let value_type = value.infer_type(ctx.into());
-                    let issues = type_annotation
-                        .resolve_type(ctx.into())
-                        .subsumation_issues(ctx.into(), &value_type);
-
-                    if let Some(issues) = issues {
-                        report_error(BagelError::AssignmentError {
-                            module_id: ctx.current_module.module_id.clone(),
-                            src: value.slice().clone(),
-                            issues,
-                        });
-                    }
+                    check_subsumation(
+                        &type_annotation.resolve_type(ctx.into()),
+                        value.infer_type(ctx.into()),
+                        value.slice(),
+                        report_error,
+                    );
                 }
             }
             ASTDetails::TestExprDeclaration { name, expr } => todo!(),
@@ -106,48 +126,42 @@ impl Checkable for AST {
 
                 let number_or_string = Type::ANY_NUMBER.union(Type::ANY_STRING);
 
-                if op.details() == &ASTDetails::BinaryOperator(BinaryOperatorOp::Plus) {
-                    if let Some(issues) =
-                        number_or_string.subsumation_issues(ctx.into(), &left_type)
+                if let ASTDetails::BinaryOperator(operator) = op.details() {
+                    if operator == &BinaryOperatorOp::Plus {
+                        check_subsumation(&number_or_string, left_type, left.slice(), report_error);
+                        check_subsumation(
+                            &number_or_string,
+                            right_type,
+                            right.slice(),
+                            report_error,
+                        );
+                    } else if operator == &BinaryOperatorOp::Minus
+                        || operator == &BinaryOperatorOp::Times
+                        || operator == &BinaryOperatorOp::Divide
                     {
-                        report_error(BagelError::AssignmentError {
-                            module_id: ctx.current_module.module_id.clone(),
-                            src: left.slice().clone(),
-                            issues,
-                        })
-                    }
-
-                    if let Some(issues) =
-                        number_or_string.subsumation_issues(ctx.into(), &right_type)
+                        check_subsumation(&Type::ANY_NUMBER, left_type, left.slice(), report_error);
+                        check_subsumation(
+                            &Type::ANY_NUMBER,
+                            right_type,
+                            right.slice(),
+                            report_error,
+                        );
+                    } else if operator == &BinaryOperatorOp::Equals
+                        || operator == &BinaryOperatorOp::NotEquals
                     {
-                        report_error(BagelError::AssignmentError {
-                            module_id: ctx.current_module.module_id.clone(),
-                            src: right.slice().clone(),
-                            issues,
-                        })
-                    }
-                } else if op.details() == &ASTDetails::BinaryOperator(BinaryOperatorOp::Minus)
-                    || op.details() == &ASTDetails::BinaryOperator(BinaryOperatorOp::Times)
-                    || op.details() == &ASTDetails::BinaryOperator(BinaryOperatorOp::Divide)
-                {
-                    if let Some(issues) =
-                        Type::ANY_NUMBER.subsumation_issues(ctx.into(), &left_type)
-                    {
-                        report_error(BagelError::AssignmentError {
-                            module_id: ctx.current_module.module_id.clone(),
-                            src: left.slice().clone(),
-                            issues,
-                        })
-                    }
-
-                    if let Some(issues) =
-                        Type::ANY_NUMBER.subsumation_issues(ctx.into(), &right_type)
-                    {
-                        report_error(BagelError::AssignmentError {
-                            module_id: ctx.current_module.module_id.clone(),
-                            src: right.slice().clone(),
-                            issues,
-                        })
+                        if !left_type.subsumes(ctx.into(), &right_type)
+                            && !right_type.subsumes(ctx.into(), &left_type)
+                        {
+                            report_error(BagelError::MiscError {
+                                module_id: ctx.current_module.module_id.clone(),
+                                src: op.slice().clone(),
+                                message: format!(
+                                    "Can't compare types {} and {} because they have no overlap",
+                                    blue_string(&format!("{}", left_type)),
+                                    blue_string(&format!("{}", right_type)),
+                                ),
+                            });
+                        }
                     }
                 }
 
@@ -164,8 +178,16 @@ impl Checkable for AST {
                 //     BinaryOperator::InstanceOf => todo!(),
                 // }
             }
-            ASTDetails::BinaryOperator(_) => todo!(),
-            ASTDetails::NegationOperation(_) => todo!(),
+            ASTDetails::NegationOperation(inner) => {
+                inner.check(ctx, report_error);
+
+                check_subsumation(
+                    &Type::ANY_NUMBER,
+                    inner.infer_type(ctx.into()),
+                    inner.slice(),
+                    report_error,
+                );
+            }
             ASTDetails::Parenthesis(inner) => inner.check(ctx, report_error),
             ASTDetails::LocalIdentifier(name) => {
                 if self.resolve_symbol(name.as_str()).is_none() {
@@ -212,14 +234,30 @@ impl Checkable for AST {
                 is_async,
                 is_pure,
                 body,
-            } => todo!(),
+            } => {
+                type_annotation.check(ctx, report_error);
+                body.check(ctx, report_error);
+
+                let type_annotation = type_annotation.expect::<FuncType>();
+                if let Some(return_type) = type_annotation.returns {
+                    check_subsumation(
+                        &return_type.resolve_type(ctx.into()),
+                        body.infer_type(ctx.into()),
+                        body.slice(),
+                        report_error,
+                    );
+                }
+            }
             ASTDetails::Proc {
                 type_annotation,
                 is_async,
                 is_pure,
                 body,
-            } => todo!(),
-            ASTDetails::Block(_) => todo!(),
+            } => {
+                type_annotation.check(ctx, report_error);
+                body.check(ctx, report_error);
+            }
+            ASTDetails::Block(statements) => {}
             ASTDetails::JavascriptEscape(_) => todo!(),
             ASTDetails::RangeExpression { start, end } => todo!(),
             ASTDetails::Invocation {
@@ -229,7 +267,58 @@ impl Checkable for AST {
                 type_args,
                 bubbles,
                 awaited_or_detached,
-            } => todo!(),
+            } => {
+                subject.check(ctx, report_error);
+                type_args.check(ctx, report_error);
+                args.check(ctx, report_error);
+                spread_args.check(ctx, report_error);
+
+                let subject_type = subject.infer_type(ctx.into());
+                let types = match &subject_type {
+                    Type::FuncType {
+                        args,
+                        args_spread,
+                        is_pure: _,
+                        returns: _,
+                    } => Some((args, args_spread)),
+                    Type::ProcType {
+                        args,
+                        args_spread,
+                        is_pure: _,
+                        is_async: _,
+                        throws: _,
+                    } => Some((args, args_spread)),
+                    _ => None,
+                };
+
+                if let Some((arg_types, args_spread_type)) = types {
+                    for (i, arg) in args.iter().enumerate() {
+                        if let Some(arg_type) = arg_types.get(i) {
+                            if let Some(type_annotation) = &arg_type.type_annotation {
+                                check_subsumation(
+                                    type_annotation,
+                                    arg.infer_type(ctx.into()),
+                                    arg.slice(),
+                                    report_error,
+                                );
+                            }
+                        }
+                    }
+                } else {
+                    report_error(BagelError::MiscError {
+                        module_id: ctx.current_module.module_id.clone(),
+                        src: subject.slice().clone(),
+                        message: format!(
+                            "{} is of type {} and cannot be called",
+                            blue_string(&format!("{}", subject)),
+                            blue_string(&format!("{}", subject_type)),
+                        ),
+                    });
+                }
+
+                // TODO: Check that type_args fit
+                // TODO: Check appropriateness of bubbles and awaited_or_detached
+            }
             ASTDetails::PropertyAccessor {
                 subject,
                 property,
@@ -239,33 +328,26 @@ impl Checkable for AST {
                 cases,
                 default_case,
             } => {
-                let truthiness_safe = Type::get_truthiness_safe_types();
+                cases.check(ctx, report_error);
+                default_case.check(ctx, report_error);
 
+                let truthiness_safe = Type::get_truthiness_safe_types();
                 for case in cases {
                     let IfElseExpressionCase { condition, outcome } =
                         case.expect::<IfElseExpressionCase>();
 
-                    let condition_type = condition.infer_type(ctx.into());
-
-                    if let Some(issues) =
-                        truthiness_safe.subsumation_issues(ctx.into(), &condition_type)
-                    {
-                        report_error(BagelError::AssignmentError {
-                            module_id: ctx.current_module.module_id.clone(),
-                            src: condition.slice().clone(),
-                            issues,
-                        });
-                    }
-
-                    condition.check(ctx, report_error);
-                    outcome.check(ctx, report_error);
-                }
-
-                if let Some(default_case) = default_case {
-                    default_case.check(ctx, report_error);
+                    check_subsumation(
+                        &truthiness_safe,
+                        condition.infer_type(ctx.into()),
+                        condition.slice(),
+                        report_error,
+                    );
                 }
             }
-            ASTDetails::IfElseExpressionCase { condition, outcome } => todo!(),
+            ASTDetails::IfElseExpressionCase { condition, outcome } => {
+                condition.check(ctx, report_error);
+                outcome.check(ctx, report_error);
+            }
             ASTDetails::SwitchExpression {
                 value,
                 cases,
@@ -304,7 +386,15 @@ impl Checkable for AST {
                 is_pure,
                 is_async,
                 returns,
-            } => todo!(),
+            } => {
+                for arg in args {
+                    arg.name.check(ctx, report_error);
+                    // TODO: Check that no optionsl args come before non-optional args
+                    arg.type_annotation.check(ctx, report_error);
+                }
+                args_spread.check(ctx, report_error);
+                returns.check(ctx, report_error);
+            }
             ASTDetails::GenericType { type_params, inner } => todo!(),
             ASTDetails::TypeParam { name, extends } => todo!(),
             ASTDetails::BoundGenericType { type_args, generic } => todo!(),
@@ -315,9 +405,19 @@ impl Checkable for AST {
             ASTDetails::RecordType {
                 key_type,
                 value_type,
-            } => todo!(),
-            ASTDetails::ArrayType(_) => todo!(),
-            ASTDetails::TupleType(_) => todo!(),
+            } => {
+                key_type.check(ctx, report_error);
+                value_type.check(ctx, report_error);
+
+                check_subsumation(
+                    &Type::ANY_NUMBER.union(Type::ANY_STRING),
+                    key_type.resolve_type(ctx.into()),
+                    key_type.slice(),
+                    report_error,
+                );
+            }
+            ASTDetails::ArrayType(element) => element.check(ctx, report_error),
+            ASTDetails::TupleType(members) => members.check(ctx, report_error),
             ASTDetails::SpecialType { kind, inner } => todo!(),
             ASTDetails::ModifierType { kind, inner } => todo!(),
             ASTDetails::ParenthesizedType(_) => todo!(),
@@ -327,6 +427,8 @@ impl Checkable for AST {
                 property,
                 optional,
             } => todo!(),
+            ASTDetails::MaybeType(inner) => inner.check(ctx, report_error),
+            ASTDetails::UnionType(members) => members.check(ctx, report_error),
             ASTDetails::DeclarationStatement {
                 destination,
                 value,
@@ -343,7 +445,17 @@ impl Checkable for AST {
                 iterator,
                 body,
             } => todo!(),
-            ASTDetails::WhileLoop { condition, body } => todo!(),
+            ASTDetails::WhileLoop { condition, body } => {
+                condition.check(ctx, report_error);
+                body.check(ctx, report_error);
+
+                check_subsumation(
+                    &Type::get_truthiness_safe_types(),
+                    condition.infer_type(ctx.into()),
+                    condition.slice(),
+                    report_error,
+                );
+            }
             ASTDetails::Assignment {
                 target,
                 value,
@@ -358,14 +470,27 @@ impl Checkable for AST {
             ASTDetails::Autorun {
                 effect_block,
                 until,
-            } => todo!(),
-            ASTDetails::PlainIdentifier(_) => todo!(),
+            } => {
+                effect_block.check(ctx, report_error);
+                until.check(ctx, report_error);
+
+                if let Some(until) = until {
+                    check_subsumation(
+                        &Type::ANY_BOOLEAN,
+                        until.infer_type(ctx.into()),
+                        until.slice(),
+                        report_error,
+                    );
+                }
+            }
 
             // intentionally have nothing to check
             ASTDetails::NilLiteral => {}
             ASTDetails::NumberLiteral(_) => {}
             ASTDetails::BooleanLiteral(_) => {}
             ASTDetails::ExactStringLiteral { tag: _, value: _ } => {}
+            ASTDetails::BinaryOperator(_) => {}
+            ASTDetails::PlainIdentifier(_) => {}
 
             ASTDetails::RegularExpressionType => {}
             ASTDetails::StringLiteralType(_) => {}
@@ -375,8 +500,6 @@ impl Checkable for AST {
             ASTDetails::NumberType => {}
             ASTDetails::BooleanType => {}
             ASTDetails::NilType => {}
-            ASTDetails::UnionType(members) => {}
-            ASTDetails::MaybeType(inner) => {}
             ASTDetails::UnknownType => {}
         }
     }
