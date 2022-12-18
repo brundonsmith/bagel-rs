@@ -19,7 +19,7 @@ impl Module {
 
         if DEBUG_MODE {
             println!(
-                "* Checking {:?} took {}ms",
+                "* Checking {} took {}ms",
                 self.module_id,
                 start.elapsed().unwrap().as_millis()
             );

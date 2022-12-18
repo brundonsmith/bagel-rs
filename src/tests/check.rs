@@ -1,10 +1,11 @@
-use std::{collections::HashMap, ops::Add, path::PathBuf, rc::Rc};
+use std::{collections::HashMap, ops::Add, rc::Rc};
 
 use reqwest::Url;
 
 use crate::{
     gather_errors,
     model::{
+        errors::BagelError,
         module::{Module, ModuleID},
         slice::Slice,
     },
@@ -3873,31 +3874,42 @@ fn test_check(bgl: &str, should_fail: bool) {
     let module_id = ModuleID::try_from(Url::try_from("https://foo.bar").unwrap()).unwrap();
     let bgl_rc = Rc::new(bgl.to_owned() + " ");
 
-    let parsed = parse(module_id.clone(), bgl_rc.clone()).unwrap();
+    let parsed = parse(module_id.clone(), bgl_rc.clone());
 
-    let mut modules_store = HashMap::new();
-    modules_store.insert(
-        module_id.clone(),
-        Ok(Module {
-            module_id,
-            src: Slice::new(bgl_rc.clone()),
-            ast: parsed,
-        }),
-    );
-    let modules_store = modules_store.into();
+    match parsed {
+        Ok(parsed) => {
+            let mut modules_store = HashMap::new();
+            modules_store.insert(
+                module_id.clone(),
+                Ok(Module {
+                    module_id,
+                    src: Slice::new(bgl_rc.clone()),
+                    ast: parsed,
+                }),
+            );
+            let modules_store = modules_store.into();
 
-    let errors = gather_errors(&modules_store);
+            let errors = gather_errors(&modules_store);
 
-    let total_errors = errors
-        .iter()
-        .map(|(_, value)| value.len())
-        .fold(0, Add::add);
-    let had_errors = total_errors > 0;
+            let total_errors = errors
+                .iter()
+                .map(|(_, value)| value.len())
+                .fold(0, Add::add);
+            let had_errors = total_errors > 0;
 
-    if !should_fail && had_errors {
-        print_errors(&errors);
-        println!("Type check should have passed but failed with errors");
-    } else if should_fail && !had_errors {
-        panic!("Type check should have failed but passed with no errors");
+            if !should_fail && had_errors {
+                print_errors(&errors);
+                println!("Type check should have passed but failed with errors");
+            } else if should_fail && !had_errors {
+                panic!("Type check should have failed but passed with no errors");
+            }
+        }
+        Err(err) => {
+            let mut buf = String::new();
+            BagelError::from(err).pretty_print(&mut buf, true);
+
+            println!("{}", buf);
+            panic!("\nFailed to parse input");
+        }
     }
 }

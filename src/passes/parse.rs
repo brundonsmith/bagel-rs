@@ -67,7 +67,7 @@ pub fn parse(module_id: ModuleID, module_src: Rc<String>) -> Result<AST, ParseEr
 
     if DEBUG_MODE {
         println!(
-            "* Parsing  {:?} took {}ms",
+            "* Parsing  {} took {}ms",
             module_id,
             start.elapsed().unwrap().as_millis()
         );
