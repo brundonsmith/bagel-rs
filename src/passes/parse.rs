@@ -476,145 +476,147 @@ fn type_annotation(i: Slice) -> ParseResult<AST> {
 // --- TypeExpression ---
 
 fn type_expression(l: usize) -> impl Fn(Slice) -> ParseResult<AST> {
-    move |i: Slice| -> ParseResult<AST> {
-        let mut tl = 0;
+    move |i: Slice| -> ParseResult<AST> { type_expression_inner(l, i) }
+}
 
-        parse_level!(
-            l,
-            tl,
-            i,
-            map(seq!(tag("typeof"), expression(0)), |(keyword, mut expr)| {
-                make_node_tuple!(TypeofType, keyword.clone().spanning(expr.slice()), expr)
-            })
-        );
+fn type_expression_inner(l: usize, i: Slice) -> ParseResult<AST> {
+    let mut tl = 0;
 
-        parse_level!(
-            l,
-            tl,
-            i,
-            map(
-                seq!(
-                    alt((
-                        tag("keyof"),
-                        tag("valueof"),
-                        tag("elementof"),
-                        tag("readonly")
-                    )),
-                    type_expression(0)
-                ),
-                |(keyword, mut inner)| {
-                    let src = keyword.clone().spanning(inner.slice());
+    parse_level!(
+        l,
+        tl,
+        i,
+        map(seq!(tag("typeof"), expression(0)), |(keyword, mut expr)| {
+            make_node_tuple!(TypeofType, keyword.clone().spanning(expr.slice()), expr)
+        })
+    );
 
-                    let this = ASTDetails::ModifierType {
-                        kind: keyword.as_str().try_into().unwrap(),
-                        inner: inner.clone(),
-                    }
-                    .with_slice(src);
+    parse_level!(
+        l,
+        tl,
+        i,
+        map(
+            seq!(
+                alt((
+                    tag("keyof"),
+                    tag("valueof"),
+                    tag("elementof"),
+                    tag("readonly")
+                )),
+                type_expression(0)
+            ),
+            |(keyword, mut inner)| {
+                let src = keyword.clone().spanning(inner.slice());
 
-                    inner.set_parent(&this);
-
-                    this
+                let this = ASTDetails::ModifierType {
+                    kind: keyword.as_str().try_into().unwrap(),
+                    inner: inner.clone(),
                 }
-            )
-        );
+                .with_slice(src);
 
-        // generic type
+                inner.set_parent(&this);
 
-        parse_level!(
-            l,
-            tl,
-            i,
+                this
+            }
+        )
+    );
+
+    // generic type
+
+    parse_level!(
+        l,
+        tl,
+        i,
+        map(
+            separated_list2(w(tag("|")), w(type_expression(tl + 1))),
+            |mut members| { make_node_tuple!(UnionType, covering(&members).unwrap(), members) }
+        )
+    );
+
+    parse_level!(
+        l,
+        tl,
+        i,
+        map(
+            seq!(type_expression(tl + 1), tag("?")),
+            |(mut inner, end)| {
+                make_node_tuple!(MaybeType, inner.slice().clone().spanning(&end), inner)
+            }
+        )
+    );
+
+    // boundGenericType
+
+    parse_level!(
+        l,
+        tl,
+        i,
+        map(
+            seq!(type_expression(tl + 1), tag("[]")),
+            |(mut element, end)| {
+                make_node_tuple!(ArrayType, element.slice().clone().spanning(&end), element)
+            }
+        )
+    );
+
+    parse_level!(
+        l,
+        tl,
+        i,
+        alt((
+            func_type,
+            proc_type,
+            record_type,
+            object_or_interface_type,
+            tuple_type,
             map(
-                separated_list2(w(tag("|")), w(type_expression(tl + 1))),
-                |mut members| { make_node_tuple!(UnionType, covering(&members).unwrap(), members) }
-            )
-        );
-
-        parse_level!(
-            l,
-            tl,
-            i,
-            map(
-                seq!(type_expression(tl + 1), tag("?")),
-                |(mut inner, end)| {
-                    make_node_tuple!(MaybeType, inner.slice().clone().spanning(&end), inner)
+                seq!(tag("("), type_expression(tl + 1), tag(")")),
+                |(open, mut inner, close)| {
+                    make_node_tuple!(ParenthesizedType, open.spanning(&close), inner)
                 }
-            )
-        );
-
-        // boundGenericType
-
-        parse_level!(
-            l,
-            tl,
-            i,
+            ),
             map(
-                seq!(type_expression(tl + 1), tag("[]")),
-                |(mut element, end)| {
-                    make_node_tuple!(ArrayType, element.slice().clone().spanning(&end), element)
-                }
-            )
-        );
+                seq!(tag("\'"), string_contents, tag("\'")),
+                |(open_quote, value, close_quote)| {
+                    ASTDetails::StringLiteralType(value)
+                        .with_slice(open_quote.spanning(&close_quote))
+                },
+            ),
+            map(seq!(opt(tag("-")), numeric), |(neg, int)| {
+                let src = neg.unwrap_or_else(|| int.clone()).spanning(&int);
+                ASTDetails::NumberLiteralType(src.clone()).with_slice(src)
+            }),
+            map(alt((tag("true"), tag("false"))), |s: Slice| {
+                ASTDetails::BooleanLiteralType(s.as_str() == "true").with_slice(s)
+            }),
+            map(tag("string"), |s: Slice| {
+                ASTDetails::StringType.with_slice(s)
+            }),
+            map(tag("number"), |s: Slice| {
+                ASTDetails::NumberType.with_slice(s)
+            }),
+            map(tag("boolean"), |s: Slice| {
+                ASTDetails::BooleanType.with_slice(s)
+            }),
+            map(tag("unknown"), |s: Slice| ASTDetails::UnknownType
+                .with_slice(s)),
+            map(tag("nil"), |s: Slice| ASTDetails::NilType.with_slice(s)),
+        ))
+    );
 
-        parse_level!(
-            l,
-            tl,
-            i,
-            alt((
-                func_type,
-                proc_type,
-                record_type,
-                object_or_interface_type,
-                tuple_type,
-                map(
-                    seq!(tag("("), type_expression(tl + 1), tag(")")),
-                    |(open, mut inner, close)| {
-                        make_node_tuple!(ParenthesizedType, open.spanning(&close), inner)
-                    }
-                ),
-                map(
-                    seq!(tag("\'"), string_contents, tag("\'")),
-                    |(open_quote, value, close_quote)| {
-                        ASTDetails::StringLiteralType(value)
-                            .with_slice(open_quote.spanning(&close_quote))
-                    },
-                ),
-                map(seq!(opt(tag("-")), numeric), |(neg, int)| {
-                    let src = neg.unwrap_or_else(|| int.clone()).spanning(&int);
-                    ASTDetails::NumberLiteralType(src.clone()).with_slice(src)
-                }),
-                map(alt((tag("true"), tag("false"))), |s: Slice| {
-                    ASTDetails::BooleanLiteralType(s.as_str() == "true").with_slice(s)
-                }),
-                map(tag("string"), |s: Slice| {
-                    ASTDetails::StringType.with_slice(s)
-                }),
-                map(tag("number"), |s: Slice| {
-                    ASTDetails::NumberType.with_slice(s)
-                }),
-                map(tag("boolean"), |s: Slice| {
-                    ASTDetails::BooleanType.with_slice(s)
-                }),
-                map(tag("unknown"), |s: Slice| ASTDetails::UnknownType
-                    .with_slice(s)),
-                map(tag("nil"), |s: Slice| ASTDetails::NilType.with_slice(s)),
-            ))
-        );
+    parse_level!(
+        l,
+        tl,
+        i,
+        map(plain_identifier, |mut name| {
+            make_node_tuple!(NamedType, name.slice().clone(), name)
+        })
+    );
 
-        parse_level!(
-            l,
-            tl,
-            i,
-            map(plain_identifier, |mut name| {
-                make_node_tuple!(NamedType, name.slice().clone(), name)
-            })
-        );
-
-        Err(nom::Err::Error(RawParseError {
-            src: i,
-            details: RawParseErrorDetails::Kind(ErrorKind::Fail),
-        }))
-    }
+    Err(nom::Err::Error(RawParseError {
+        src: i,
+        details: RawParseErrorDetails::Kind(ErrorKind::Fail),
+    }))
 }
 
 #[memoize]
@@ -865,122 +867,128 @@ fn autorun(i: Slice) -> ParseResult<AST> {
 // --- Expression ---
 
 fn expression(l: usize) -> impl Fn(Slice) -> ParseResult<AST> {
-    move |i: Slice| -> ParseResult<AST> {
-        let mut tl = 0;
+    move |i: Slice| -> ParseResult<AST> { expression_inner(l, i) }
+}
 
-        // parse_level!(level, this_level, i, ); // debug, javascriptEscape, elementTag
-        parse_level!(
-            l,
-            tl,
-            i,
-            alt((
-                func,
-                // map(proc, |x| x.map(ASTDetails::from)),
-            ))
-        );
-        parse_level!(l, tl, i, binary_operation_1(tl, "??"));
-        parse_level!(l, tl, i, binary_operation_1(tl, "||"));
-        parse_level!(l, tl, i, binary_operation_1(tl, "&&"));
-        parse_level!(l, tl, i, binary_operation_2(tl, "==", "!="));
-        parse_level!(l, tl, i, binary_operation_4(tl, "<=", ">=", "<", ">"));
-        parse_level!(l, tl, i, binary_operation_2(tl, "+", "-"));
-        parse_level!(l, tl, i, binary_operation_2(tl, "*", "/"));
-        parse_level!(l, tl, i, alt((as_cast(tl), instance_of(tl))));
-        parse_level!(l, tl, i, negation_operation(tl));
+#[memoize]
+fn expression_inner(l: usize, i: Slice) -> ParseResult<AST> {
+    let mut tl = 0;
 
-        // indexer
+    // parse_level!(level, this_level, i, ); // debug, javascriptEscape, elementTag
+    parse_level!(
+        l,
+        tl,
+        i,
+        alt((
+            func,
+            // map(proc, |x| x.map(ASTDetails::from)),
+        ))
+    );
+    parse_level!(l, tl, i, binary_operation_1(tl, "??"));
+    parse_level!(l, tl, i, binary_operation_1(tl, "||"));
+    parse_level!(l, tl, i, binary_operation_1(tl, "&&"));
+    parse_level!(l, tl, i, binary_operation_2(tl, "==", "!="));
+    parse_level!(l, tl, i, binary_operation_4(tl, "<=", ">=", "<", ">"));
+    parse_level!(l, tl, i, binary_operation_2(tl, "+", "-"));
+    parse_level!(l, tl, i, binary_operation_2(tl, "*", "/"));
+    parse_level!(l, tl, i, alt((as_cast(tl), instance_of(tl))));
+    parse_level!(l, tl, i, negation_operation(tl));
 
-        // parse_level!(l, tl, i, error_expression);
+    // indexer
 
-        parse_level!(l, tl, i, invocation_accessor_chain(tl));
+    // parse_level!(l, tl, i, error_expression);
 
-        parse_level!(l, tl, i, range_expression);
+    parse_level!(l, tl, i, invocation_accessor_chain(tl));
 
-        parse_level!(l, tl, i, parenthesis(tl));
+    parse_level!(l, tl, i, range_expression);
 
-        parse_level!(
-            l,
-            tl,
-            i,
-            alt((
-                if_else_expression,
-                switch_expression,
-                // inline_const_group,
-                object_literal,
-                array_literal,
-                exact_string_literal,
-                number_literal,
-                boolean_literal,
-                nil_literal,
-            ))
-        );
-        parse_level!(
-            l,
-            tl,
-            i,
-            alt((
-                local_identifier,
-                // localIdentifier, regExp
-            ))
-        );
+    parse_level!(l, tl, i, parenthesis(tl));
 
-        Err(nom::Err::Error(RawParseError {
-            src: i,
-            details: RawParseErrorDetails::Kind(ErrorKind::Fail),
-        }))
-    }
+    parse_level!(
+        l,
+        tl,
+        i,
+        alt((
+            if_else_expression,
+            switch_expression,
+            // inline_const_group,
+            object_literal,
+            array_literal,
+            exact_string_literal,
+            number_literal,
+            boolean_literal,
+            nil_literal,
+        ))
+    );
+    parse_level!(
+        l,
+        tl,
+        i,
+        alt((
+            local_identifier,
+            // localIdentifier, regExp
+        ))
+    );
+
+    Err(nom::Err::Error(RawParseError {
+        src: i,
+        details: RawParseErrorDetails::Kind(ErrorKind::Fail),
+    }))
 }
 
 fn invocation_accessor_chain(level: usize) -> impl Fn(Slice) -> ParseResult<AST> {
-    move |i: Slice| -> ParseResult<AST> {
-        map(
-            seq!(
-                expression(level + 1),
-                many1(alt((
-                    invocation_args,
-                    indexer_expression,
-                    dot_property_access,
-                )))
-            ),
-            |(mut base, clauses)| {
-                let mut subject = base;
+    move |i: Slice| -> ParseResult<AST> { invocation_accessor_chain_inner(level, i) }
+}
 
-                for clause in clauses {
-                    let mut old_subject = subject;
+#[memoize]
+fn invocation_accessor_chain_inner(level: usize, i: Slice) -> ParseResult<AST> {
+    map(
+        seq!(
+            expression(level + 1),
+            many1(alt((
+                invocation_args,
+                indexer_expression,
+                dot_property_access,
+            )))
+        ),
+        |(mut base, clauses)| {
+            let mut subject = base;
 
-                    match clause {
-                        InvocationOrPropertyAccess::InvokingWith(mut args, args_slice) => {
-                            subject = ASTDetails::Invocation {
-                                subject: old_subject.clone(),
-                                args: args.clone(),
-                                spread_args: None,         // TODO
-                                type_args: Vec::new(),     // TODO
-                                bubbles: false,            // TODO
-                                awaited_or_detached: None, // TODO
-                            }
-                            .with_slice(old_subject.slice().clone().spanning(&args_slice));
+            for clause in clauses {
+                let mut old_subject = subject;
 
-                            old_subject.set_parent(&subject);
-                            args.set_parent(&subject);
+                match clause {
+                    InvocationOrPropertyAccess::InvokingWith(mut args, args_slice) => {
+                        subject = ASTDetails::Invocation {
+                            subject: old_subject.clone(),
+                            args: args.clone(),
+                            spread_args: None,         // TODO
+                            type_args: Vec::new(),     // TODO
+                            bubbles: false,            // TODO
+                            awaited_or_detached: None, // TODO
                         }
-                        InvocationOrPropertyAccess::Accessing(mut property, indexer_slice) => {
-                            subject = ASTDetails::PropertyAccessor {
-                                subject: old_subject.clone(),
-                                property: property.clone(),
-                                optional: false, // TODO
-                            }
-                            .with_slice(old_subject.slice().clone().spanning(&indexer_slice));
+                        .with_slice(old_subject.slice().clone().spanning(&args_slice));
 
-                            old_subject.set_parent(&subject);
-                            property.set_parent(&subject);
+                        old_subject.set_parent(&subject);
+                        args.set_parent(&subject);
+                    }
+                    InvocationOrPropertyAccess::Accessing(mut property, indexer_slice) => {
+                        subject = ASTDetails::PropertyAccessor {
+                            subject: old_subject.clone(),
+                            property: property.clone(),
+                            optional: false, // TODO
                         }
+                        .with_slice(old_subject.slice().clone().spanning(&indexer_slice));
+
+                        old_subject.set_parent(&subject);
+                        property.set_parent(&subject);
                     }
                 }
+            }
 
-                subject
-            },
-        )(i)
-    }
+            subject
+        },
+    )(i)
 }
 
 #[memoize]
