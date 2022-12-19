@@ -472,7 +472,7 @@ fn test_type_declaration(i: Slice) -> ParseResult<AST> {
 
 #[memoize]
 fn type_annotation(i: Slice) -> ParseResult<AST> {
-    preceded(tag(":"), w(type_expression(0)))(i).log()
+    preceded(tag(":"), w(type_expression(0)))(i)
 }
 
 // --- TypeExpression ---
