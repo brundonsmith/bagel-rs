@@ -243,7 +243,7 @@ fn func_declaration(i: Slice) -> ParseResult<AST> {
             opt(tag("async")),
             tag("func"),
             plain_identifier,
-            args,
+            alt((args_parenthesized, arg_singleton)),
             opt(type_annotation),
             tag("=>"),
             expression(0),
@@ -300,37 +300,39 @@ fn func_declaration(i: Slice) -> ParseResult<AST> {
 }
 
 #[memoize]
-fn args(i: Slice) -> ParseResult<Vec<Arg>> {
-    alt((
-        map(plain_identifier, |name| {
-            vec![Arg {
-                name: name.clone(),
-                type_annotation: None,
-                optional: false,
-            }]
-        }),
-        map(
-            seq!(
-                tag("("),
-                preceded(
-                    whitespace,
-                    separated_list0(w(tag(",")), w(seq!(plain_identifier, opt(type_annotation)))),
-                ),
-                tag(")"),
+fn arg_singleton(i: Slice) -> ParseResult<Vec<Arg>> {
+    map(plain_identifier, |name| {
+        vec![Arg {
+            name: name.clone(),
+            type_annotation: None,
+            optional: false,
+        }]
+    })(i)
+}
+
+#[memoize]
+fn args_parenthesized(i: Slice) -> ParseResult<Vec<Arg>> {
+    map(
+        seq!(
+            tag("("),
+            preceded(
+                whitespace,
+                separated_list0(w(tag(",")), w(seq!(plain_identifier, opt(type_annotation)))),
             ),
-            |(start, args, end)| {
-                args.into_iter()
-                    .map(|(name, type_annotation)| {
-                        Arg {
-                            name,
-                            type_annotation,
-                            optional: false, // TODO
-                        }
-                    })
-                    .collect()
-            },
+            tag(")"),
         ),
-    ))(i)
+        |(start, args, end)| {
+            args.into_iter()
+                .map(|(name, type_annotation)| {
+                    Arg {
+                        name,
+                        type_annotation,
+                        optional: false, // TODO
+                    }
+                })
+                .collect()
+        },
+    )(i)
 }
 
 #[memoize]
@@ -342,7 +344,7 @@ fn proc_declaration(i: Slice) -> ParseResult<AST> {
             opt(tag("async")),
             tag("proc"),
             plain_identifier,
-            args,
+            alt((args_parenthesized, arg_singleton)),
             block,
         ),
         |(export, pure, asyn, keyword, name, args, body)| {
@@ -470,7 +472,7 @@ fn test_type_declaration(i: Slice) -> ParseResult<AST> {
 
 #[memoize]
 fn type_annotation(i: Slice) -> ParseResult<AST> {
-    preceded(tag(":"), w(type_expression(0)))(i)
+    preceded(tag(":"), w(type_expression(0)))(i).log()
 }
 
 // --- TypeExpression ---
@@ -622,7 +624,7 @@ fn type_expression_inner(l: usize, i: Slice) -> ParseResult<AST> {
 #[memoize]
 fn func_type(i: Slice) -> ParseResult<AST> {
     map(
-        seq!(args, tag("=>"), type_expression(0)),
+        seq!(args_parenthesized, tag("=>"), type_expression(0)),
         |(args, _, returns)| {
             // TODO: func type with 0 arguments will have weird src
             let src = args
@@ -646,7 +648,7 @@ fn func_type(i: Slice) -> ParseResult<AST> {
 #[memoize]
 fn proc_type(i: Slice) -> ParseResult<AST> {
     map(
-        seq!(args, tag("{"), tag("}")),
+        seq!(args_parenthesized, tag("{"), tag("}")),
         |(args, open_brace, close)| {
             // TODO: proc type with 0 arguments will have weird src
             let src = args
@@ -1237,7 +1239,7 @@ fn func(i: Slice) -> ParseResult<AST> {
         seq!(
             opt(tag("pure")),
             opt(tag("async")),
-            args,
+            alt((args_parenthesized, arg_singleton)),
             opt(type_annotation),
             tag("=>"),
             expression(0),
