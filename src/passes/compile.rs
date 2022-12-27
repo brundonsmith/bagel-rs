@@ -469,7 +469,7 @@ fn compile_function<W: Write>(
     } else {
         f.write_str("{ return ")?;
         body.compile(f)?;
-        f.write_str("; }")?;
+        f.write_str(" }")?;
     }
 
     Ok(())
