@@ -388,13 +388,18 @@ where
                 is_async,
                 returns,
             } => {
-                for arg in args {
-                    arg.name.check(ctx, report_error);
-                    // TODO: Check that no optionsl args come before non-optional args
-                    arg.type_annotation.check(ctx, report_error);
-                }
+                args.check(ctx, report_error);
                 args_spread.check(ctx, report_error);
                 returns.check(ctx, report_error);
+            }
+            ASTDetails::Arg {
+                name,
+                type_annotation,
+                optional,
+            } => {
+                name.check(ctx, report_error);
+                // TODO: Check that no optionsl args come before non-optional args
+                type_annotation.check(ctx, report_error);
             }
             ASTDetails::GenericType { type_params, inner } => todo!(),
             ASTDetails::TypeParam { name, extends } => todo!(),

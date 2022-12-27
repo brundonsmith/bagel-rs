@@ -96,7 +96,17 @@ where
                                 .map(|t| t.resolve_type(ctx.into()))
                                 .unwrap_or_else(|| value.infer_type(ctx));
                         }
-                        _ => unreachable!(),
+                        ASTDetails::Arg {
+                            name,
+                            type_annotation,
+                            optional,
+                        } => {
+                            return type_annotation
+                                .as_ref()
+                                .map(|t| t.resolve_type(ctx.into()))
+                                .unwrap_or(Type::PoisonedType);
+                        }
+                        _ => todo!(),
                     }
                 }
 
@@ -135,10 +145,16 @@ where
                     args: type_annotation
                         .args
                         .into_iter()
-                        .map(|a| bgl_type::Arg {
-                            name: a.name.downcast().0.as_str().to_owned(),
-                            type_annotation: a.type_annotation.map(|a| a.resolve_type(ctx.into())),
-                            optional: a.optional,
+                        .map(|a| {
+                            let a = a.downcast();
+
+                            bgl_type::Arg {
+                                name: a.name.downcast().0.as_str().to_owned(),
+                                type_annotation: a
+                                    .type_annotation
+                                    .map(|a| a.resolve_type(ctx.into())),
+                                optional: a.optional,
+                            }
                         })
                         .collect(),
                     args_spread: type_annotation
@@ -166,10 +182,16 @@ where
                     args: type_annotation
                         .args
                         .into_iter()
-                        .map(|a| bgl_type::Arg {
-                            name: a.name.downcast().0.as_str().to_owned(),
-                            type_annotation: a.type_annotation.map(|a| a.resolve_type(ctx.into())),
-                            optional: a.optional,
+                        .map(|a| {
+                            let a = a.downcast();
+
+                            bgl_type::Arg {
+                                name: a.name.downcast().0.as_str().to_owned(),
+                                type_annotation: a
+                                    .type_annotation
+                                    .map(|a| a.resolve_type(ctx.into())),
+                                optional: a.optional,
+                            }
                         })
                         .collect(),
                     args_spread: type_annotation

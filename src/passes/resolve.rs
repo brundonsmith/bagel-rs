@@ -8,7 +8,7 @@ where
     pub fn resolve_symbol(&self, symbol: &str) -> Option<ASTAny> {
         match self.details() {
             ASTDetails::Module { declarations } => {
-                return declarations.iter().find_map(|decl| {
+                if let Some(found) = declarations.iter().find_map(|decl| {
                     match decl.details() {
                         ASTDetails::ImportAllDeclaration { name, path } => todo!(),
                         ASTDetails::ImportDeclaration { imports, path } => todo!(),
@@ -64,10 +64,42 @@ where
                             }
                         }
                         _ => {}
-                    };
+                    }
 
                     None
-                });
+                }) {
+                    return Some(found);
+                }
+            }
+            ASTDetails::Func {
+                type_annotation,
+                is_async: _,
+                is_pure: _,
+                body: _,
+            } => {
+                if let Some(found) = type_annotation
+                    .downcast()
+                    .args
+                    .iter()
+                    .find(|arg| arg.downcast().name.downcast().0.as_str() == symbol)
+                {
+                    return Some(found.clone().upcast());
+                }
+            }
+            ASTDetails::Proc {
+                type_annotation,
+                is_async: _,
+                is_pure: _,
+                body: _,
+            } => {
+                if let Some(found) = type_annotation
+                    .downcast()
+                    .args
+                    .iter()
+                    .find(|arg| arg.downcast().name.downcast().0.as_str() == symbol)
+                {
+                    return Some(found.clone().upcast());
+                }
             }
             _ => {}
         };

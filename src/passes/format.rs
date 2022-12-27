@@ -242,17 +242,8 @@ where
                 returns,
             } => {
                 f.write_char('(')?;
-                for Arg {
-                    name,
-                    type_annotation,
-                    optional,
-                } in args
-                {
-                    name.format(f, opts)?;
-                    if *optional {
-                        f.write_char('?')?;
-                    }
-                    format_type_annotation(f, opts, type_annotation.as_ref())?;
+                for arg in args {
+                    arg.format(f, opts)?;
                 }
                 f.write_char(')')?;
 
@@ -265,6 +256,17 @@ where
                 }
 
                 Ok(())
+            }
+            ASTDetails::Arg {
+                name,
+                type_annotation,
+                optional,
+            } => {
+                name.format(f, opts)?;
+                if *optional {
+                    f.write_char('?')?;
+                }
+                format_type_annotation(f, opts, type_annotation.as_ref())
             }
             ASTDetails::GenericType { type_params, inner } => todo!(),
             ASTDetails::TypeParam { name, extends } => todo!(),

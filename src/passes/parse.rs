@@ -301,7 +301,7 @@ fn func_declaration(i: Slice) -> ParseResult<ASTAny> {
             }
             .with_slice(
                 args.get(0)
-                    .map(|arg| arg.name.slice().clone())
+                    .map(|arg| arg.downcast().name.slice().clone())
                     .unwrap_or(arrow)
                     .spanning(body.slice()),
             );
@@ -313,11 +313,12 @@ fn func_declaration(i: Slice) -> ParseResult<ASTAny> {
                 type_annotation: type_annotation.clone(),
                 is_async: asyn.is_some(),
                 is_pure: pure.is_some(),
-                body,
+                body: body.clone(),
             }
             .with_slice(src.clone());
 
             type_annotation.set_parent(&func);
+            body.set_parent(&func);
 
             let this = ASTDetails::FuncDeclaration {
                 name: name.clone(),
@@ -337,18 +338,19 @@ fn func_declaration(i: Slice) -> ParseResult<ASTAny> {
 }
 
 #[memoize]
-fn arg_singleton(i: Slice) -> ParseResult<Vec<Arg>> {
+fn arg_singleton(i: Slice) -> ParseResult<Vec<AST<Arg>>> {
     map(plain_identifier, |name| {
         vec![Arg {
             name: name.clone(),
             type_annotation: None,
             optional: false,
-        }]
+        }
+        .with_slice(name.slice().clone())]
     })(i)
 }
 
 #[memoize]
-fn args_parenthesized(i: Slice) -> ParseResult<Vec<Arg>> {
+fn args_parenthesized(i: Slice) -> ParseResult<Vec<AST<Arg>>> {
     map(
         seq!(
             tag("("),
@@ -360,12 +362,25 @@ fn args_parenthesized(i: Slice) -> ParseResult<Vec<Arg>> {
         ),
         |(start, args, end)| {
             args.into_iter()
-                .map(|(name, type_annotation)| {
-                    Arg {
-                        name,
-                        type_annotation,
+                .map(|(mut name, mut type_annotation)| {
+                    let this = Arg {
+                        name: name.clone(),
+                        type_annotation: type_annotation.clone(),
                         optional: false, // TODO
                     }
+                    .with_slice(
+                        name.slice().clone().spanning(
+                            type_annotation
+                                .as_ref()
+                                .map(|a| a.slice())
+                                .unwrap_or(name.slice()),
+                        ),
+                    );
+
+                    name.set_parent(&this);
+                    type_annotation.set_parent(&this);
+
+                    this
                 })
                 .collect()
         },
@@ -404,7 +419,7 @@ fn proc_declaration(i: Slice) -> ParseResult<ASTAny> {
                     }
                     .with_slice(
                         args.get(0)
-                            .map(|arg| arg.name.slice().clone())
+                            .map(|arg| arg.downcast().name.slice().clone())
                             .unwrap_or(body.slice().clone())
                             .spanning(body.slice()),
                     ),
@@ -668,7 +683,7 @@ fn func_type(i: Slice) -> ParseResult<ASTAny> {
             // TODO: func type with 0 arguments will have weird src
             let src = args
                 .get(0)
-                .map(|arg| arg.name.slice().clone())
+                .map(|arg| arg.downcast().name.slice().clone())
                 .unwrap_or(returns.slice().clone())
                 .spanning(returns.slice());
 
@@ -692,7 +707,7 @@ fn proc_type(i: Slice) -> ParseResult<ASTAny> {
             // TODO: proc type with 0 arguments will have weird src
             let src = args
                 .get(0)
-                .map(|arg| arg.name.slice().clone())
+                .map(|arg| arg.downcast().name.slice().clone())
                 .unwrap_or(open_brace.clone())
                 .spanning(&close);
 
@@ -1294,7 +1309,7 @@ fn func(i: Slice) -> ParseResult<AST<Func>> {
             let src = pure
                 .unwrap_or(asyn.unwrap_or_else(|| {
                     args.get(0)
-                        .map(|arg| arg.name.slice().clone())
+                        .map(|arg| arg.downcast().name.slice().clone())
                         .unwrap_or(body.slice().clone())
                 }))
                 .spanning(body.slice());

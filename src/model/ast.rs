@@ -149,17 +149,6 @@ where
     }
 }
 
-impl Parentable for Arg {
-    fn set_parent<TParentKind>(&mut self, parent: &AST<TParentKind>)
-    where
-        TParentKind: Clone + TryFrom<ASTDetails>,
-        ASTDetails: From<TParentKind>,
-    {
-        self.name.set_parent(parent);
-        self.type_annotation.set_parent(parent);
-    }
-}
-
 impl Parentable for ObjectTypeEntry {
     fn set_parent<TParentKind>(&mut self, parent: &AST<TParentKind>)
     where
@@ -446,7 +435,7 @@ pub enum ASTDetails {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ProcType {
-        args: Vec<Arg>,
+        args: Vec<AST<Arg>>,
         args_spread: Option<ASTAny>,
         is_pure: bool,
         is_async: bool,
@@ -455,11 +444,18 @@ pub enum ASTDetails {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     FuncType {
-        args: Vec<Arg>,
+        args: Vec<AST<Arg>>,
         args_spread: Option<ASTAny>,
         is_pure: bool,
         is_async: bool,
         returns: Option<ASTAny>,
+    },
+
+    #[evt(derive(Debug, Clone, PartialEq))]
+    Arg {
+        name: AST<PlainIdentifier>,
+        type_annotation: Option<ASTAny>,
+        optional: bool,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
@@ -667,13 +663,6 @@ pub struct KeyValueType {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SpreadType(pub ASTAny);
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Arg {
-    pub name: AST<PlainIdentifier>,
-    pub type_annotation: Option<ASTAny>,
-    pub optional: bool,
-}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct InlineDeclaration {

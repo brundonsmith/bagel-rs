@@ -19,10 +19,16 @@ impl ASTAny {
             } => Type::ProcType {
                 args: args
                     .into_iter()
-                    .map(|a| Arg {
-                        name: a.name.downcast().0.as_str().to_owned(),
-                        type_annotation: a.type_annotation.as_ref().map(|s| s.resolve_type(ctx)),
-                        optional: a.optional,
+                    .map(|a| {
+                        let a = a.downcast();
+                        Arg {
+                            name: a.name.downcast().0.as_str().to_owned(),
+                            type_annotation: a
+                                .type_annotation
+                                .as_ref()
+                                .map(|s| s.resolve_type(ctx)),
+                            optional: a.optional,
+                        }
                     })
                     .collect(),
                 args_spread: args_spread
@@ -42,10 +48,16 @@ impl ASTAny {
             } => Type::FuncType {
                 args: args
                     .into_iter()
-                    .map(|a| Arg {
-                        name: a.name.downcast().0.as_str().to_owned(),
-                        type_annotation: a.type_annotation.as_ref().map(|s| s.resolve_type(ctx)),
-                        optional: a.optional,
+                    .map(|a| {
+                        let a = a.downcast();
+                        Arg {
+                            name: a.name.downcast().0.as_str().to_owned(),
+                            type_annotation: a
+                                .type_annotation
+                                .as_ref()
+                                .map(|s| s.resolve_type(ctx)),
+                            optional: a.optional,
+                        }
                     })
                     .collect(),
                 args_spread: args_spread
@@ -160,6 +172,11 @@ impl ASTAny {
                 }
             }
 
+            ASTDetails::Arg {
+                name,
+                type_annotation,
+                optional,
+            } => unreachable!(),
             ASTDetails::ExactStringLiteral { tag: _, value: _ } => unreachable!(),
             ASTDetails::NumberLiteral(_) => unreachable!(),
             ASTDetails::BooleanLiteral(_) => unreachable!(),

@@ -299,6 +299,14 @@ where
                 is_async,
                 returns,
             } => todo!(),
+            ASTDetails::Arg {
+                name,
+                type_annotation,
+                optional,
+            } => {
+                name.compile(f)?;
+                compile_type_annotation(f, type_annotation.as_ref())
+            }
             ASTDetails::GenericType { type_params, inner } => todo!(),
             ASTDetails::TypeParam { name, extends } => todo!(),
             ASTDetails::BoundGenericType { type_args, generic } => todo!(),
@@ -430,7 +438,7 @@ pub const INT_FN: &str = "___fn_";
 fn compile_function<W: Write>(
     f: &mut W,
     name: Option<&str>,
-    args: &Vec<Arg>,
+    args: &Vec<AST<Arg>>,
     return_type_void: bool, // HACK
     return_type: Option<&ASTAny>,
     body: &ASTAny,
@@ -443,14 +451,8 @@ fn compile_function<W: Write>(
     }
 
     f.write_char('(')?;
-    for Arg {
-        name,
-        type_annotation,
-        optional,
-    } in args
-    {
-        name.compile(f)?;
-        compile_type_annotation(f, type_annotation.as_ref())?;
+    for arg in args {
+        arg.compile(f)?;
     }
     f.write_char(')')?;
 
