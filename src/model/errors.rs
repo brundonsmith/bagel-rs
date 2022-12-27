@@ -40,6 +40,12 @@ pub enum BagelError {
 }
 
 impl BagelError {
+    pub fn pretty_print_string(&self, color: bool) -> Result<String, std::fmt::Error> {
+        let mut buf = String::new();
+        self.pretty_print(&mut buf, color)?;
+        Ok(buf)
+    }
+
     pub fn pretty_print<W: Write>(&self, f: &mut W, color: bool) -> std::fmt::Result {
         match self {
             BagelError::ModuleNotFoundError {

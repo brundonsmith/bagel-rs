@@ -3,7 +3,11 @@ use std::rc::Rc;
 use regex::Regex;
 use reqwest::Url;
 
-use crate::{model::module::ModuleID, passes::compile::Compilable, passes::parse::parse};
+use crate::{
+    model::{errors::BagelError, module::ModuleID},
+    passes::compile::Compilable,
+    passes::parse::parse,
+};
 
 #[test]
 fn Simple_func_declaration() {
@@ -772,13 +776,22 @@ fn test_compile(bgl: &str, js: &str) {
     let parsed = parse(
         ModuleID::try_from(Url::try_from("https://foo.bar").unwrap()).unwrap(),
         Rc::new(bgl.to_owned() + " "),
-    )
-    .unwrap();
+    );
 
-    let mut compiled = String::new();
-    parsed.compile(&mut compiled).unwrap();
-
-    assert_eq!(normalize(&compiled), normalize(js));
+    match parsed {
+        Ok(parsed) => {
+            let mut compiled = String::new();
+            parsed.compile(&mut compiled).unwrap();
+            assert_eq!(normalize(&compiled), normalize(js));
+        }
+        Err(err) => {
+            println!(
+                "{}\n",
+                BagelError::from(err).pretty_print_string(true).unwrap(),
+            );
+            panic!("Parsing failed");
+        }
+    }
 }
 
 fn normalize(js: &str) -> String {

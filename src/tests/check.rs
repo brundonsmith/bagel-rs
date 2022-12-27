@@ -3917,10 +3917,10 @@ fn test_check(bgl: &str, should_fail: bool) {
         }
         Err(err) => {
             let mut buf = String::new();
-            BagelError::from(err).pretty_print(&mut buf, true);
+            BagelError::from(err).pretty_print_string(true);
 
-            println!("{}", buf);
-            panic!("\nFailed to parse input");
+            println!("{}\n", buf);
+            panic!("Failed to parse input");
         }
     }
 }
