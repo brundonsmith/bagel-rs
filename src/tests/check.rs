@@ -87,6 +87,7 @@ fn Function_as_argument_inference_3() {
         false,
     );
 }
+
 #[test]
 fn Function_as_argument_inference_4() {
     test_check(

@@ -146,15 +146,9 @@ where
                         .args
                         .into_iter()
                         .map(|a| {
-                            let a = a.downcast();
-
-                            bgl_type::Arg {
-                                name: a.name.downcast().0.as_str().to_owned(),
-                                type_annotation: a
-                                    .type_annotation
-                                    .map(|a| a.resolve_type(ctx.into())),
-                                optional: a.optional,
-                            }
+                            a.downcast()
+                                .type_annotation
+                                .map(|a| a.resolve_type(ctx.into()))
                         })
                         .collect(),
                     args_spread: type_annotation
@@ -183,15 +177,9 @@ where
                         .args
                         .into_iter()
                         .map(|a| {
-                            let a = a.downcast();
-
-                            bgl_type::Arg {
-                                name: a.name.downcast().0.as_str().to_owned(),
-                                type_annotation: a
-                                    .type_annotation
-                                    .map(|a| a.resolve_type(ctx.into())),
-                                optional: a.optional,
-                            }
+                            a.downcast()
+                                .type_annotation
+                                .map(|a| a.resolve_type(ctx.into()))
                         })
                         .collect(),
                     args_spread: type_annotation

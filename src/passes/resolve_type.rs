@@ -1,6 +1,6 @@
 use crate::model::{
     ast::*,
-    bgl_type::{Arg, Type},
+    bgl_type::Type,
     module::{Module, ModulesStore},
 };
 
@@ -20,15 +20,10 @@ impl ASTAny {
                 args: args
                     .into_iter()
                     .map(|a| {
-                        let a = a.downcast();
-                        Arg {
-                            name: a.name.downcast().0.as_str().to_owned(),
-                            type_annotation: a
-                                .type_annotation
-                                .as_ref()
-                                .map(|s| s.resolve_type(ctx)),
-                            optional: a.optional,
-                        }
+                        a.downcast()
+                            .type_annotation
+                            .as_ref()
+                            .map(|s| s.resolve_type(ctx))
                     })
                     .collect(),
                 args_spread: args_spread
@@ -49,15 +44,10 @@ impl ASTAny {
                 args: args
                     .into_iter()
                     .map(|a| {
-                        let a = a.downcast();
-                        Arg {
-                            name: a.name.downcast().0.as_str().to_owned(),
-                            type_annotation: a
-                                .type_annotation
-                                .as_ref()
-                                .map(|s| s.resolve_type(ctx)),
-                            optional: a.optional,
-                        }
+                        a.downcast()
+                            .type_annotation
+                            .as_ref()
+                            .map(|s| s.resolve_type(ctx))
                     })
                     .collect(),
                 args_spread: args_spread

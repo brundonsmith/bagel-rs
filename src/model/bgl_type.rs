@@ -28,7 +28,7 @@ pub enum Type {
     UnionType(Vec<Type>),
 
     ProcType {
-        args: Vec<Arg>,
+        args: Vec<Option<Type>>,
         args_spread: Option<Box<Type>>,
         is_pure: bool,
         is_async: bool,
@@ -36,7 +36,7 @@ pub enum Type {
     },
 
     FuncType {
-        args: Vec<Arg>,
+        args: Vec<Option<Type>>,
         args_spread: Option<Box<Type>>,
         is_pure: bool,
         returns: Box<Type>,
@@ -85,13 +85,6 @@ pub enum Type {
     PoisonedType,
 
     AnyType,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct Arg {
-    pub name: String,
-    pub type_annotation: Option<Type>,
-    pub optional: bool,
 }
 
 impl Type {
@@ -335,13 +328,50 @@ impl Display for Type {
                 is_pure,
                 is_async,
                 throws,
-            } => todo!(),
+            } => {
+                if *is_pure {
+                    f.write_str("pure ")?;
+                }
+
+                if *is_async {
+                    f.write_str("async ")?;
+                }
+
+                f.write_char('(')?;
+                for arg in args {
+                    if let Some(arg) = arg {
+                        f.write_fmt(format_args!("{}", arg))?;
+                    } else {
+                        f.write_str("_")?;
+                    }
+                }
+                f.write_str(") {}")?;
+
+                Ok(())
+            }
             Type::FuncType {
                 args,
                 args_spread,
                 is_pure,
                 returns,
-            } => todo!(),
+            } => {
+                if *is_pure {
+                    f.write_str("pure ")?;
+                }
+
+                f.write_char('(')?;
+                for arg in args {
+                    if let Some(arg) = arg {
+                        f.write_fmt(format_args!("{}", arg))?;
+                    } else {
+                        f.write_str("_")?;
+                    }
+                }
+                f.write_str(") => ")?;
+                f.write_fmt(format_args!("{}", returns))?;
+
+                Ok(())
+            }
             Type::ObjectType {
                 entries,
                 is_interface,

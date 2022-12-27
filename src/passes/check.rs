@@ -296,7 +296,7 @@ where
                 if let Some((arg_types, args_spread_type)) = types {
                     for (i, arg) in args.iter().enumerate() {
                         if let Some(arg_type) = arg_types.get(i) {
-                            if let Some(type_annotation) = &arg_type.type_annotation {
+                            if let Some(type_annotation) = &arg_type {
                                 check_subsumation(
                                     type_annotation,
                                     arg.infer_type(ctx.into()),
