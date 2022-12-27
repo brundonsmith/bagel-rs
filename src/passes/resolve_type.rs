@@ -6,7 +6,7 @@ use crate::model::{
 
 use super::{check::CheckContext, typeinfer::InferTypeContext};
 
-impl AST {
+impl ASTAny {
     pub fn resolve_type<'a>(&self, ctx: ResolveContext<'a>) -> Type {
         match self.details() {
             ASTDetails::GenericParamType { name, extends } => todo!(),
@@ -20,7 +20,7 @@ impl AST {
                 args: args
                     .into_iter()
                     .map(|a| Arg {
-                        name: a.name.expect::<PlainIdentifier>().0.as_str().to_owned(),
+                        name: a.name.downcast().0.as_str().to_owned(),
                         type_annotation: a.type_annotation.as_ref().map(|s| s.resolve_type(ctx)),
                         optional: a.optional,
                     })
@@ -43,7 +43,7 @@ impl AST {
                 args: args
                     .into_iter()
                     .map(|a| Arg {
-                        name: a.name.expect::<PlainIdentifier>().0.as_str().to_owned(),
+                        name: a.name.downcast().0.as_str().to_owned(),
                         type_annotation: a.type_annotation.as_ref().map(|s| s.resolve_type(ctx)),
                         optional: a.optional,
                     })

@@ -2,7 +2,7 @@ use colored::{Color, Colorize};
 use nom::IResult;
 
 use crate::{
-    model::{ast::AST, slice::Slice},
+    model::{ast::ASTAny, slice::Slice},
     passes::parse::RawParseError,
 };
 
@@ -17,21 +17,21 @@ impl Loggable for Slice {
     }
 }
 
-impl Loggable for AST {
+impl Loggable for ASTAny {
     fn log(self) -> Self {
         println!("{:?}", &self);
         self
     }
 }
 
-impl Loggable for (Slice, AST) {
+impl Loggable for (Slice, ASTAny) {
     fn log(self) -> Self {
         println!("{:?}", &self);
         self
     }
 }
 
-impl Loggable for IResult<Slice, AST, RawParseError> {
+impl Loggable for IResult<Slice, ASTAny, RawParseError> {
     fn log(self) -> Self {
         println!("{:?}", &self);
         self

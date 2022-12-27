@@ -3,9 +3,9 @@ use std::{fmt::Write, usize};
 use colored::Colorize;
 use enum_variant_type::EnumVariantType;
 
-use crate::{model::ast::LocalIdentifier, model::bgl_type::SubsumationIssue, model::slice::Slice};
+use crate::{model::bgl_type::SubsumationIssue, model::slice::Slice};
 
-use super::{ast::AST, module::ModuleID};
+use super::{ast::ASTAny, module::ModuleID};
 
 #[derive(Debug, Clone, PartialEq, EnumVariantType)]
 pub enum BagelError {
@@ -35,7 +35,7 @@ pub enum BagelError {
     #[evt(derive(Debug, Clone, PartialEq))]
     NotFoundError {
         module_id: ModuleID,
-        identifier: AST,
+        identifier: ASTAny,
     },
 }
 

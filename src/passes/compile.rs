@@ -1,5 +1,4 @@
 use crate::model::{ast::*, module::Module};
-use core::ops::Deref;
 use std::fmt::{Result, Write};
 
 impl Module {
@@ -12,7 +11,11 @@ pub trait Compilable {
     fn compile<W: Write>(&self, f: &mut W) -> Result;
 }
 
-impl Compilable for AST {
+impl<TKind> Compilable for AST<TKind>
+where
+    TKind: Clone + TryFrom<ASTDetails>,
+    ASTDetails: From<TKind>,
+{
     fn compile<W: Write>(&self, f: &mut W) -> Result {
         match self.details() {
             ASTDetails::Module { declarations } => {
@@ -38,8 +41,8 @@ impl Compilable for AST {
                 platforms,
                 decorators,
             } => {
-                let func = func.expect::<Func>();
-                let type_annotation = func.type_annotation.expect::<FuncType>();
+                let func = func.downcast();
+                let type_annotation = func.type_annotation.downcast();
 
                 if *exported {
                     f.write_str("export ")?;
@@ -64,8 +67,8 @@ impl Compilable for AST {
                 platforms,
                 decorators,
             } => {
-                let proc = proc.expect::<Proc>();
-                let type_annotation = proc.type_annotation.expect::<ProcType>();
+                let proc = proc.downcast();
+                let type_annotation = proc.type_annotation.downcast();
 
                 if *exported {
                     f.write_str("export ")?;
@@ -179,7 +182,7 @@ impl Compilable for AST {
                 is_pure,
                 body,
             } => {
-                let type_annotation = type_annotation.expect::<FuncType>();
+                let type_annotation = type_annotation.downcast();
 
                 compile_function(
                     f,
@@ -364,6 +367,17 @@ impl Compilable for AST {
     }
 }
 
+// impl<'a, TKind> Compilable for AST<TKind>
+// where
+//     TKind: 'a,
+//     &'a TKind: From<&'a ASTDetails>,
+//     ASTDetails: TryInto<TKind>,
+// {
+//     fn compile<W: Write>(&self, f: &mut W) -> Result {
+//         self.into().compile(f)
+//     }
+// }
+
 impl Compilable for Arg {
     fn compile<W: Write>(&self, f: &mut W) -> Result {
         let Arg {
@@ -418,8 +432,8 @@ fn compile_function<W: Write>(
     name: Option<&str>,
     args: &Vec<Arg>,
     return_type_void: bool, // HACK
-    return_type: Option<&AST>,
-    body: &AST,
+    return_type: Option<&ASTAny>,
+    body: &ASTAny,
 ) -> Result {
     f.write_str("function ")?;
 
@@ -459,7 +473,7 @@ fn compile_function<W: Write>(
     Ok(())
 }
 
-fn compile_type_annotation<W: Write>(f: &mut W, type_annotation: Option<&AST>) -> Result {
+fn compile_type_annotation<W: Write>(f: &mut W, type_annotation: Option<&ASTAny>) -> Result {
     if let Some(type_annotation) = type_annotation {
         f.write_str(": ")?;
         type_annotation.compile(f)?;

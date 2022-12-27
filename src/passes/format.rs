@@ -7,7 +7,7 @@ impl Module {
     }
 }
 
-impl Display for AST {
+impl Display for ASTAny {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         self.format(f, FormatOptions::DEFAULT)
     }
@@ -17,7 +17,11 @@ pub trait Formattable {
     fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result;
 }
 
-impl Formattable for AST {
+impl<TKind> Formattable for AST<TKind>
+where
+    TKind: Clone + TryFrom<ASTDetails>,
+    ASTDetails: From<TKind>,
+{
     fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
         match self.details() {
             ASTDetails::Module { declarations } => {
@@ -151,7 +155,7 @@ impl Formattable for AST {
                 is_pure,
                 body,
             } => {
-                let type_annotation = type_annotation.expect::<FuncType>();
+                let type_annotation = type_annotation.downcast();
 
                 f.write_char('(')?;
                 type_annotation.args.format(f, opts)?;
@@ -384,7 +388,7 @@ where
 fn format_type_annotation<W: Write>(
     f: &mut W,
     opts: FormatOptions,
-    type_annotation: Option<&AST>,
+    type_annotation: Option<&ASTAny>,
 ) -> Result {
     if let Some(type_annotation) = type_annotation {
         f.write_str(": ")?;

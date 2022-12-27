@@ -1,7 +1,7 @@
 use crate::{
     model::ast::*,
     model::{
-        ast::{ASTDetails, AST},
+        ast::ASTDetails,
         bgl_type::{self, Type},
         module::Module,
     },
@@ -11,7 +11,11 @@ use crate::{
 
 use super::resolve_type::ResolveContext;
 
-impl AST {
+impl<TKind> AST<TKind>
+where
+    TKind: Clone + TryFrom<ASTDetails>,
+    ASTDetails: From<TKind>,
+{
     pub fn infer_type<'a>(&self, ctx: InferTypeContext<'a>) -> Type {
         match self.details() {
             ASTDetails::BinaryOperation { left, op, right } => match op.details() {
@@ -68,7 +72,7 @@ impl AST {
                             platforms: _,
                             decorators: _,
                         } => {
-                            return proc.infer_type(ctx);
+                            return proc.clone().upcast().infer_type(ctx);
                         }
                         ASTDetails::FuncDeclaration {
                             name: _,
@@ -77,7 +81,7 @@ impl AST {
                             platforms: _,
                             decorators: _,
                         } => {
-                            return func.infer_type(ctx);
+                            return func.clone().upcast().infer_type(ctx);
                         }
                         ASTDetails::ValueDeclaration {
                             name: _,
@@ -125,14 +129,14 @@ impl AST {
                 is_pure,
                 body,
             } => {
-                let type_annotation = type_annotation.expect::<FuncType>();
+                let type_annotation = type_annotation.downcast();
 
                 Type::FuncType {
                     args: type_annotation
                         .args
                         .into_iter()
                         .map(|a| bgl_type::Arg {
-                            name: a.name.expect::<PlainIdentifier>().0.as_str().to_owned(),
+                            name: a.name.downcast().0.as_str().to_owned(),
                             type_annotation: a.type_annotation.map(|a| a.resolve_type(ctx.into())),
                             optional: a.optional,
                         })
@@ -156,14 +160,14 @@ impl AST {
                 is_pure,
                 body,
             } => {
-                let type_annotation = type_annotation.expect::<ProcType>();
+                let type_annotation = type_annotation.downcast();
 
                 Type::ProcType {
                     args: type_annotation
                         .args
                         .into_iter()
                         .map(|a| bgl_type::Arg {
-                            name: a.name.expect::<PlainIdentifier>().0.as_str().to_owned(),
+                            name: a.name.downcast().0.as_str().to_owned(),
                             type_annotation: a.type_annotation.map(|a| a.resolve_type(ctx.into())),
                             optional: a.optional,
                         })
@@ -218,8 +222,13 @@ impl AST {
             } => Type::UnionType(
                 cases
                     .iter()
-                    .chain(default_case.iter())
-                    .map(|expr| expr.infer_type(ctx))
+                    .map(|case| case.downcast().outcome.infer_type(ctx))
+                    .chain(
+                        default_case
+                            .as_ref()
+                            .map(|case| case.infer_type(ctx))
+                            .into_iter(),
+                    )
                     .collect(),
             ),
             ASTDetails::SwitchExpression {

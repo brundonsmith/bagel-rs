@@ -3,8 +3,6 @@ use std::{fmt::Debug, rc::Rc};
 
 use nom::{AsChar, Compare, InputIter, InputLength, InputTake, Offset, UnspecializedInput};
 
-use crate::utils::Loggable;
-
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct Slice {
     pub full_string: Rc<String>,

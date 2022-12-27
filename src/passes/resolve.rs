@@ -1,7 +1,11 @@
 use crate::model::ast::*;
 
-impl AST {
-    pub fn resolve_symbol(&self, symbol: &str) -> Option<AST> {
+impl<TKind> AST<TKind>
+where
+    TKind: Clone + TryFrom<ASTDetails>,
+    ASTDetails: From<TKind>,
+{
+    pub fn resolve_symbol(&self, symbol: &str) -> Option<ASTAny> {
         match self.details() {
             ASTDetails::Module { declarations } => {
                 return declarations.iter().find_map(|decl| {
@@ -13,7 +17,7 @@ impl AST {
                             declared_type: _,
                             exported: _,
                         } => {
-                            let name = name.expect::<PlainIdentifier>();
+                            let name = name.downcast();
 
                             if name.0.as_str() == symbol {
                                 return Some(decl.clone());
@@ -26,7 +30,7 @@ impl AST {
                             platforms: _,
                             decorators: _,
                         } => {
-                            let name = name.expect::<PlainIdentifier>();
+                            let name = name.downcast();
 
                             if name.0.as_str() == symbol {
                                 return Some(decl.clone());
@@ -39,7 +43,7 @@ impl AST {
                             platforms: _,
                             decorators: _,
                         } => {
-                            let name = name.expect::<PlainIdentifier>();
+                            let name = name.downcast();
 
                             if name.0.as_str() == symbol {
                                 return Some(decl.clone());
@@ -53,7 +57,7 @@ impl AST {
                             exported: _,
                             platforms: _,
                         } => {
-                            let name = name.expect::<PlainIdentifier>();
+                            let name = name.downcast();
 
                             if name.0.as_str() == symbol {
                                 return Some(decl.clone());

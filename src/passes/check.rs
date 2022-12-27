@@ -1,5 +1,3 @@
-use boa::syntax::ast::node::spread;
-
 use crate::{
     model::{
         ast::BinaryOperatorOp,
@@ -17,7 +15,7 @@ impl Module {
     pub fn check<'a, F: FnMut(BagelError)>(&self, ctx: CheckContext<'a>, report_error: &mut F) {
         let start = SystemTime::now();
 
-        self.ast.check(ctx, report_error);
+        self.ast.clone().upcast().check(ctx, report_error);
 
         if DEBUG_MODE {
             println!(
@@ -33,7 +31,11 @@ pub trait Checkable {
     fn check<'a, F: FnMut(BagelError)>(&self, ctx: CheckContext<'a>, report_error: &mut F);
 }
 
-impl Checkable for AST {
+impl<TKind> Checkable for AST<TKind>
+where
+    TKind: Clone + TryFrom<ASTDetails>,
+    ASTDetails: From<TKind>,
+{
     fn check<'a, F: FnMut(BagelError)>(&self, ctx: CheckContext<'a>, report_error: &mut F) {
         let mut check_subsumation =
             |destination: &Type, value: Type, slice: &Slice, report_error: &mut F| {
@@ -193,7 +195,7 @@ impl Checkable for AST {
                 if self.resolve_symbol(name.as_str()).is_none() {
                     report_error(BagelError::NotFoundError {
                         module_id: ctx.current_module.module_id.clone(),
-                        identifier: self.clone(),
+                        identifier: self.clone().upcast(),
                     });
                 }
             }
@@ -235,10 +237,10 @@ impl Checkable for AST {
                 is_pure,
                 body,
             } => {
-                type_annotation.check(ctx, report_error);
+                type_annotation.clone().upcast().check(ctx, report_error);
                 body.check(ctx, report_error);
 
-                let type_annotation = type_annotation.expect::<FuncType>();
+                let type_annotation = type_annotation.downcast();
                 if let Some(return_type) = type_annotation.returns {
                     check_subsumation(
                         &return_type.resolve_type(ctx.into()),
@@ -333,8 +335,7 @@ impl Checkable for AST {
 
                 let truthiness_safe = Type::get_truthiness_safe_types();
                 for case in cases {
-                    let IfElseExpressionCase { condition, outcome } =
-                        case.expect::<IfElseExpressionCase>();
+                    let IfElseExpressionCase { condition, outcome } = case.downcast();
 
                     check_subsumation(
                         &truthiness_safe,

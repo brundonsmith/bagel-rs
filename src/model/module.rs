@@ -1,4 +1,4 @@
-use super::ast::{ASTDetails, AST};
+use super::ast::{self, ASTDetails, AST};
 use super::errors::ParseError;
 use super::slice::Slice;
 use crate::passes::parse::parse;
@@ -37,10 +37,10 @@ impl ModulesStore {
                 }),
             );
 
-            if let Some(Ok(ASTDetails::Module { declarations })) = self
+            if let Some(Ok(ast::Module { declarations })) = self
                 .modules
                 .get(&module_id)
-                .map(|res| res.as_ref().map(|module| module.ast.details()))
+                .map(|res| res.as_ref().map(|module| module.ast.downcast()))
             {
                 let imported: Vec<String> = declarations
                     .iter()
@@ -207,5 +207,5 @@ impl From<Url> for ModuleID {
 pub struct Module {
     pub module_id: ModuleID,
     pub src: Slice,
-    pub ast: AST,
+    pub ast: AST<ast::Module>,
 }
