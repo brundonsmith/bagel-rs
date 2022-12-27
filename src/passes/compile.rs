@@ -82,7 +82,7 @@ where
                     &type_annotation.args,
                     true,
                     None,
-                    &proc.body,
+                    &proc.body.upcast(),
                 )?;
                 f.write_str(";")
             }

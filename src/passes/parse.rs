@@ -223,14 +223,14 @@ fn import_declaration(i: Slice) -> ParseResult<ASTAny> {
 }
 
 #[memoize]
-fn import_item(i: Slice) -> ParseResult<ASTAny> {
+fn import_item(i: Slice) -> ParseResult<AST<ImportItem>> {
     map(
         pair(
             plain_identifier,
             opt(map(seq!(tag("as"), plain_identifier), |(_, alias)| alias)),
         ),
         |(mut name, mut alias)| {
-            make_node!(
+            make_node_typed!(
                 ImportItem,
                 name.slice().clone().spanning(
                     alias
@@ -424,10 +424,12 @@ fn proc_declaration(i: Slice) -> ParseResult<ASTAny> {
 }
 
 #[memoize]
-fn block(i: Slice) -> ParseResult<ASTAny> {
+fn block(i: Slice) -> ParseResult<AST<Block>> {
     map(
         seq!(tag("{"), many0(statement), tag("}")),
-        |(open, mut statements, close)| make_node_tuple!(Block, open.spanning(&close), statements),
+        |(open, mut statements, close)| {
+            make_node_tuple_typed!(Block, open.spanning(&close), statements)
+        },
     )(i)
 }
 
@@ -822,12 +824,12 @@ fn if_else_statement(i: Slice) -> ParseResult<ASTAny> {
 }
 
 #[memoize]
-fn if_else_statement_case(i: Slice) -> ParseResult<ASTAny> {
+fn if_else_statement_case(i: Slice) -> ParseResult<AST<IfElseStatementCase>> {
     map(
         seq!(tag("if"), expression(0), block),
         |(start, mut condition, mut outcome)| {
-            make_node!(
-                IfElseExpressionCase,
+            make_node_typed!(
+                IfElseStatementCase,
                 start.spanning(outcome.slice()),
                 condition,
                 outcome
@@ -1086,10 +1088,9 @@ macro_rules! parse_binary_operation {
 
                     for (op, mut right) in clauses {
                         let mut old_left = left.clone();
-                        let mut op = ASTDetails::BinaryOperator(
-                            BinaryOperatorOp::from_str(op.as_str()).unwrap(),
-                        )
-                        .with_slice(op);
+                        let mut op =
+                            BinaryOperator(BinaryOperatorOp::from_str(op.as_str()).unwrap())
+                                .with_slice(op);
 
                         left = ASTDetails::BinaryOperation {
                             left: old_left.clone(),

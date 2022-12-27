@@ -208,7 +208,7 @@ pub enum ASTDetails {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ImportDeclaration {
-        imports: Vec<ASTAny>,
+        imports: Vec<AST<ImportItem>>,
         path: AST<ExactStringLiteral>,
     },
 
@@ -231,7 +231,7 @@ pub enum ASTDetails {
         func: AST<Func>,
         exported: bool,
         platforms: PlatformSet,
-        decorators: Vec<ASTAny>,
+        decorators: Vec<AST<Decorator>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
@@ -240,7 +240,7 @@ pub enum ASTDetails {
         proc: AST<Proc>,
         exported: bool,
         platforms: PlatformSet,
-        decorators: Vec<ASTAny>,
+        decorators: Vec<AST<Decorator>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
@@ -268,12 +268,12 @@ pub enum ASTDetails {
     #[evt(derive(Debug, Clone, PartialEq))]
     TestBlockDeclaration {
         name: AST<ExactStringLiteral>,
-        block: ASTAny,
+        block: AST<Block>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     TestTypeDeclaration {
-        name: ASTAny,
+        name: AST<ExactStringLiteral>,
         destination_type: ASTAny,
         value_type: ASTAny,
     },
@@ -308,7 +308,7 @@ pub enum ASTDetails {
     #[evt(derive(Debug, Clone, PartialEq))]
     BinaryOperation {
         left: ASTAny,
-        op: ASTAny,
+        op: AST<BinaryOperator>,
         right: ASTAny,
     },
 
@@ -343,7 +343,7 @@ pub enum ASTDetails {
         type_annotation: AST<ProcType>,
         is_async: bool,
         is_pure: bool,
-        body: ASTAny,
+        body: AST<Block>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
@@ -402,7 +402,7 @@ pub enum ASTDetails {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ElementTag {
-        tag_name: ASTAny,
+        tag_name: AST<PlainIdentifier>,
         attributes: Vec<KeyValue>,
         children: Vec<ASTAny>,
     },
@@ -440,7 +440,7 @@ pub enum ASTDetails {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     GenericParamType {
-        name: ASTAny,
+        name: AST<PlainIdentifier>,
         extends: Option<ASTAny>,
     },
 
@@ -464,13 +464,13 @@ pub enum ASTDetails {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     GenericType {
-        type_params: Vec<ASTAny>,
+        type_params: Vec<AST<TypeParam>>,
         inner: ASTAny,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     TypeParam {
-        name: ASTAny,
+        name: AST<PlainIdentifier>,
         extends: Option<ASTAny>,
     },
 
@@ -555,27 +555,27 @@ pub enum ASTDetails {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     IfElseStatement {
-        cases: Vec<ASTAny>,
-        default_case: Option<ASTAny>,
+        cases: Vec<AST<IfElseStatementCase>>,
+        default_case: Option<AST<Block>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     IfElseStatementCase {
         condition: ASTAny,
-        outcome: ASTAny,
+        outcome: AST<Block>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ForLoop {
         item_identifier: AST<PlainIdentifier>,
         iterator: ASTAny,
-        body: ASTAny,
+        body: AST<Block>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     WhileLoop {
         condition: ASTAny,
-        body: ASTAny,
+        body: AST<Block>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
@@ -587,9 +587,9 @@ pub enum ASTDetails {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     TryCatch {
-        try_block: ASTAny,
-        error_identifier: ASTAny,
-        catch_block: ASTAny,
+        try_block: AST<Block>,
+        error_identifier: AST<PlainIdentifier>,
+        catch_block: AST<Block>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
@@ -599,7 +599,7 @@ pub enum ASTDetails {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     Autorun {
-        effect_block: ASTAny,
+        effect_block: AST<Block>,
         until: Option<ASTAny>,
     },
 
@@ -698,19 +698,6 @@ pub struct Destructure {
 }
 
 simple_enum!(DestructureKind = Array | Object);
-
-// macro_rules! from_details_ref {
-//     ($variant:ident) => {
-//         impl From<&ASTDetails> for &$variant {
-//             fn from(s: &ASTDetails) -> Self {
-//                 s.try_into().unwrap()
-//             }
-//         }
-//     };
-// }
-
-// from_details_ref!(Module);
-// from_details_ref!(LocalIdentifier);
 
 // --- Utils ---
 
