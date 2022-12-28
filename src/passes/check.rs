@@ -119,8 +119,26 @@ where
                 value_type,
             } => todo!(),
             ASTDetails::StringLiteral { tag, segments } => todo!(),
-            ASTDetails::ArrayLiteral(_) => todo!(),
+            ASTDetails::ArrayLiteral(members) => {
+                members.check(ctx, report_error);
+
+                for member in members {
+                    if let Some(SpreadExpression(spread_inner)) =
+                        member.try_downcast::<SpreadExpression>()
+                    {
+                        check_subsumation(
+                            &Type::any_array(),
+                            spread_inner.infer_type(ctx.into()),
+                            spread_inner.slice(),
+                            report_error,
+                        );
+                    }
+                }
+            }
             ASTDetails::ObjectLiteral(_) => todo!(),
+            ASTDetails::SpreadExpression(inner) => {
+                inner.check(ctx, report_error);
+            }
             ASTDetails::BinaryOperation { left, op, right } => {
                 let ctx: InferTypeContext = ctx.into();
                 let left_type = left.infer_type(ctx);
@@ -363,7 +381,7 @@ where
                 condition.check(ctx, report_error);
                 outcome.check(ctx, report_error);
 
-                let truthiness_safe = Type::get_truthiness_safe_types();
+                let truthiness_safe = Type::truthiness_safe_types();
                 check_subsumation(
                     &truthiness_safe,
                     condition.infer_type(ctx.into()),
@@ -494,7 +512,7 @@ where
                 condition.check(ctx, report_error);
                 outcome.check(ctx, report_error);
 
-                let truthiness_safe = Type::get_truthiness_safe_types();
+                let truthiness_safe = Type::truthiness_safe_types();
                 check_subsumation(
                     &truthiness_safe,
                     condition.infer_type(ctx.into()),
@@ -512,7 +530,7 @@ where
                 body.check(ctx, report_error);
 
                 check_subsumation(
-                    &Type::get_truthiness_safe_types(),
+                    &Type::truthiness_safe_types(),
                     condition.infer_type(ctx.into()),
                     condition.slice(),
                     report_error,

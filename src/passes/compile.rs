@@ -147,13 +147,17 @@ where
                             f.write_str(": ")?;
                             value.compile(f)?;
                         }
-                        ObjectLiteralEntry::Spread(Spread(expr)) => {
+                        ObjectLiteralEntry::SpreadExpression(SpreadExpression(expr)) => {
                             f.write_str("...")?;
                             expr.compile(f)?;
                         }
                     }
                 }
                 f.write_str(" }")
+            }
+            ASTDetails::SpreadExpression(inner) => {
+                f.write_str("...")?;
+                inner.compile(f)
             }
             ASTDetails::BinaryOperation { left, op, right } => {
                 f.write_char('(')?;

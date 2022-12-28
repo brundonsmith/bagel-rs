@@ -122,13 +122,17 @@ where
                             f.write_str(": ")?;
                             value.format(f, opts)?;
                         }
-                        ObjectLiteralEntry::Spread(Spread(expr)) => {
+                        ObjectLiteralEntry::SpreadExpression(SpreadExpression(expr)) => {
                             f.write_str("...")?;
                             expr.format(f, opts)?;
                         }
                     }
                 }
                 f.write_str(" }")
+            }
+            ASTDetails::SpreadExpression(inner) => {
+                f.write_str("...")?;
+                inner.format(f, opts)
             }
             ASTDetails::BinaryOperation { left, op, right } => {
                 left.format(f, opts)?;

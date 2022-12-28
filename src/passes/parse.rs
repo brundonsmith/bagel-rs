@@ -1283,6 +1283,16 @@ fn range_expression(i: Slice) -> ParseResult<ASTAny> {
 }
 
 #[memoize]
+fn spread_expression(i: Slice) -> ParseResult<AST<SpreadExpression>> {
+    map(
+        tuple((tag("..."), expression(0))),
+        |(mut start, mut inner)| {
+            make_node_tuple_typed!(SpreadExpression, start.spanning(inner.slice()), inner)
+        },
+    )(i)
+}
+
+#[memoize]
 fn javascript_escape_expression(i: Slice) -> ParseResult<ASTAny> {
     todo!()
 }
@@ -1444,7 +1454,7 @@ fn object_literal(i: Slice) -> ParseResult<ASTAny> {
                         key.set_parent(&this);
                         value.set_parent(&this);
                     }
-                    ObjectLiteralEntry::Spread(Spread(expr)) => {
+                    ObjectLiteralEntry::SpreadExpression(SpreadExpression(expr)) => {
                         expr.set_parent(&this);
                     }
                 }
@@ -1473,7 +1483,10 @@ fn array_literal(i: Slice) -> ParseResult<ASTAny> {
     map(
         seq!(
             tag("["),
-            separated_list0(w(char(',')), w(expression(0))),
+            separated_list0(
+                w(char(',')),
+                w(alt((map(spread_expression, AST::upcast), expression(0),)))
+            ),
             tag("]"),
         ),
         |(open_bracket, mut entries, close_bracket)| {

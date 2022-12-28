@@ -95,7 +95,7 @@ impl Type {
     };
     pub const ANY_BOOLEAN: Type = Type::BooleanType(None);
 
-    pub fn get_truthiness_safe_types() -> Type {
+    pub fn truthiness_safe_types() -> Type {
         Type::UnionType(vec![
             Type::ANY_BOOLEAN,
             Type::NilType,
@@ -106,6 +106,10 @@ impl Type {
             // PROC,
             // FUNC
         ])
+    }
+
+    pub fn any_array() -> Type {
+        Type::ArrayType(Box::new(Type::AnyType))
     }
 
     // export const FALSY: UnionType = {
@@ -149,6 +153,11 @@ impl Type {
             (dest, Type::ReadonlyType(inner)) => {
                 return dest
                     .subsumation_issues(ctx.with_val_mutability(Mutability::Readonly), inner);
+            }
+            (Type::ArrayType(element), Type::TupleType(members)) => {
+                if members.iter().all(|member| element.subsumes(ctx, member)) {
+                    return None;
+                }
             }
             (Type::UnionType(members), value) => {
                 if members.iter().any(|member| member.subsumes(ctx, &value)) {

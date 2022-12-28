@@ -213,6 +213,7 @@ impl ASTAny {
             ASTDetails::StringLiteral { tag, segments } => unreachable!(),
             ASTDetails::ArrayLiteral(_) => unreachable!(),
             ASTDetails::ObjectLiteral(_) => unreachable!(),
+            ASTDetails::SpreadExpression(_) => unreachable!(),
             ASTDetails::BinaryOperation { left, op, right } => unreachable!(),
             ASTDetails::BinaryOperator(_) => unreachable!(),
             ASTDetails::NegationOperation(_) => unreachable!(),

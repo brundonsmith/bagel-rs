@@ -397,6 +397,9 @@ pub enum ASTDetails {
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
+    SpreadExpression(ASTAny),
+
+    #[evt(derive(Debug, Clone, PartialEq))]
     ElementTag {
         tag_name: AST<PlainIdentifier>,
         attributes: Vec<KeyValue>,
@@ -649,16 +652,13 @@ impl From<ASTAny> for StringLiteralSegment {
     }
 }
 
-union_type!(ObjectLiteralEntry = KeyValue | Spread);
+union_type!(ObjectLiteralEntry = KeyValue | SpreadExpression);
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct KeyValue {
     pub key: ASTAny,
     pub value: ASTAny,
 }
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Spread(pub ASTAny);
 
 union_type!(ObjectTypeEntry = KeyValueType | SpreadType);
 

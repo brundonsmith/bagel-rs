@@ -146,7 +146,50 @@ where
                 tag: _,
                 segments: _,
             } => Type::ANY_STRING,
-            ASTDetails::ArrayLiteral(entries) => Type::TupleType(todo!()),
+            ASTDetails::ArrayLiteral(members) => {
+                if members
+                    .iter()
+                    .any(|member| member.try_downcast::<SpreadExpression>().is_some())
+                {
+                    let mut member_types: Vec<Type> = vec![];
+                    let mut bail_out_to_union = false;
+
+                    for member in members {
+                        match member.try_downcast::<SpreadExpression>() {
+                            Some(SpreadExpression(spread_inner)) => {
+                                let spread_type = spread_inner.infer_type(ctx);
+
+                                match spread_type {
+                                    Type::TupleType(members) => {
+                                        for member in members {
+                                            member_types.push(member);
+                                        }
+                                    }
+                                    Type::ArrayType(element) => {
+                                        bail_out_to_union = true;
+                                        member_types.push(element.as_ref().clone());
+                                    }
+                                    _ => todo!(),
+                                }
+                            }
+                            None => member_types.push(member.infer_type(ctx)),
+                        }
+                    }
+
+                    if bail_out_to_union {
+                        Type::ArrayType(Box::new(Type::UnionType(member_types)))
+                    } else {
+                        Type::TupleType(member_types)
+                    }
+                } else {
+                    Type::TupleType(
+                        members
+                            .iter()
+                            .map(|member| member.infer_type(ctx))
+                            .collect(),
+                    )
+                }
+            }
             ASTDetails::ObjectLiteral(entries) => todo!(),
             ASTDetails::NegationOperation(inner) => todo!(),
             ASTDetails::Func {
