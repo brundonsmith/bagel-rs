@@ -56,9 +56,95 @@ where
 
                 // todo!("Check for name duplicates");
             }
-            ASTDetails::ImportAllDeclaration { name, path } => todo!(),
-            ASTDetails::ImportDeclaration { imports, path } => todo!(),
-            ASTDetails::ImportItem { name, alias } => todo!(),
+            ASTDetails::ImportAllDeclaration { name, path } => {
+                name.check(ctx, report_error);
+                path.check(ctx, report_error);
+
+                let path = path.downcast();
+                let path = path.value.as_str();
+
+                if ctx
+                    .modules
+                    .import(&ctx.current_module.module_id, path)
+                    .is_none()
+                {
+                    report_error(BagelError::ModuleNotFoundError {
+                        path: path.to_owned(),
+                        importer_module_id: ctx.current_module.module_id.clone(),
+                    })
+                }
+            }
+            ASTDetails::ImportDeclaration { imports, path } => {
+                imports.check(ctx, report_error);
+                path.check(ctx, report_error);
+
+                let path = path.downcast();
+                let path = path.value.as_str();
+
+                let imported_module = ctx.modules.import(&ctx.current_module.module_id, path);
+
+                match imported_module {
+                    None => {
+                        report_error(BagelError::ModuleNotFoundError {
+                            path: path.to_owned(),
+                            importer_module_id: ctx.current_module.module_id.clone(),
+                        });
+                    }
+                    Some(imported_module) => {
+                        let imported_module_downcast = imported_module.ast.downcast();
+                        for item in imports {
+                            let item_downcast = item.downcast();
+                            let item_name = item_downcast.name.downcast();
+                            let item_name = item_name.0.as_str();
+
+                            let decl =
+                                imported_module_downcast.declarations.iter().find(
+                                    |decl| match decl.details() {
+                                        ASTDetails::ValueDeclaration {
+                                            name,
+                                            exported,
+                                            type_annotation: _,
+                                            value: _,
+                                            is_const: _,
+                                            platforms: _,
+                                        } => *exported && name.downcast().0.as_str() == item_name,
+                                        ASTDetails::FuncDeclaration {
+                                            name,
+                                            exported,
+                                            func: _,
+                                            platforms: _,
+                                            decorators: _,
+                                        } => *exported && name.downcast().0.as_str() == item_name,
+                                        ASTDetails::ProcDeclaration {
+                                            name,
+                                            exported,
+                                            proc: _,
+                                            platforms: _,
+                                            decorators: _,
+                                        } => *exported && name.downcast().0.as_str() == item_name,
+                                        _ => unreachable!(),
+                                    },
+                                );
+
+                            if decl.is_none() {
+                                report_error(BagelError::MiscError {
+                                    module_id: ctx.current_module.module_id.clone(),
+                                    src: item.slice().clone(),
+                                    message: format!(
+                                        "No exported member named {} found in module {}",
+                                        blue_string(item_name),
+                                        blue_string(&imported_module.module_id)
+                                    ),
+                                })
+                            }
+                        }
+                    }
+                }
+            }
+            ASTDetails::ImportItem { name, alias } => {
+                name.check(ctx, report_error);
+                alias.check(ctx, report_error);
+            }
             ASTDetails::TypeDeclaration {
                 name,
                 declared_type,
@@ -177,8 +263,8 @@ where
                                 src: op.slice().clone(),
                                 message: format!(
                                     "Can't compare types {} and {} because they have no overlap",
-                                    blue_string(&format!("{}", left_type)),
-                                    blue_string(&format!("{}", right_type)),
+                                    blue_string(&left_type),
+                                    blue_string(&right_type),
                                 ),
                             });
                         }
@@ -366,8 +452,8 @@ where
                         src: subject.slice().clone(),
                         message: format!(
                             "{} is of type {} and cannot be called",
-                            blue_string(&format!("{}", subject)),
-                            blue_string(&format!("{}", subject_type)),
+                            blue_string(&subject),
+                            blue_string(&subject_type),
                         ),
                     });
                 }
@@ -395,8 +481,8 @@ where
                         src: property.slice().clone(),
                         message: format!(
                             "{} cannot be used to index type {}",
-                            blue_string(&format!("{}", property_type)),
-                            blue_string(&format!("{}", subject_type))
+                            blue_string(&property_type),
+                            blue_string(&subject_type)
                         ),
                     })
                 }
@@ -542,7 +628,7 @@ where
                             message: format!(
                                 "Cannot apply {} to {}",
                                 blue_string("keyof"),
-                                blue_string(format!("{}", inner_type).as_str())
+                                blue_string(&inner_type)
                             ),
                         }),
                     }
@@ -565,7 +651,7 @@ where
                             message: format!(
                                 "Cannot apply {} to {}",
                                 blue_string("valueof"),
-                                blue_string(format!("{}", inner_type).as_str())
+                                blue_string(&inner_type)
                             ),
                         }),
                     }
@@ -582,7 +668,7 @@ where
                             message: format!(
                                 "Cannot apply {} to {}",
                                 blue_string("keyof"),
-                                blue_string(format!("{}", inner_type).as_str())
+                                blue_string(&inner_type)
                             ),
                         }),
                     }

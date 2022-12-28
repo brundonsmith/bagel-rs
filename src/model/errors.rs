@@ -1,4 +1,7 @@
-use std::{fmt::Write, usize};
+use std::{
+    fmt::{Display, Write},
+    usize,
+};
 
 use colored::Colorize;
 use enum_variant_type::EnumVariantType;
@@ -23,8 +26,8 @@ pub enum BagelError {
     },
     #[evt(derive(Debug, Clone, PartialEq))]
     ModuleNotFoundError {
-        module_id: ModuleID,
-        importer_module_id: Option<ModuleID>,
+        path: String,
+        importer_module_id: ModuleID,
     },
     #[evt(derive(Debug, Clone, PartialEq))]
     AssignmentError {
@@ -49,15 +52,27 @@ impl BagelError {
     pub fn pretty_print<W: Write>(&self, f: &mut W, color: bool) -> std::fmt::Result {
         match self {
             BagelError::ModuleNotFoundError {
-                module_id,
+                path,
                 importer_module_id,
-            } => todo!(),
+            } => {
+                error_heading(
+                    f,
+                    importer_module_id,
+                    None,
+                    "module not found",
+                    Some(&format!(
+                        "Couldn't find module {}, imported from module {}",
+                        blue_string(path),
+                        blue_string(&importer_module_id),
+                    )),
+                )?;
+            }
             BagelError::MiscError {
                 src,
                 module_id,
                 message,
             } => {
-                error_heading(f, &module_id, &src, "", Some(message.as_str()))?;
+                error_heading(f, &module_id, Some(&src), "", Some(message.as_str()))?;
 
                 f.write_char('\n')?;
 
@@ -68,7 +83,13 @@ impl BagelError {
                 module_id,
                 message,
             } => {
-                error_heading(f, &module_id, &src, "parse error", Some(message.as_str()))?;
+                error_heading(
+                    f,
+                    &module_id,
+                    Some(&src),
+                    "parse error",
+                    Some(message.as_str()),
+                )?;
 
                 f.write_char('\n')?;
 
@@ -79,7 +100,7 @@ impl BagelError {
                 src,
                 issues,
             } => {
-                error_heading(f, &module_id, &src, "assignment error", None)?;
+                error_heading(f, &module_id, Some(&src), "assignment error", None)?;
 
                 match issues {
                     SubsumationIssue::Assignment(levels) => {
@@ -89,17 +110,17 @@ impl BagelError {
                             }
 
                             f.write_str("Type ")?;
-                            f.write_str(&blue_string(&format!("{}", value)))?;
+                            f.write_str(&blue_string(&value))?;
                             f.write_str(" is not assignable to type ")?;
-                            f.write_str(&blue_string(&format!("{}", destination)))?;
+                            f.write_str(&blue_string(&destination))?;
                             f.write_char('\n')?;
                         }
                     }
                     SubsumationIssue::Mutability(destination, value) => {
                         f.write_str("Readonly type ")?;
-                        f.write_str(&blue_string(&format!("{}", value)))?;
+                        f.write_str(&blue_string(&value))?;
                         f.write_str(" is not assignable to mutable type ")?;
-                        f.write_str(&blue_string(&format!("{}", destination)))?;
+                        f.write_str(&blue_string(&destination))?;
                         f.write_char('\n')?;
                     }
                 };
@@ -115,7 +136,7 @@ impl BagelError {
                 error_heading(
                     f,
                     &module_id,
-                    identifier.slice(),
+                    Some(identifier.slice()),
                     "unknown identifier error",
                     None,
                 )?;
@@ -139,7 +160,7 @@ impl BagelError {
 fn error_heading<W: Write>(
     f: &mut W,
     module_id: &ModuleID,
-    src: &Slice,
+    src: Option<&Slice>,
     kind: &str,
     message: Option<&str>,
 ) -> std::fmt::Result {
@@ -147,11 +168,13 @@ fn error_heading<W: Write>(
     f.write_str(&format!("{}", module_id).cyan().to_string())?;
 
     // line and column
-    f.write_char(':')?;
-    let (line, column) = line_and_column(src);
-    f.write_str(&line.to_string().as_str().yellow().to_string())?;
-    f.write_char(':')?;
-    f.write_str(&column.to_string().as_str().yellow().to_string())?;
+    if let Some(src) = src {
+        f.write_char(':')?;
+        let (line, column) = line_and_column(src);
+        f.write_str(&line.to_string().as_str().yellow().to_string())?;
+        f.write_char(':')?;
+        f.write_str(&column.to_string().as_str().yellow().to_string())?;
+    }
 
     f.write_str(" - ")?;
 
@@ -266,6 +289,6 @@ fn line_and_column(slice: &Slice) -> (usize, usize) {
     (line, column)
 }
 
-pub fn blue_string(s: &str) -> String {
-    s.blue().to_string()
+pub fn blue_string<S: Display>(s: S) -> String {
+    format!("{}", s).blue().to_string()
 }

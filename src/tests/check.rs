@@ -1414,19 +1414,22 @@ fn Optional_property_access_fail() {
 }
 
 #[test]
+fn Basic_import_module_pass() {
+    test_check_multi(
+        vec![
+            ("module-1.bgl", "export func foo(b: number) => b * 2"),
+            ("module-2.bgl", "from 'module-1.bgl' import { foo }"),
+        ],
+        false,
+    )
+}
+
+#[test]
 fn Fail_to_import_module() {
     test_check_multi(
         vec![
-            (
-                "module-1.bgl",
-                "
-      export func foo(b: number) => b * 2",
-            ),
-            (
-                "module-2.bgl",
-                "
-      from 'module-3.bgl' import { foo }",
-            ),
+            ("module-1.bgl", "export func foo(b: number) => b * 2"),
+            ("module-2.bgl", "from 'module-3.bgl' import { foo }"),
         ],
         true,
     )

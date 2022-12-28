@@ -66,18 +66,15 @@ impl ModulesStore {
                     .collect();
 
                 for path in imported {
-                    let other_module_id =
-                        if path.starts_with("https://") || path.starts_with("http://") {
-                            ModuleID::from(Url::parse(path.as_str()).unwrap())
-                        } else {
-                            let path = Path::new(&path);
-                            let full_path = path.to_owned(); //module_id.as_path().join(path);
+                    let other_module_id = module_id.imported(&path);
 
-                            ModuleID::try_from(full_path.as_path()).unwrap()
-                        };
-
-                    if !self.modules.contains_key(&other_module_id) {
-                        self.load_module_and_dependencies(other_module_id, clean);
+                    if let Some(other_module_id) = other_module_id {
+                        if !self.modules.contains_key(&other_module_id) {
+                            self.load_module_and_dependencies(other_module_id, clean);
+                        }
+                    } else {
+                        // TODO: Improve this, make it a proper error
+                        println!("ERROR: Malformed import path {:?}", path);
                     }
                 }
             }
@@ -86,6 +83,18 @@ impl ModulesStore {
 
     pub fn iter(&self) -> impl Iterator<Item = (&ModuleID, &Result<Module, ParseError>)> {
         self.modules.iter()
+    }
+
+    pub fn import(&self, current_module_id: &ModuleID, path: &str) -> Option<&Module> {
+        current_module_id
+            .imported(&path)
+            .map(|other_module_id| {
+                self.modules
+                    .get(&other_module_id)
+                    .map(|res| res.as_ref().ok())
+            })
+            .flatten()
+            .flatten()
     }
 }
 
@@ -159,6 +168,20 @@ impl ModuleID {
                 None
             }
             ModuleID::Artificial(_) => unreachable!(),
+        }
+    }
+
+    pub fn imported(&self, imported: &str) -> Option<ModuleID> {
+        if imported.starts_with("https://") || imported.starts_with("http://") {
+            Url::parse(imported).ok().map(ModuleID::from)
+        } else if imported.starts_with("/") {
+            ModuleID::try_from(Path::new(imported)).ok()
+        } else {
+            match self {
+                ModuleID::Local(this) => ModuleID::try_from(this.join(imported).as_path()).ok(),
+                ModuleID::Remote(this) => this.join(imported).ok().map(ModuleID::from),
+                ModuleID::Artificial(_) => Some(ModuleID::Artificial(Rc::new(imported.to_owned()))),
+            }
         }
     }
 }
