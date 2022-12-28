@@ -626,7 +626,7 @@ fn type_expression_inner(l: usize, i: Slice) -> ParseResult<ASTAny> {
             object_or_interface_type,
             tuple_type,
             map(
-                seq!(tag("("), type_expression(tl + 1), tag(")")),
+                seq!(tag("("), type_expression(0), tag(")")),
                 |(open, mut inner, close)| {
                     make_node_tuple!(ParenthesizedType, open.spanning(&close), inner)
                 }

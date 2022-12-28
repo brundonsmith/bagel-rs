@@ -507,7 +507,6 @@ where
             ASTDetails::TupleType(members) => members.check(ctx, report_error),
             ASTDetails::SpecialType { kind, inner } => todo!(),
             ASTDetails::ModifierType { kind, inner } => todo!(),
-            ASTDetails::ParenthesizedType(_) => todo!(),
             ASTDetails::TypeofType(_) => todo!(),
             ASTDetails::PropertyType {
                 subject,
@@ -594,6 +593,7 @@ where
             ASTDetails::BinaryOperator(_) => {}
             ASTDetails::PlainIdentifier(_) => {}
 
+            ASTDetails::ParenthesizedType(_) => {}
             ASTDetails::RegularExpressionType => {}
             ASTDetails::StringLiteralType(_) => {}
             ASTDetails::NumberLiteralType(_) => {}
