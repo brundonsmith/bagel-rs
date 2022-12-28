@@ -8,7 +8,7 @@ use enum_variant_type::EnumVariantType;
 
 use crate::{model::bgl_type::SubsumationIssue, model::slice::Slice};
 
-use super::{ast::ASTAny, module::ModuleID};
+use super::module::ModuleID;
 
 #[derive(Debug, Clone, PartialEq, EnumVariantType)]
 pub enum BagelError {

@@ -1,6 +1,7 @@
 use crate::model::{
     ast::*,
     bgl_type::{SubsumationContext, Type},
+    errors::BagelError,
     module::{Module, ModulesStore},
 };
 
@@ -337,12 +338,13 @@ impl<'a> From<InferTypeContext<'a>> for ResolveContext<'a> {
     }
 }
 
-impl<'a> From<CheckContext<'a>> for ResolveContext<'a> {
+impl<'a, F: FnMut(BagelError)> From<&mut CheckContext<'a, F>> for ResolveContext<'a> {
     fn from(
         CheckContext {
             modules,
             current_module,
-        }: CheckContext<'a>,
+            report_error: _,
+        }: &mut CheckContext<'a, F>,
     ) -> Self {
         Self {
             modules,

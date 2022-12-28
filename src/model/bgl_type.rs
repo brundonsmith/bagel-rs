@@ -9,6 +9,7 @@ use crate::{
 
 use super::{
     ast::{ASTDetails, PlainIdentifier, AST},
+    errors::BagelError,
     module::Module,
     slice::Slice,
 };
@@ -358,12 +359,13 @@ pub struct SubsumationContext<'a> {
     pub val_mutability: Mutability,
 }
 
-impl<'a> From<CheckContext<'a>> for SubsumationContext<'a> {
+impl<'a, F: FnMut(BagelError)> From<&CheckContext<'a, F>> for SubsumationContext<'a> {
     fn from(
         CheckContext {
             modules,
             current_module,
-        }: CheckContext<'a>,
+            report_error: _,
+        }: &CheckContext<'a, F>,
     ) -> Self {
         Self {
             modules,

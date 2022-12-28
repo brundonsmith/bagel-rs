@@ -4,7 +4,12 @@ use crate::{
         errors::BagelError,
         module::{Module, ModulesStore},
     },
-    model::{ast::*, bgl_type::Type, errors::blue_string, slice::Slice},
+    model::{
+        ast::*,
+        bgl_type::{SubsumationContext, Type},
+        errors::blue_string,
+        slice::Slice,
+    },
     passes::typeinfer::InferTypeContext,
     DEBUG_MODE,
 };
@@ -12,10 +17,10 @@ use std::fmt::Debug;
 use std::time::SystemTime;
 
 impl Module {
-    pub fn check<'a, F: FnMut(BagelError)>(&self, ctx: CheckContext<'a>, report_error: &mut F) {
+    pub fn check<'a, F: FnMut(BagelError)>(&self, ctx: &mut CheckContext<'a, F>) {
         let start = SystemTime::now();
 
-        self.ast.check(ctx, report_error);
+        self.ast.check(ctx);
 
         if DEBUG_MODE {
             println!(
@@ -28,7 +33,7 @@ impl Module {
 }
 
 pub trait Checkable {
-    fn check<'a, F: FnMut(BagelError)>(&self, ctx: CheckContext<'a>, report_error: &mut F);
+    fn check<'a, F: FnMut(BagelError)>(&self, ctx: &mut CheckContext<'a, F>);
 }
 
 impl<TKind> Checkable for AST<TKind>
@@ -36,14 +41,16 @@ where
     TKind: Clone + TryFrom<ASTDetails>,
     ASTDetails: From<TKind>,
 {
-    fn check<'a, F: FnMut(BagelError)>(&self, ctx: CheckContext<'a>, report_error: &mut F) {
-        let mut check_subsumation =
+    fn check<'a, F: FnMut(BagelError)>(&self, ctx: &mut CheckContext<'a, F>) {
+        let module_id = &ctx.current_module.module_id.clone();
+        let subsumation_context = SubsumationContext::from(&*ctx);
+        let check_subsumation =
             |destination: &Type, value: Type, slice: &Slice, report_error: &mut F| {
-                let issues = destination.subsumation_issues(ctx.into(), &value);
+                let issues = destination.subsumation_issues(subsumation_context, &value);
 
                 if let Some(issues) = issues {
                     report_error(BagelError::AssignmentError {
-                        module_id: ctx.current_module.module_id.clone(),
+                        module_id: module_id.clone(),
                         src: slice.clone(),
                         issues,
                     });
@@ -52,50 +59,46 @@ where
 
         match self.details() {
             ASTDetails::Module { declarations } => {
-                declarations.check(ctx, report_error);
+                declarations.check(ctx);
 
                 // todo!("Check for name duplicates");
             }
             ASTDetails::ImportAllDeclaration { name, path } => {
-                name.check(ctx, report_error);
-                path.check(ctx, report_error);
+                name.check(ctx);
+                path.check(ctx);
 
                 let path_name = path.downcast();
                 let path_name = path_name.value.as_str();
 
-                if ctx
-                    .modules
-                    .import(&ctx.current_module.module_id, path_name)
-                    .is_none()
-                {
-                    report_error(BagelError::MiscError {
-                        module_id: ctx.current_module.module_id.clone(),
+                if ctx.modules.import(module_id, path_name).is_none() {
+                    ctx.report_error(BagelError::MiscError {
+                        module_id: module_id.clone(),
                         src: path.slice().clone(),
                         message: format!(
                             "Couldn't find module {} from module {}",
                             blue_string(path_name),
-                            blue_string(&ctx.current_module.module_id)
+                            blue_string(module_id)
                         ),
                     });
                 }
             }
             ASTDetails::ImportDeclaration { imports, path } => {
-                imports.check(ctx, report_error);
-                path.check(ctx, report_error);
+                imports.check(ctx);
+                path.check(ctx);
 
                 let path_name = path.downcast();
                 let path_name = path_name.value.as_str();
 
-                let imported_module = ctx.modules.import(&ctx.current_module.module_id, path_name);
+                let imported_module = ctx.modules.import(module_id, path_name);
 
                 match imported_module {
-                    None => report_error(BagelError::MiscError {
+                    None => ctx.report_error(BagelError::MiscError {
                         module_id: ctx.current_module.module_id.clone(),
                         src: path.slice().clone(),
                         message: format!(
                             "Couldn't find module {} from module {}",
                             blue_string(path_name),
-                            blue_string(&ctx.current_module.module_id)
+                            blue_string(module_id)
                         ),
                     }),
                     Some(imported_module) => {
@@ -107,7 +110,7 @@ where
                             let decl = imported_module.get_declaration(item_name, true);
 
                             if decl.is_none() {
-                                report_error(BagelError::MiscError {
+                                ctx.report_error(BagelError::MiscError {
                                     module_id: ctx.current_module.module_id.clone(),
                                     src: item.slice().clone(),
                                     message: format!(
@@ -122,16 +125,16 @@ where
                 }
             }
             ASTDetails::ImportItem { name, alias } => {
-                name.check(ctx, report_error);
-                alias.check(ctx, report_error);
+                name.check(ctx);
+                alias.check(ctx);
             }
             ASTDetails::TypeDeclaration {
                 name,
                 declared_type,
                 exported,
             } => {
-                name.check(ctx, report_error);
-                declared_type.check(ctx, report_error);
+                name.check(ctx);
+                declared_type.check(ctx);
             }
             ASTDetails::FuncDeclaration {
                 name,
@@ -140,9 +143,9 @@ where
                 platforms,
                 decorators,
             } => {
-                name.check(ctx, report_error);
-                func.check(ctx, report_error);
-                decorators.check(ctx, report_error);
+                name.check(ctx);
+                func.check(ctx);
+                decorators.check(ctx);
             }
             ASTDetails::ProcDeclaration {
                 name,
@@ -151,9 +154,9 @@ where
                 platforms,
                 decorators,
             } => {
-                name.check(ctx, report_error);
-                proc.check(ctx, report_error);
-                decorators.check(ctx, report_error);
+                name.check(ctx);
+                proc.check(ctx);
+                decorators.check(ctx);
             }
             ASTDetails::Decorator { name } => todo!(),
             ASTDetails::ValueDeclaration {
@@ -164,16 +167,16 @@ where
                 exported,
                 platforms,
             } => {
-                name.check(ctx, report_error);
-                type_annotation.check(ctx, report_error);
-                value.check(ctx, report_error);
+                name.check(ctx);
+                type_annotation.check(ctx);
+                value.check(ctx);
 
                 if let Some(type_annotation) = type_annotation {
                     check_subsumation(
                         &type_annotation.resolve_type(ctx.into()),
                         value.infer_type(ctx.into()),
                         value.slice(),
-                        report_error,
+                        ctx.report_error,
                     );
                 }
             }
@@ -186,7 +189,7 @@ where
             } => todo!(),
             ASTDetails::StringLiteral { tag, segments } => todo!(),
             ASTDetails::ArrayLiteral(members) => {
-                members.check(ctx, report_error);
+                members.check(ctx);
 
                 for member in members {
                     if let Some(SpreadExpression(spread_inner)) =
@@ -196,49 +199,58 @@ where
                             &Type::any_array(),
                             spread_inner.infer_type(ctx.into()),
                             spread_inner.slice(),
-                            report_error,
+                            ctx.report_error,
                         );
                     }
                 }
             }
             ASTDetails::ObjectLiteral(_) => todo!(),
             ASTDetails::SpreadExpression(inner) => {
-                inner.check(ctx, report_error);
+                inner.check(ctx);
             }
             ASTDetails::BinaryOperation { left, op, right } => {
-                let ctx: InferTypeContext = ctx.into();
-                let left_type = left.infer_type(ctx);
-                let right_type = right.infer_type(ctx);
+                let left_type = left.infer_type(ctx.into());
+                let right_type = right.infer_type(ctx.into());
 
                 let number_or_string = Type::ANY_NUMBER.union(Type::ANY_STRING);
 
                 if let ASTDetails::BinaryOperator(operator) = op.details() {
                     if operator == &BinaryOperatorOp::Plus {
-                        check_subsumation(&number_or_string, left_type, left.slice(), report_error);
+                        check_subsumation(
+                            &number_or_string,
+                            left_type,
+                            left.slice(),
+                            ctx.report_error,
+                        );
                         check_subsumation(
                             &number_or_string,
                             right_type,
                             right.slice(),
-                            report_error,
+                            ctx.report_error,
                         );
                     } else if operator == &BinaryOperatorOp::Minus
                         || operator == &BinaryOperatorOp::Times
                         || operator == &BinaryOperatorOp::Divide
                     {
-                        check_subsumation(&Type::ANY_NUMBER, left_type, left.slice(), report_error);
+                        check_subsumation(
+                            &Type::ANY_NUMBER,
+                            left_type,
+                            left.slice(),
+                            ctx.report_error,
+                        );
                         check_subsumation(
                             &Type::ANY_NUMBER,
                             right_type,
                             right.slice(),
-                            report_error,
+                            ctx.report_error,
                         );
                     } else if operator == &BinaryOperatorOp::Equals
                         || operator == &BinaryOperatorOp::NotEquals
                     {
-                        if !left_type.subsumes(ctx.into(), &right_type)
-                            && !right_type.subsumes(ctx.into(), &left_type)
+                        if !left_type.subsumes((&*ctx).into(), &right_type)
+                            && !right_type.subsumes((&*ctx).into(), &left_type)
                         {
-                            report_error(BagelError::MiscError {
+                            ctx.report_error(BagelError::MiscError {
                                 module_id: ctx.current_module.module_id.clone(),
                                 src: op.slice().clone(),
                                 message: format!(
@@ -265,20 +277,20 @@ where
                 // }
             }
             ASTDetails::NegationOperation(inner) => {
-                inner.check(ctx, report_error);
+                inner.check(ctx);
 
                 check_subsumation(
                     &Type::ANY_NUMBER,
                     inner.infer_type(ctx.into()),
                     inner.slice(),
-                    report_error,
+                    ctx.report_error,
                 );
             }
-            ASTDetails::Parenthesis(inner) => inner.check(ctx, report_error),
+            ASTDetails::Parenthesis(inner) => inner.check(ctx),
             ASTDetails::LocalIdentifier(name) => {
                 // TODO: Make sure it isn't a type
                 if self.resolve_symbol(name.as_str()).is_none() {
-                    report_error(BagelError::MiscError {
+                    ctx.report_error(BagelError::MiscError {
                         module_id: ctx.current_module.module_id.clone(),
                         src: self.slice().clone(),
                         message: format!(
@@ -293,7 +305,7 @@ where
                 let name = name.downcast();
                 let name_str = name.0.as_str();
                 if self.resolve_symbol(name_str).is_none() {
-                    report_error(BagelError::MiscError {
+                    ctx.report_error(BagelError::MiscError {
                         module_id: ctx.current_module.module_id.clone(),
                         src: self.slice().clone(),
                         message: format!(
@@ -307,8 +319,8 @@ where
                 declarations,
                 inner,
             } => {
-                declarations.check(ctx, report_error);
-                inner.check(ctx, report_error);
+                declarations.check(ctx);
+                inner.check(ctx);
             }
             ASTDetails::InlineDeclaration {
                 destination,
@@ -320,15 +332,15 @@ where
                         name,
                         type_annotation,
                     }) => {
-                        name.check(ctx, report_error);
-                        type_annotation.check(ctx, report_error);
+                        name.check(ctx);
+                        type_annotation.check(ctx);
 
                         if let Some(type_annotation) = type_annotation {
                             check_subsumation(
                                 &type_annotation.resolve_type(ctx.into()),
                                 value.infer_type(ctx.into()),
                                 value.slice(),
-                                report_error,
+                                ctx.report_error,
                             );
                         }
                     }
@@ -337,11 +349,11 @@ where
                         spread,
                         destructure_kind,
                     }) => {
-                        properties.check(ctx, report_error);
-                        spread.check(ctx, report_error);
+                        properties.check(ctx);
+                        spread.check(ctx);
                     }
                 }
-                value.check(ctx, report_error);
+                value.check(ctx);
             }
             ASTDetails::Func {
                 type_annotation,
@@ -349,8 +361,8 @@ where
                 is_pure,
                 body,
             } => {
-                type_annotation.check(ctx, report_error);
-                body.check(ctx, report_error);
+                type_annotation.check(ctx);
+                body.check(ctx);
 
                 let type_annotation = type_annotation.downcast();
                 if let Some(return_type) = type_annotation.returns {
@@ -358,7 +370,7 @@ where
                         &return_type.resolve_type(ctx.into()),
                         body.infer_type(ctx.into()),
                         body.slice(),
-                        report_error,
+                        ctx.report_error,
                     );
                 }
             }
@@ -368,28 +380,28 @@ where
                 is_pure,
                 body,
             } => {
-                type_annotation.check(ctx, report_error);
-                body.check(ctx, report_error);
+                type_annotation.check(ctx);
+                body.check(ctx);
             }
             ASTDetails::Block(statements) => {
-                statements.check(ctx, report_error);
+                statements.check(ctx);
             }
             ASTDetails::RangeExpression { start, end } => {
-                start.check(ctx, report_error);
-                end.check(ctx, report_error);
+                start.check(ctx);
+                end.check(ctx);
 
                 check_subsumation(
                     &Type::ANY_NUMBER,
                     start.infer_type(ctx.into()),
                     start.slice(),
-                    report_error,
+                    ctx.report_error,
                 );
 
                 check_subsumation(
                     &Type::ANY_NUMBER,
                     end.infer_type(ctx.into()),
                     end.slice(),
-                    report_error,
+                    ctx.report_error,
                 );
             }
             ASTDetails::Invocation {
@@ -400,10 +412,10 @@ where
                 bubbles,
                 awaited_or_detached,
             } => {
-                subject.check(ctx, report_error);
-                type_args.check(ctx, report_error);
-                args.check(ctx, report_error);
-                spread_args.check(ctx, report_error);
+                subject.check(ctx);
+                type_args.check(ctx);
+                args.check(ctx);
+                spread_args.check(ctx);
 
                 let subject_type = subject.infer_type(ctx.into());
                 let types = match &subject_type {
@@ -431,13 +443,13 @@ where
                                     type_annotation,
                                     arg.infer_type(ctx.into()),
                                     arg.slice(),
-                                    report_error,
+                                    ctx.report_error,
                                 );
                             }
                         }
                     }
                 } else {
-                    report_error(BagelError::MiscError {
+                    ctx.report_error(BagelError::MiscError {
                         module_id: ctx.current_module.module_id.clone(),
                         src: subject.slice().clone(),
                         message: format!(
@@ -456,8 +468,8 @@ where
                 property,
                 optional,
             } => {
-                subject.check(ctx, report_error);
-                property.check(ctx, report_error);
+                subject.check(ctx);
+                property.check(ctx);
 
                 let subject_type = subject.infer_type(ctx.into());
                 let property_type = property.infer_type(ctx.into());
@@ -466,7 +478,7 @@ where
                 // TODO: detect valid optional
 
                 if subject_type.indexed(&property_type).is_none() {
-                    report_error(BagelError::MiscError {
+                    ctx.report_error(BagelError::MiscError {
                         module_id: ctx.current_module.module_id.clone(),
                         src: property.slice().clone(),
                         message: format!(
@@ -481,19 +493,19 @@ where
                 cases,
                 default_case,
             } => {
-                cases.check(ctx, report_error);
-                default_case.check(ctx, report_error);
+                cases.check(ctx);
+                default_case.check(ctx);
             }
             ASTDetails::IfElseExpressionCase { condition, outcome } => {
-                condition.check(ctx, report_error);
-                outcome.check(ctx, report_error);
+                condition.check(ctx);
+                outcome.check(ctx);
 
                 let truthiness_safe = Type::truthiness_safe_types();
                 check_subsumation(
                     &truthiness_safe,
                     condition.infer_type(ctx.into()),
                     condition.slice(),
-                    report_error,
+                    ctx.report_error,
                 );
             }
             ASTDetails::SwitchExpression {
@@ -511,35 +523,35 @@ where
                 children,
             } => todo!(),
             ASTDetails::AsCast { inner, as_type } => {
-                inner.check(ctx, report_error);
-                as_type.check(ctx, report_error);
+                inner.check(ctx);
+                as_type.check(ctx);
 
                 check_subsumation(
                     &as_type.resolve_type(ctx.into()),
                     inner.infer_type(ctx.into()),
                     inner.slice(),
-                    report_error,
+                    ctx.report_error,
                 );
             }
             ASTDetails::InstanceOf {
                 inner,
                 possible_type,
             } => {
-                inner.check(ctx, report_error);
-                possible_type.check(ctx, report_error);
+                inner.check(ctx);
+                possible_type.check(ctx);
 
                 check_subsumation(
                     &inner.infer_type(ctx.into()),
                     possible_type.resolve_type(ctx.into()),
                     inner.slice(),
-                    report_error,
+                    ctx.report_error,
                 );
             }
             ASTDetails::ErrorExpression(_) => todo!(),
             ASTDetails::UnionType(members) => {
-                members.check(ctx, report_error);
+                members.check(ctx);
             }
-            ASTDetails::MaybeType(inner) => inner.check(ctx, report_error),
+            ASTDetails::MaybeType(inner) => inner.check(ctx),
             ASTDetails::GenericParamType { name, extends } => todo!(),
             ASTDetails::ProcType {
                 args,
@@ -548,9 +560,9 @@ where
                 is_async,
                 throws,
             } => {
-                args.check(ctx, report_error);
-                args_spread.check(ctx, report_error);
-                throws.check(ctx, report_error);
+                args.check(ctx);
+                args_spread.check(ctx);
+                throws.check(ctx);
             }
             ASTDetails::FuncType {
                 args,
@@ -559,18 +571,18 @@ where
                 is_async,
                 returns,
             } => {
-                args.check(ctx, report_error);
-                args_spread.check(ctx, report_error);
-                returns.check(ctx, report_error);
+                args.check(ctx);
+                args_spread.check(ctx);
+                returns.check(ctx);
             }
             ASTDetails::Arg {
                 name,
                 type_annotation,
                 optional,
             } => {
-                name.check(ctx, report_error);
+                name.check(ctx);
                 // TODO: Check that no optionsl args come before non-optional args
-                type_annotation.check(ctx, report_error);
+                type_annotation.check(ctx);
             }
             ASTDetails::GenericType { type_params, inner } => todo!(),
             ASTDetails::TypeParam { name, extends } => todo!(),
@@ -583,20 +595,20 @@ where
                 key_type,
                 value_type,
             } => {
-                key_type.check(ctx, report_error);
-                value_type.check(ctx, report_error);
+                key_type.check(ctx);
+                value_type.check(ctx);
 
                 check_subsumation(
                     &Type::ANY_NUMBER.union(Type::ANY_STRING),
                     key_type.resolve_type(ctx.into()),
                     key_type.slice(),
-                    report_error,
+                    ctx.report_error,
                 );
             }
-            ASTDetails::ArrayType(element) => element.check(ctx, report_error),
-            ASTDetails::TupleType(members) => members.check(ctx, report_error),
+            ASTDetails::ArrayType(element) => element.check(ctx),
+            ASTDetails::TupleType(members) => members.check(ctx),
             ASTDetails::SpecialType { kind: _, inner } => {
-                inner.check(ctx, report_error);
+                inner.check(ctx);
             }
             ASTDetails::ModifierType { kind, inner } => match kind {
                 ModifierTypeKind::Readonly => {}
@@ -612,7 +624,7 @@ where
                             entries: _,
                             is_interface: _,
                         } => {}
-                        _ => report_error(BagelError::MiscError {
+                        _ => ctx.report_error(BagelError::MiscError {
                             module_id: ctx.current_module.module_id.clone(),
                             src: self.slice().clone(),
                             message: format!(
@@ -635,7 +647,7 @@ where
                             entries: _,
                             is_interface: _,
                         } => {}
-                        _ => report_error(BagelError::MiscError {
+                        _ => ctx.report_error(BagelError::MiscError {
                             module_id: ctx.current_module.module_id.clone(),
                             src: self.slice().clone(),
                             message: format!(
@@ -652,7 +664,7 @@ where
                     match inner_type {
                         Type::ArrayType(_) => {}
                         Type::TupleType(_) => {}
-                        _ => report_error(BagelError::MiscError {
+                        _ => ctx.report_error(BagelError::MiscError {
                             module_id: ctx.current_module.module_id.clone(),
                             src: self.slice().clone(),
                             message: format!(
@@ -670,8 +682,8 @@ where
                 property,
                 optional,
             } => todo!(),
-            ASTDetails::MaybeType(inner) => inner.check(ctx, report_error),
-            ASTDetails::UnionType(members) => members.check(ctx, report_error),
+            ASTDetails::MaybeType(inner) => inner.check(ctx),
+            ASTDetails::UnionType(members) => members.check(ctx),
             ASTDetails::DeclarationStatement {
                 destination,
                 value,
@@ -683,15 +695,15 @@ where
                         name,
                         type_annotation,
                     }) => {
-                        name.check(ctx, report_error);
-                        type_annotation.check(ctx, report_error);
+                        name.check(ctx);
+                        type_annotation.check(ctx);
 
                         if let Some(type_annotation) = type_annotation {
                             check_subsumation(
                                 &type_annotation.resolve_type(ctx.into()),
                                 value.infer_type(ctx.into()),
                                 value.slice(),
-                                report_error,
+                                ctx.report_error,
                             );
                         }
                     }
@@ -700,29 +712,29 @@ where
                         spread,
                         destructure_kind,
                     }) => {
-                        properties.check(ctx, report_error);
-                        spread.check(ctx, report_error);
+                        properties.check(ctx);
+                        spread.check(ctx);
                     }
                 }
-                value.check(ctx, report_error);
+                value.check(ctx);
             }
             ASTDetails::IfElseStatement {
                 cases,
                 default_case,
             } => {
-                cases.check(ctx, report_error);
-                default_case.check(ctx, report_error);
+                cases.check(ctx);
+                default_case.check(ctx);
             }
             ASTDetails::IfElseStatementCase { condition, outcome } => {
-                condition.check(ctx, report_error);
-                outcome.check(ctx, report_error);
+                condition.check(ctx);
+                outcome.check(ctx);
 
                 let truthiness_safe = Type::truthiness_safe_types();
                 check_subsumation(
                     &truthiness_safe,
                     condition.infer_type(ctx.into()),
                     condition.slice(),
-                    report_error,
+                    ctx.report_error,
                 );
             }
             ASTDetails::ForLoop {
@@ -731,14 +743,14 @@ where
                 body,
             } => todo!(),
             ASTDetails::WhileLoop { condition, body } => {
-                condition.check(ctx, report_error);
-                body.check(ctx, report_error);
+                condition.check(ctx);
+                body.check(ctx);
 
                 check_subsumation(
                     &Type::truthiness_safe_types(),
                     condition.infer_type(ctx.into()),
                     condition.slice(),
-                    report_error,
+                    ctx.report_error,
                 );
             }
             ASTDetails::Assignment {
@@ -746,9 +758,9 @@ where
                 value,
                 operator,
             } => {
-                target.check(ctx, report_error);
-                value.check(ctx, report_error);
-                operator.check(ctx, report_error);
+                target.check(ctx);
+                value.check(ctx);
+                operator.check(ctx);
 
                 // TODO: Check operator compatibility for value and target
 
@@ -756,7 +768,7 @@ where
                     &target.infer_type(ctx.into()),
                     value.infer_type(ctx.into()),
                     value.slice(),
-                    report_error,
+                    ctx.report_error,
                 );
             }
             ASTDetails::TryCatch {
@@ -769,15 +781,15 @@ where
                 effect_block,
                 until,
             } => {
-                effect_block.check(ctx, report_error);
-                until.check(ctx, report_error);
+                effect_block.check(ctx);
+                until.check(ctx);
 
                 if let Some(until) = until {
                     check_subsumation(
                         &Type::ANY_BOOLEAN,
                         until.infer_type(ctx.into()),
                         until.slice(),
-                        report_error,
+                        ctx.report_error,
                     );
                 }
             }
@@ -810,9 +822,9 @@ impl<T> Checkable for Option<T>
 where
     T: Checkable,
 {
-    fn check<'a, F: FnMut(BagelError)>(&self, ctx: CheckContext<'a>, report_error: &mut F) {
+    fn check<'a, F: FnMut(BagelError)>(&self, ctx: &mut CheckContext<'a, F>) {
         if let Some(sel) = self {
-            sel.check(ctx, report_error);
+            sel.check(ctx);
         }
     }
 }
@@ -821,15 +833,22 @@ impl<T> Checkable for Vec<T>
 where
     T: Checkable,
 {
-    fn check<'a, F: FnMut(BagelError)>(&self, ctx: CheckContext<'a>, report_error: &mut F) {
+    fn check<'a, F: FnMut(BagelError)>(&self, ctx: &mut CheckContext<'a, F>) {
         for el in self.iter() {
-            el.check(ctx, report_error);
+            el.check(ctx);
         }
     }
 }
 
-#[derive(Clone, Copy, Debug)]
-pub struct CheckContext<'a> {
+#[derive(Debug)]
+pub struct CheckContext<'a, F: FnMut(BagelError)> {
     pub modules: &'a ModulesStore,
     pub current_module: &'a Module,
+    pub report_error: &'a mut F,
+}
+
+impl<'a, F: FnMut(BagelError)> CheckContext<'a, F> {
+    pub fn report_error(&mut self, error: BagelError) {
+        (self.report_error)(error)
+    }
 }

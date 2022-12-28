@@ -1,6 +1,6 @@
 use crate::{
     model::ast::*,
-    model::{ast::ASTDetails, bgl_type::Type, module::Module},
+    model::{ast::ASTDetails, bgl_type::Type, errors::BagelError, module::Module},
     passes::check::CheckContext,
     ModulesStore,
 };
@@ -387,12 +387,13 @@ pub struct InferTypeContext<'a> {
     pub current_module: &'a Module,
 }
 
-impl<'a> From<CheckContext<'a>> for InferTypeContext<'a> {
+impl<'a, F: FnMut(BagelError)> From<&mut CheckContext<'a, F>> for InferTypeContext<'a> {
     fn from(
         CheckContext {
             modules,
             current_module,
-        }: CheckContext<'a>,
+            report_error: _,
+        }: &mut CheckContext<'a, F>,
     ) -> Self {
         Self {
             modules,

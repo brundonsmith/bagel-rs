@@ -204,15 +204,15 @@ pub fn gather_errors(modules_store: &ModulesStore) -> HashMap<ModuleID, Vec<Bage
 
         match module {
             Ok(module) => {
-                module.check(
-                    CheckContext {
-                        modules: &modules_store,
-                        current_module: &module,
-                    },
-                    &mut |error: BagelError| {
+                let mut context = CheckContext {
+                    modules: &modules_store,
+                    current_module: &module,
+                    report_error: &mut |error: BagelError| {
                         module_errors.push(error);
                     },
-                );
+                };
+
+                module.check(&mut context);
             }
             Err(error) => {
                 module_errors.push(BagelError::from(error.clone()));
