@@ -339,6 +339,15 @@ impl Type {
             _ => None,
         }
     }
+
+    pub fn broaden_for_mutation(self) -> Type {
+        match self {
+            Type::BooleanType(_) => Type::ANY_BOOLEAN,
+            Type::NumberType { min: _, max: _ } => Type::ANY_NUMBER,
+            Type::StringType(_) => Type::ANY_STRING,
+            _ => self,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug)]

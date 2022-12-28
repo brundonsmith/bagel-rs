@@ -118,6 +118,31 @@ where
                                 DeclarationDestination::Destructure(_) => todo!(),
                             }
                         }
+                        ASTDetails::DeclarationStatement {
+                            destination,
+                            value,
+                            awaited,
+                            is_const,
+                        } => {
+                            return match destination {
+                                DeclarationDestination::NameAndType(NameAndType {
+                                    name: _,
+                                    type_annotation,
+                                }) => type_annotation
+                                    .as_ref()
+                                    .map(|x| x.resolve_type(ctx.into()))
+                                    .unwrap_or_else(|| {
+                                        let base_type = value.infer_type(ctx);
+
+                                        if *is_const {
+                                            base_type
+                                        } else {
+                                            base_type.broaden_for_mutation()
+                                        }
+                                    }),
+                                DeclarationDestination::Destructure(_) => todo!(),
+                            };
+                        }
                         _ => todo!(),
                     }
                 }

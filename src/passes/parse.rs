@@ -795,11 +795,11 @@ fn tuple_type(i: Slice) -> ParseResult<ASTAny> {
 #[memoize]
 fn statement(i: Slice) -> ParseResult<ASTAny> {
     alt((
-        // map(declaration_statement, |x| x.map(ASTDetails::from)),
+        declaration_statement,
         if_else_statement,
         for_loop,
         while_loop,
-        // assignment,
+        assignment,
         // try_catch,
         throw_statement,
         autorun,
@@ -815,7 +815,29 @@ fn statement(i: Slice) -> ParseResult<ASTAny> {
 
 #[memoize]
 fn declaration_statement(i: Slice) -> ParseResult<ASTAny> {
-    todo!()
+    map(
+        seq!(
+            alt((tag("let"), tag("const"))),
+            declaration_destination,
+            tag("="),
+            expression(0),
+            tag(";")
+        ),
+        |(keyword, mut destination, _, mut value, end)| {
+            let this = ASTDetails::DeclarationStatement {
+                destination: destination.clone(),
+                value: value.clone(),
+                awaited: false, // TODO
+                is_const: keyword.as_str() == "const",
+            }
+            .with_slice(keyword.spanning(&end));
+
+            destination.set_parent(&this);
+            value.set_parent(&this);
+
+            this
+        },
+    )(i)
 }
 
 #[memoize]
@@ -887,7 +909,44 @@ fn while_loop(i: Slice) -> ParseResult<ASTAny> {
 
 #[memoize]
 fn assignment(i: Slice) -> ParseResult<ASTAny> {
-    todo!()
+    map(
+        seq!(
+            alt((invocation_accessor_chain(11), local_identifier)),
+            pair(
+                opt(map(
+                    alt((
+                        tag("??"),
+                        tag("||"),
+                        tag("&&"),
+                        tag("+"),
+                        tag("-"),
+                        tag("*"),
+                        tag("/"),
+                    )),
+                    |slice: Slice| BinaryOperator(
+                        BinaryOperatorOp::from_str(slice.as_str()).unwrap()
+                    )
+                    .with_slice(slice)
+                )),
+                tag("=")
+            ),
+            expression(0),
+            tag(";")
+        ),
+        |(mut target, (operator, _), mut value, end)| {
+            let this = ASTDetails::Assignment {
+                target: target.clone(),
+                value: value.clone(),
+                operator,
+            }
+            .with_slice(target.slice().clone().spanning(&end));
+
+            target.set_parent(&this);
+            value.set_parent(&this);
+
+            this
+        },
+    )(i)
 }
 
 #[memoize]

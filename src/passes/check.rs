@@ -1,3 +1,5 @@
+use boa::syntax::ast::op;
+
 use crate::{
     model::{
         ast::BinaryOperatorOp,
@@ -471,7 +473,11 @@ where
                 is_pure,
                 is_async,
                 throws,
-            } => todo!(),
+            } => {
+                args.check(ctx, report_error);
+                args_spread.check(ctx, report_error);
+                throws.check(ctx, report_error);
+            }
             ASTDetails::FuncType {
                 args,
                 args_spread,
@@ -597,7 +603,35 @@ where
                 value,
                 awaited,
                 is_const,
-            } => todo!(),
+            } => {
+                match destination {
+                    DeclarationDestination::NameAndType(NameAndType {
+                        name,
+                        type_annotation,
+                    }) => {
+                        name.check(ctx, report_error);
+                        type_annotation.check(ctx, report_error);
+
+                        if let Some(type_annotation) = type_annotation {
+                            check_subsumation(
+                                &type_annotation.resolve_type(ctx.into()),
+                                value.infer_type(ctx.into()),
+                                value.slice(),
+                                report_error,
+                            );
+                        }
+                    }
+                    DeclarationDestination::Destructure(Destructure {
+                        properties,
+                        spread,
+                        destructure_kind,
+                    }) => {
+                        properties.check(ctx, report_error);
+                        spread.check(ctx, report_error);
+                    }
+                }
+                value.check(ctx, report_error);
+            }
             ASTDetails::IfElseStatement {
                 cases,
                 default_case,
@@ -637,7 +671,20 @@ where
                 target,
                 value,
                 operator,
-            } => todo!(),
+            } => {
+                target.check(ctx, report_error);
+                value.check(ctx, report_error);
+                operator.check(ctx, report_error);
+
+                // TODO: Check operator compatibility for value and target
+
+                check_subsumation(
+                    &target.infer_type(ctx.into()),
+                    value.infer_type(ctx.into()),
+                    value.slice(),
+                    report_error,
+                );
+            }
             ASTDetails::TryCatch {
                 try_block,
                 error_identifier,

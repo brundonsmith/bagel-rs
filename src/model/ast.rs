@@ -553,7 +553,7 @@ pub enum ASTDetails {
     // --- Statements ---
     #[evt(derive(Debug, Clone, PartialEq))]
     DeclarationStatement {
-        destination: ASTAny,
+        destination: DeclarationDestination,
         value: ASTAny,
         awaited: bool,
         is_const: bool,
@@ -588,7 +588,7 @@ pub enum ASTDetails {
     Assignment {
         target: ASTAny,
         value: ASTAny,
-        operator: Option<ASTAny>,
+        operator: Option<AST<BinaryOperator>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
