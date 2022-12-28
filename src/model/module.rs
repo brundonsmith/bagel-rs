@@ -1,4 +1,4 @@
-use super::ast::{self, ASTDetails, AST};
+use super::ast::{self, ASTAny, ASTDetails, AST};
 use super::errors::ParseError;
 use super::slice::Slice;
 use crate::passes::parse::parse;
@@ -234,4 +234,39 @@ pub struct Module {
     pub module_id: ModuleID,
     pub src: Slice,
     pub ast: AST<ast::Module>,
+}
+
+impl Module {
+    pub fn get_declaration(&self, item_name: &str, must_be_exported: bool) -> Option<ASTAny> {
+        self.ast
+            .downcast()
+            .declarations
+            .iter()
+            .find(|decl| match decl.details() {
+                ASTDetails::ValueDeclaration {
+                    name,
+                    exported,
+                    type_annotation: _,
+                    value: _,
+                    is_const: _,
+                    platforms: _,
+                } => (!must_be_exported || *exported) && name.downcast().0.as_str() == item_name,
+                ASTDetails::FuncDeclaration {
+                    name,
+                    exported,
+                    func: _,
+                    platforms: _,
+                    decorators: _,
+                } => (!must_be_exported || *exported) && name.downcast().0.as_str() == item_name,
+                ASTDetails::ProcDeclaration {
+                    name,
+                    exported,
+                    proc: _,
+                    platforms: _,
+                    decorators: _,
+                } => (!must_be_exported || *exported) && name.downcast().0.as_str() == item_name,
+                _ => unreachable!(),
+            })
+            .cloned()
+    }
 }

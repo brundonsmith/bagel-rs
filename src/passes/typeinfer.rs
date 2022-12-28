@@ -61,6 +61,21 @@ where
 
                 if let Some(resolved) = resolved {
                     match resolved.details() {
+                        ASTDetails::ImportAllDeclaration { name, path } => todo!(),
+                        ASTDetails::ImportDeclaration { imports: _, path } => {
+                            return ctx
+                                .modules
+                                .import(
+                                    &ctx.current_module.module_id,
+                                    path.downcast().value.as_str(),
+                                )
+                                .map(|other_module| {
+                                    other_module.get_declaration(name.as_str(), true)
+                                })
+                                .flatten()
+                                .map(|decl| decl.infer_type(ctx))
+                                .unwrap_or(Type::PoisonedType);
+                        }
                         ASTDetails::ProcDeclaration {
                             name: _,
                             proc,
@@ -213,6 +228,13 @@ where
             }
             ASTDetails::ObjectLiteral(entries) => todo!(),
             ASTDetails::NegationOperation(inner) => todo!(),
+            ASTDetails::FuncDeclaration {
+                name: _,
+                func,
+                exported: _,
+                platforms: _,
+                decorators: _,
+            } => func.infer_type(ctx),
             ASTDetails::Func {
                 type_annotation,
                 is_async: _,
@@ -244,6 +266,13 @@ where
                     ),
                 }
             }
+            ASTDetails::ProcDeclaration {
+                name: _,
+                proc,
+                exported: _,
+                platforms: _,
+                decorators: _,
+            } => proc.infer_type(ctx),
             ASTDetails::Proc {
                 type_annotation,
                 is_async,

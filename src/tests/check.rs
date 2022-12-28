@@ -1418,7 +1418,12 @@ fn Basic_import_module_pass() {
     test_check_multi(
         vec![
             ("module-1.bgl", "export func foo(b: number) => b * 2"),
-            ("module-2.bgl", "from 'module-1.bgl' import { foo }"),
+            (
+                "module-2.bgl",
+                "
+                from 'module-1.bgl' import { foo }
+                const x: number = foo(2)",
+            ),
         ],
         false,
     )

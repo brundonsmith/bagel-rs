@@ -10,16 +10,29 @@ where
             Some(ASTDetails::Module { declarations }) => {
                 if let Some(found) = declarations.iter().find_map(|decl| {
                     match decl.details() {
-                        ASTDetails::ImportAllDeclaration { name, path } => todo!(),
-                        ASTDetails::ImportDeclaration { imports, path } => todo!(),
+                        ASTDetails::ImportAllDeclaration { name, path: _ } => {
+                            if name.downcast().0.as_str() == symbol {
+                                return Some(decl.clone());
+                            }
+                        }
+                        ASTDetails::ImportDeclaration { imports, path: _ } => {
+                            if imports.iter().any(|item| {
+                                let item = item.downcast();
+
+                                match item.alias {
+                                    Some(alias) => alias.downcast().0.as_str() == symbol,
+                                    None => item.name.downcast().0.as_str() == symbol,
+                                }
+                            }) {
+                                return Some(decl.clone());
+                            }
+                        }
                         ASTDetails::TypeDeclaration {
                             name,
                             declared_type: _,
                             exported: _,
                         } => {
-                            let name = name.downcast();
-
-                            if name.0.as_str() == symbol {
+                            if name.downcast().0.as_str() == symbol {
                                 return Some(decl.clone());
                             }
                         }
@@ -30,9 +43,7 @@ where
                             platforms: _,
                             decorators: _,
                         } => {
-                            let name = name.downcast();
-
-                            if name.0.as_str() == symbol {
+                            if name.downcast().0.as_str() == symbol {
                                 return Some(decl.clone());
                             }
                         }
@@ -43,9 +54,7 @@ where
                             platforms: _,
                             decorators: _,
                         } => {
-                            let name = name.downcast();
-
-                            if name.0.as_str() == symbol {
+                            if name.downcast().0.as_str() == symbol {
                                 return Some(decl.clone());
                             }
                         }
@@ -57,9 +66,7 @@ where
                             exported: _,
                             platforms: _,
                         } => {
-                            let name = name.downcast();
-
-                            if name.0.as_str() == symbol {
+                            if name.downcast().0.as_str() == symbol {
                                 return Some(decl.clone());
                             }
                         }

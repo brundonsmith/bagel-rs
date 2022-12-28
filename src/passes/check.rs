@@ -99,40 +99,12 @@ where
                         ),
                     }),
                     Some(imported_module) => {
-                        let imported_module_downcast = imported_module.ast.downcast();
                         for item in imports {
                             let item_downcast = item.downcast();
                             let item_name = item_downcast.name.downcast();
                             let item_name = item_name.0.as_str();
 
-                            let decl =
-                                imported_module_downcast.declarations.iter().find(
-                                    |decl| match decl.details() {
-                                        ASTDetails::ValueDeclaration {
-                                            name,
-                                            exported,
-                                            type_annotation: _,
-                                            value: _,
-                                            is_const: _,
-                                            platforms: _,
-                                        } => *exported && name.downcast().0.as_str() == item_name,
-                                        ASTDetails::FuncDeclaration {
-                                            name,
-                                            exported,
-                                            func: _,
-                                            platforms: _,
-                                            decorators: _,
-                                        } => *exported && name.downcast().0.as_str() == item_name,
-                                        ASTDetails::ProcDeclaration {
-                                            name,
-                                            exported,
-                                            proc: _,
-                                            platforms: _,
-                                            decorators: _,
-                                        } => *exported && name.downcast().0.as_str() == item_name,
-                                        _ => unreachable!(),
-                                    },
-                                );
+                            let decl = imported_module.get_declaration(item_name, true);
 
                             if decl.is_none() {
                                 report_error(BagelError::MiscError {
