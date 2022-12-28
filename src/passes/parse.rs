@@ -577,7 +577,52 @@ fn type_expression_inner(l: usize, i: Slice) -> ParseResult<ASTAny> {
         )
     );
 
-    // generic type
+    parse_level!(
+        l,
+        tl,
+        i,
+        map(
+            seq!(
+                local_identifier,
+                tag("<"),
+                separated_list1(w(tag(",")), w(type_expression(0))),
+                tag(">"),
+            ),
+            |(mut generic, _, mut type_args, end)| {
+                if let Some(name) = generic.try_downcast::<LocalIdentifier>() {
+                    if type_args.len() == 1 {
+                        let kind = match name.0.as_str() {
+                            "Plan" => Some(SpecialTypeKind::Plan),
+                            "Iterator" => Some(SpecialTypeKind::Iterator),
+                            "Error" => Some(SpecialTypeKind::Error),
+                            _ => None,
+                        };
+
+                        if let Some(kind) = kind {
+                            let mut inner = type_args.into_iter().next().unwrap();
+
+                            let this = ASTDetails::SpecialType {
+                                kind,
+                                inner: inner.clone(),
+                            }
+                            .with_slice(generic.slice().clone().spanning(&end));
+
+                            inner.set_parent(&this);
+
+                            return this;
+                        }
+                    }
+                }
+
+                make_node!(
+                    BoundGenericType,
+                    generic.slice().clone().spanning(&end),
+                    generic,
+                    type_args
+                )
+            }
+        )
+    );
 
     parse_level!(
         l,
@@ -820,14 +865,15 @@ fn declaration_statement(i: Slice) -> ParseResult<ASTAny> {
             alt((tag("let"), tag("const"))),
             declaration_destination,
             tag("="),
+            opt(tag("await")),
             expression(0),
             tag(";")
         ),
-        |(keyword, mut destination, _, mut value, end)| {
+        |(keyword, mut destination, _, awaited, mut value, end)| {
             let this = ASTDetails::DeclarationStatement {
                 destination: destination.clone(),
                 value: value.clone(),
-                awaited: false, // TODO
+                awaited: awaited.is_some(),
                 is_const: keyword.as_str() == "const",
             }
             .with_slice(keyword.spanning(&end));
@@ -1065,6 +1111,7 @@ fn invocation_accessor_chain(level: usize) -> impl Fn(Slice) -> ParseResult<ASTA
 fn invocation_accessor_chain_inner(level: usize, i: Slice) -> ParseResult<ASTAny> {
     map(
         seq!(
+            await_or_detach,
             expression(level + 1),
             many1(alt((
                 invocation_args,
@@ -1072,7 +1119,7 @@ fn invocation_accessor_chain_inner(level: usize, i: Slice) -> ParseResult<ASTAny
                 dot_property_access,
             )))
         ),
-        |(mut base, clauses)| {
+        |(awaited_or_detached, mut base, clauses)| {
             let mut subject = base;
 
             for clause in clauses {
@@ -1083,10 +1130,10 @@ fn invocation_accessor_chain_inner(level: usize, i: Slice) -> ParseResult<ASTAny
                         subject = ASTDetails::Invocation {
                             subject: old_subject.clone(),
                             args: args.clone(),
-                            spread_args: None,         // TODO
-                            type_args: Vec::new(),     // TODO
-                            bubbles: false,            // TODO
-                            awaited_or_detached: None, // TODO
+                            spread_args: None,     // TODO
+                            type_args: Vec::new(), // TODO
+                            bubbles: false,        // TODO
+                            awaited_or_detached,
                         }
                         .with_slice(old_subject.slice().clone().spanning(&args_slice));
 
@@ -1110,6 +1157,17 @@ fn invocation_accessor_chain_inner(level: usize, i: Slice) -> ParseResult<ASTAny
             subject
         },
     )(i)
+}
+
+#[memoize]
+fn await_or_detach(i: Slice) -> ParseResult<Option<AwaitOrDetach>> {
+    map(opt(alt((tag("await"), tag("detach")))), |keyword| {
+        keyword.map(|s: Slice| match s.as_str() {
+            "await" => AwaitOrDetach::Await,
+            "detach" => AwaitOrDetach::Detach,
+            _ => unreachable!(),
+        })
+    })(i)
 }
 
 #[memoize]
@@ -1661,7 +1719,13 @@ fn string_contents(i: Slice) -> ParseResult<Slice> {
 }
 
 fn identifier_like(i: Slice) -> ParseResult<Slice> {
-    take_while1(|ch: char| ch.is_alphabetic() || ch == '_' || ch == '$')(i) // TODO: numeric
+    map(
+        tuple((
+            take_while1(|ch: char| ch.is_alphabetic() || ch == '_' || ch == '$'),
+            take_while(|ch: char| ch.is_alphanumeric() || ch == '_' || ch == '$'),
+        )),
+        |(a, b): (Slice, Slice)| a.spanning(&b),
+    )(i)
 }
 
 fn numeric(i: Slice) -> ParseResult<Slice> {

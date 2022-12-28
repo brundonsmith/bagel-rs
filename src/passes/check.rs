@@ -1,5 +1,3 @@
-use boa::syntax::ast::op;
-
 use crate::{
     model::{
         ast::BinaryOperatorOp,
