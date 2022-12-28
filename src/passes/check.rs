@@ -60,36 +60,44 @@ where
                 name.check(ctx, report_error);
                 path.check(ctx, report_error);
 
-                let path = path.downcast();
-                let path = path.value.as_str();
+                let path_name = path.downcast();
+                let path_name = path_name.value.as_str();
 
                 if ctx
                     .modules
-                    .import(&ctx.current_module.module_id, path)
+                    .import(&ctx.current_module.module_id, path_name)
                     .is_none()
                 {
-                    report_error(BagelError::ModuleNotFoundError {
-                        path: path.to_owned(),
-                        importer_module_id: ctx.current_module.module_id.clone(),
-                    })
+                    report_error(BagelError::MiscError {
+                        module_id: ctx.current_module.module_id.clone(),
+                        src: path.slice().clone(),
+                        message: format!(
+                            "Couldn't find module {} from module {}",
+                            blue_string(path_name),
+                            blue_string(&ctx.current_module.module_id)
+                        ),
+                    });
                 }
             }
             ASTDetails::ImportDeclaration { imports, path } => {
                 imports.check(ctx, report_error);
                 path.check(ctx, report_error);
 
-                let path = path.downcast();
-                let path = path.value.as_str();
+                let path_name = path.downcast();
+                let path_name = path_name.value.as_str();
 
-                let imported_module = ctx.modules.import(&ctx.current_module.module_id, path);
+                let imported_module = ctx.modules.import(&ctx.current_module.module_id, path_name);
 
                 match imported_module {
-                    None => {
-                        report_error(BagelError::ModuleNotFoundError {
-                            path: path.to_owned(),
-                            importer_module_id: ctx.current_module.module_id.clone(),
-                        });
-                    }
+                    None => report_error(BagelError::MiscError {
+                        module_id: ctx.current_module.module_id.clone(),
+                        src: path.slice().clone(),
+                        message: format!(
+                            "Couldn't find module {} from module {}",
+                            blue_string(path_name),
+                            blue_string(&ctx.current_module.module_id)
+                        ),
+                    }),
                     Some(imported_module) => {
                         let imported_module_downcast = imported_module.ast.downcast();
                         for item in imports {
@@ -298,18 +306,28 @@ where
             ASTDetails::LocalIdentifier(name) => {
                 // TODO: Make sure it isn't a type
                 if self.resolve_symbol(name.as_str()).is_none() {
-                    report_error(BagelError::NotFoundError {
+                    report_error(BagelError::MiscError {
                         module_id: ctx.current_module.module_id.clone(),
-                        identifier: self.clone().upcast(),
+                        src: self.slice().clone(),
+                        message: format!(
+                            "Couldn't resolve identifier {} in this scope",
+                            blue_string(name.as_str())
+                        ),
                     });
                 }
             }
             ASTDetails::NamedType(name) => {
                 // TODO: Make sure it isn't an expression
-                if self.resolve_symbol(name.downcast().0.as_str()).is_none() {
-                    report_error(BagelError::NotFoundError {
+                let name = name.downcast();
+                let name_str = name.0.as_str();
+                if self.resolve_symbol(name_str).is_none() {
+                    report_error(BagelError::MiscError {
                         module_id: ctx.current_module.module_id.clone(),
-                        identifier: self.clone().upcast(),
+                        src: self.slice().clone(),
+                        message: format!(
+                            "Couldn't resolve identifier {} in this scope",
+                            blue_string(name_str)
+                        ),
                     });
                 }
             }

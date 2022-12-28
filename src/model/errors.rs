@@ -25,20 +25,10 @@ pub enum BagelError {
         message: String,
     },
     #[evt(derive(Debug, Clone, PartialEq))]
-    ModuleNotFoundError {
-        path: String,
-        importer_module_id: ModuleID,
-    },
-    #[evt(derive(Debug, Clone, PartialEq))]
     AssignmentError {
         module_id: ModuleID,
         src: Slice,
         issues: SubsumationIssue,
-    },
-    #[evt(derive(Debug, Clone, PartialEq))]
-    NotFoundError {
-        module_id: ModuleID,
-        identifier: ASTAny,
     },
 }
 
@@ -51,22 +41,6 @@ impl BagelError {
 
     pub fn pretty_print<W: Write>(&self, f: &mut W, color: bool) -> std::fmt::Result {
         match self {
-            BagelError::ModuleNotFoundError {
-                path,
-                importer_module_id,
-            } => {
-                error_heading(
-                    f,
-                    importer_module_id,
-                    None,
-                    "module not found",
-                    Some(&format!(
-                        "Couldn't find module {}, imported from module {}",
-                        blue_string(path),
-                        blue_string(&importer_module_id),
-                    )),
-                )?;
-            }
             BagelError::MiscError {
                 src,
                 module_id,
@@ -128,28 +102,6 @@ impl BagelError {
                 f.write_char('\n')?;
 
                 code_block_highlighted(f, &src)?;
-            }
-            BagelError::NotFoundError {
-                module_id,
-                identifier,
-            } => {
-                error_heading(
-                    f,
-                    &module_id,
-                    Some(identifier.slice()),
-                    "unknown identifier error",
-                    None,
-                )?;
-
-                f.write_fmt(format_args!(
-                    " Couldn't resolve identifier {} in this scope",
-                    identifier.slice().as_str().blue().to_string()
-                ));
-
-                f.write_char('\n')?;
-                f.write_char('\n')?;
-
-                code_block_highlighted(f, identifier.slice())?;
             }
         };
 
