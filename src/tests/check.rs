@@ -5,8 +5,8 @@ use reqwest::Url;
 use crate::{
     gather_errors,
     model::{
-        errors::BagelError,
-        module::{Module, ModuleID},
+        errors::{BagelError, ParseError},
+        module::{Module, ModuleID, ModulesStore},
         slice::Slice,
     },
     passes::parse::parse,
@@ -834,6 +834,26 @@ fn Duplicate_declaration_name_1() {
 // });
 
 #[test]
+fn Duplicate_declaration_name_2() {
+    test_check_multi(
+        vec![
+            (
+                "a.bgl",
+                "
+                export const a = 12",
+            ),
+            (
+                "b.bgl",
+                "
+                from 'a.bgl' import { a }
+                func a() => nil",
+            ),
+        ],
+        true,
+    )
+}
+
+#[test]
 fn Basic_type_refinement() {
     test_check(
         "
@@ -1393,116 +1413,152 @@ fn Optional_property_access_fail() {
     );
 }
 
-// Deno.test({
-//   name: "Fail to import module",
-//   fn() {
-//     testMultiModuleTypecheck({
-//       "module-1.bgl": `
-//       export func foo(b: number) => b * 2`,
-//       "module-2.bgl": `
-//       from 'module-3.bgl' import { foo }`
-//     }, true)
-//   }
-// })
+#[test]
+fn Fail_to_import_module() {
+    test_check_multi(
+        vec![
+            (
+                "module-1.bgl",
+                "
+      export func foo(b: number) => b * 2",
+            ),
+            (
+                "module-2.bgl",
+                "
+      from 'module-3.bgl' import { foo }",
+            ),
+        ],
+        true,
+    )
+}
 
-// Deno.test({
-//   name: "Import type across modules pass",
-//   fn() {
-//     testMultiModuleTypecheck({
-//       "module-1.bgl": `
-//       export type Foo = {
-//         method: () {}
-//       }`,
+#[test]
+fn Import_type_across_modules_pass() {
+    test_check_multi(
+        vec![
+            (
+                "module-1.bgl",
+                "
+      export type Foo = {
+        method: () {}
+      }",
+            ),
+            (
+                "module-2.bgl",
+                "
+      from 'module-1.bgl' import { Foo }
+      proc bar(foo: Foo) {
+        foo.method();
+      }",
+            ),
+        ],
+        false,
+    )
+}
 
-//       "module-2.bgl": `
-//       from 'module-1.bgl' import { Foo }
-//       proc bar(foo: Foo) {
-//         foo.method();
-//       }`
-//     }, false)
-//   }
-// })
+#[test]
+fn Import_type_across_modules_fail() {
+    test_check_multi(
+        vec![
+            (
+                "module-1.bgl",
+                "
+      export type Foo = {
+        method: () {}
+      }",
+            ),
+            (
+                "module-2.bgl",
+                "
+      from 'module-1.bgl' import { Foo }
+      proc bar(foo: Foo) {
+        foo.other();
+      }",
+            ),
+        ],
+        true,
+    )
+}
 
-// Deno.test({
-//   name: "Import type across modules fail",
-//   fn() {
-//     testMultiModuleTypecheck({
-//       "module-1.bgl": `
-//       export type Foo = {
-//         method: () {}
-//       }`,
+#[test]
+fn Inferred_type_across_modules() {
+    test_check_multi(
+        vec![
+            (
+                "module-1.bgl",
+                "
+      export func foo(b: number) => b * 2",
+            ),
+            (
+                "module-2.bgl",
+                "
+      from 'module-1.bgl' import { foo }
+      const stuff: number = foo(12)",
+            ),
+        ],
+        false,
+    )
+}
 
-//       "module-2.bgl": `
-//       from 'module-1.bgl' import { Foo }
-//       proc bar(foo: Foo) {
-//         foo.other();
-//       }`
-//     }, true)
-//   }
-// })
+#[test]
+fn Inferred_type_across_module_with_name_resolution() {
+    test_check_multi(
+        vec![
+            (
+                "module-1.bgl",
+                "func foo(a: number) => a * 2
+            export func bar(b: number) => foo(b) * 2",
+            ),
+            (
+                "module-2.bgl",
+                "from 'module-1.bgl' import { bar }
+            const stuff: number = bar(12)",
+            ),
+        ],
+        false,
+    )
+}
 
-// Deno.test({
-//   name: "Inferred type across modules",
-//   fn() {
-//     testMultiModuleTypecheck({
-//       "module-1.bgl": `
-//       export func foo(b: number) => b * 2`,
+#[test]
+fn Expose_access_in_module() {
+    test_check_multi(
+        vec![
+            (
+                "module-1.bgl",
+                "
+      expose let foo: number = 12",
+            ),
+            (
+                "module-2.bgl",
+                "
+      from 'module-1.bgl' import { foo }
+      proc bar() {
+        let a: number = 0;
 
-//       "module-2.bgl": `
-//       from 'module-1.bgl' import { foo }
-//       const stuff: number = foo(12)`
-//     }, false)
-//   }
-// })
+        a = foo;
+      }",
+            ),
+        ],
+        false,
+    )
+}
 
-// Deno.test({
-//   name: "Inferred type across module with name resolution",
-//   fn() {
-//     testMultiModuleTypecheck({
-//       "module-1.bgl": `
-//       func foo(a: number) => a * 2
-//       export func bar(b: number) => foo(b) * 2`,
-
-//       "module-2.bgl": `
-//       from 'module-1.bgl' import { bar }
-//       const stuff: number = bar(12)`
-//     }, false)
-//   }
-// })
-
-// Deno.test({
-//   name: "Expose access in module",
-//   fn() {
-//     testMultiModuleTypecheck({
-//       "module-1.bgl": `
-//       expose let foo: number = 12`,
-
-//       "module-2.bgl": `
-//       from 'module-1.bgl' import { foo }
-//       proc bar() {
-//         let a: number = 0;
-
-//         a = foo;
-//       }`
-//     }, false)
-//   }
-// })
-
-// Deno.test({
-//   name: "Expose assignment",
-//   fn() {
-//     testMultiModuleTypecheck({
-//       "module-1.bgl": `
-//       expose let foo: number = 12`,
-
-//       "module-2.bgl": `
-//       from 'module-1.bgl' import { foo }
-//       proc bar() {
-//         foo = 13;
-//       }`
-//     }, true)
-//   }
-// })
+#[test]
+fn Expose_assignment() {
+    test_check_multi(
+        vec![
+            ("module-1.bgl", "expose let foo: number = 12"),
+            (
+                "module-2.bgl",
+                "from 'module-1.bgl' import { foo }
+            proc bar() {
+              foo = 13;
+            }",
+            ),
+        ],
+        true,
+    )
+}
 
 #[test]
 fn Assignment_ops_pass() {
@@ -2056,79 +2112,94 @@ fn Pure_function() {
     );
 }
 
-// Deno.test({
-//   name: "Impure function",
-//   fn() {
-//     testTypecheck(`
-//     let a = 12
-//     func foo(b: number) => a * b`,
-//     true)
-//   }
-// })
+#[test]
+fn Impure_function() {
+    test_check(
+        "
+        let a = 12
+        func foo(b: number) => a * b",
+        true,
+    );
+}
 
-// Deno.test({
-//   name: "Import all pass",
-//   fn() {
-//     testMultiModuleTypecheck({
-//       'a.bgl': `export func foo(a: number) => a + 'stuff'`,
-//       'b.bgl': `
-//       import 'a.bgl' as moduleA
-//       const x = moduleA.foo(12)`
-//     },
-//     false)
-//   }
-// })
+#[test]
+fn Import_all_pass() {
+    test_check_multi(
+        vec![
+            ("a.bgl", "export func foo(a: number) => a + 'stuff'"),
+            (
+                "b.bgl",
+                "
+      import 'a.bgl' as moduleA
+      const x = moduleA.foo(12)",
+            ),
+        ],
+        false,
+    )
+}
 
-// Deno.test({
-//   name: "Import all fail 1",
-//   fn() {
-//     testMultiModuleTypecheck({
-//       'a.bgl': `export func foo2(a: number) => a + 'stuff'`,
-//       'b.bgl': `
-//       import 'a.bgl' as moduleA
-//       const x = moduleA.foo(12)`
-//     },
-//     true)
-//   }
-// })
+#[test]
+fn Import_all_fail_1() {
+    test_check_multi(
+        vec![
+            ("a.bgl", "export func foo2(a: number) => a + 'stuff'"),
+            (
+                "b.bgl",
+                "
+      import 'a.bgl' as moduleA
+      const x = moduleA.foo(12)",
+            ),
+        ],
+        true,
+    )
+}
 
-// Deno.test({
-//   name: "Import all fail 2",
-//   fn() {
-//     testMultiModuleTypecheck({
-//       'a.bgl': `export func foo(a: number) => a + 'stuff'`,
-//       'b.bgl': `
-//       import 'a.bgl' as moduleA
-//       const x = foo(12)`
-//     },
-//     true)
-//   }
-// })
+#[test]
+fn Import_all_fail_2() {
+    test_check_multi(
+        vec![
+            ("a.bgl", "export func foo(a: number) => a + 'stuff'"),
+            (
+                "b.bgl",
+                "
+      import 'a.bgl' as moduleA
+      const x = foo(12)",
+            ),
+        ],
+        true,
+    )
+}
 
-// Deno.test({
-//   name: "Import all fail 3",
-//   fn() {
-//     testMultiModuleTypecheck({
-//       'a.bgl': `export func foo(a: number) => a + 'stuff'`,
-//       'b.bgl': `
-//       import 'a.bgl' as moduleA
-//       const x = moduleA.foo('stuff')`
-//     },
-//     true)
-//   }
-// })
+#[test]
+fn Import_all_fail_3() {
+    test_check_multi(
+        vec![
+            ("a.bgl", "export func foo(a: number) => a + 'stuff'"),
+            (
+                "b.bgl",
+                "
+      import 'a.bgl' as moduleA
+      const x = moduleA.foo('stuff')",
+            ),
+        ],
+        true,
+    )
+}
 
-// Deno.test({
-//   name: "Import all fail 4",
-//   fn() {
-//     testMultiModuleTypecheck({
-//       'a.bgl': `export func foo(a: number) => a + 'stuff'`,
-//       'b.bgl': `
-//       import 'c.bgl' as moduleA`
-//     },
-//     true)
-//   }
-// })
+#[test]
+fn Import_all_fail_4() {
+    test_check_multi(
+        vec![
+            ("a.bgl", "export func foo(a: number) => a + 'stuff'"),
+            (
+                "b.bgl",
+                "
+      import 'c.bgl' as moduleA",
+            ),
+        ],
+        true,
+    )
+}
 
 #[test]
 fn Record_type_pass() {
@@ -2965,31 +3036,31 @@ fn Circular_type_pass_2() {
     );
 }
 
-// Deno.test({
-//   name: "Circular type pass 3",
-//   fn() {
-//     testTypecheck(`
-//     export type JSON =
-//       | {[string]: JSON}
-//       | JSON[]
-//       | string
-//       | number
-//       | boolean
-//       | nil
-
-//     export func clone<T extends JSON>(val: T): T =>
-//         if val instanceof {[string]: unknown} {
-//             val.entries()
-//                 .map(entry => [entry[0], entry[1].clone()])
-//                 .collectObject()
-//         } else if val instanceof unknown[] {
-//             val.map(clone).collectArray()
-//         } else {
-//             val
-//         }`,
-//     false)
-//   }
-// })
+#[test]
+fn Circular_type_pass_3() {
+    test_check(
+        "
+        export type JSON =
+            | {[string]: JSON}
+            | JSON[]
+            | string
+            | number
+            | boolean
+            | nil
+    
+        export func clone<T extends JSON>(val: T): T =>
+            if val instanceof {[string]: unknown} {
+                val.entries()
+                    .map(entry => [entry[0], entry[1].clone()])
+                    .collectObject()
+            } else if val instanceof unknown[] {
+                val.map(clone).collectArray()
+            } else {
+                val
+            }",
+        false,
+    );
+}
 
 #[test]
 fn Circular_type_fail_1() {
@@ -3035,21 +3106,28 @@ fn Circular_type_fail_1() {
 //   }
 // })
 
-// Deno.test({
-//   name: "Nominal fail 1",
-//   fn() {
-//     testMultiModuleTypecheck({
-//       'a.bgl': `
-//       export nominal type A`,
-//       'b.bgl': `
-//       from 'a.bgl' import { A as OtherA }
+#[test]
+fn Nominal_fail_1() {
+    test_check_multi(
+        vec![
+            (
+                "a.bgl",
+                "
+      export nominal type A",
+            ),
+            (
+                "b.bgl",
+                "
+      from 'a.bgl' import { A as OtherA }
 
-//       nominal type A
+      nominal type A
 
-//       const x: OtherA = A`
-//     }, true)
-//   }
-// })
+      const x: OtherA = A",
+            ),
+        ],
+        true,
+    )
+}
 
 // Deno.test({
 //   name: "Nominal fail 2",
@@ -3063,68 +3141,90 @@ fn Circular_type_fail_1() {
 //   }
 // })
 
-// Deno.test({
-//   name: "Import JSON pass",
-//   fn() {
-//     testMultiModuleTypecheck({
-//       'a.json': `
-//       {
-//         "foo": 123,
-//         "bar": {
-//           "arr": [ "foo" ],
-//           "thing": false,
-//           "other": null
-//         }
-//       }`,
-//       'b.bgl': `
-//       import 'a.json' as a
+#[test]
+fn Import_JSON_pass() {
+    test_check_multi(
+        vec![
+            (
+                "a.json",
+                "
+        {
+            \"foo\": 123,
+            \"bar\": {
+            \"arr\": [ \"foo\" ],
+            \"thing\": false,
+            \"other\": null
+            }
+        }",
+            ),
+            (
+                "b.bgl",
+                "
+      import 'a.json' as a
 
-//       const x: 123 = a.foo`
-//     }, false)
-//   }
-// })
+      const x: 123 = a.foo",
+            ),
+        ],
+        false,
+    );
+}
 
-// Deno.test({
-//   name: "Import JSON fail",
-//   fn() {
-//     testMultiModuleTypecheck({
-//       'a.json': `
-//       {
-//         "foo": 123
-//       }`,
-//       'b.bgl': `
-//       import 'a.json' as a
+#[test]
+fn Import_JSON_fail() {
+    test_check_multi(
+        vec![
+            (
+                "a.json",
+                "
+      {
+        \"foo\": 123
+      }",
+            ),
+            (
+                "b.bgl",
+                "
+      import 'a.json' as a
 
-//       const x: string = a.foo`
-//     }, true)
-//   }
-// })
+      const x: string = a.foo",
+            ),
+        ],
+        true,
+    );
+}
 
-// Deno.test({
-//   name: "Import plaintext pass",
-//   fn() {
-//     testMultiModuleTypecheck({
-//       'a.txt': `Lorem ipsum`,
-//       'b.bgl': `
-//       import 'a.txt' as a
+#[test]
+fn Import_plaintext_pass() {
+    test_check_multi(
+        vec![
+            ("a.txt", "Lorem ipsum"),
+            (
+                "b.bgl",
+                "
+      import 'a.txt' as a
 
-//       const x: 'Lorem ipsum' = a`
-//     }, false)
-//   }
-// })
+      const x: 'Lorem ipsum' = a",
+            ),
+        ],
+        false,
+    )
+}
 
-// Deno.test({
-//   name: "Import plaintext fail",
-//   fn() {
-//     testMultiModuleTypecheck({
-//       'a.txt': `Lorem ipsum`,
-//       'b.bgl': `
-//       import 'a.txt' as a
+#[test]
+fn Import_plaintext_fail() {
+    test_check_multi(
+        vec![
+            ("a.txt", "Lorem ipsum"),
+            (
+                "b.bgl",
+                "
+      import 'a.txt' as a
 
-//       const x: number = a`
-//     }, true)
-//   }
-// })
+      const x: number = a",
+            ),
+        ],
+        true,
+    )
+}
 
 #[test]
 fn Element_type_pass() {
@@ -3730,20 +3830,20 @@ fn String_type_addition_fail() {
     );
 }
 
-// Deno.test({
-//   name: "Complex function type inference pass",
-//   fn() {
-//     testTypecheck(`
-//     type Adder = {
-//       inc: (n: number) => number
-//     }
+#[test]
+fn Complex_function_type_inference_pass() {
+    test_check(
+        "
+    type Adder = {
+        inc: (n: number) => number
+    }
 
-//     const a: Adder = {
-//       inc: n => n + 1
-//     }`,
-//     false)
-//   }
-// })
+    const a: Adder = {
+        inc: n => n + 1
+    }",
+        false,
+    )
+}
 
 #[test]
 fn Pure_functions_pass() {
@@ -3882,7 +3982,7 @@ fn Pure_procs_fail_3() {
 }
 
 fn test_check(bgl: &str, should_fail: bool) {
-    let module_id = ModuleID::try_from(Url::try_from("https://foo.bar").unwrap()).unwrap();
+    let module_id = ModuleID::Artificial(Rc::new("foo".to_owned()));
     let bgl_rc = Rc::new(bgl.to_owned() + " ");
 
     let parsed = parse(module_id.clone(), bgl_rc.clone());
@@ -3921,6 +4021,57 @@ fn test_check(bgl: &str, should_fail: bool) {
                 BagelError::from(err).pretty_print_string(true).unwrap()
             );
             panic!("Failed to parse input");
+        }
+    }
+}
+
+fn test_check_multi(modules: Vec<(&str, &str)>, should_fail: bool) {
+    let modules_store: HashMap<ModuleID, Result<Module, ParseError>> = modules
+        .into_iter()
+        .map(|(id, bgl)| {
+            let module_id = ModuleID::Artificial(Rc::new(id.to_owned()));
+            let bgl_rc = Rc::new(bgl.to_owned() + " ");
+
+            (
+                module_id.clone(),
+                parse(module_id.clone(), bgl_rc.clone()).map(|parsed| Module {
+                    module_id: module_id.clone(),
+                    src: Slice::new(bgl_rc.clone()),
+                    ast: parsed,
+                }),
+            )
+        })
+        .collect();
+    let modules_store: ModulesStore = modules_store.into();
+
+    let parse_errors = modules_store
+        .iter()
+        .filter_map(|(_, res)| res.as_ref().err().cloned())
+        .collect::<Vec<ParseError>>();
+
+    if parse_errors.len() > 0 {
+        for err in parse_errors {
+            println!(
+                "{}\n",
+                BagelError::from(err).pretty_print_string(true).unwrap()
+            );
+        }
+
+        panic!("Failed to parse input");
+    } else {
+        let checker_errors = gather_errors(&modules_store);
+
+        let total_errors = checker_errors
+            .iter()
+            .map(|(_, value)| value.len())
+            .fold(0, Add::add);
+        let had_errors = total_errors > 0;
+
+        if !should_fail && had_errors {
+            print_errors(&checker_errors);
+            println!("Type check should have passed but failed with errors");
+        } else if should_fail && !had_errors {
+            panic!("Type check should have failed but passed with no errors");
         }
     }
 }

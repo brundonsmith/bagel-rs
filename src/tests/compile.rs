@@ -774,7 +774,7 @@ fn Comment_test_block() {
 
 fn test_compile(bgl: &str, js: &str) {
     let parsed = parse(
-        ModuleID::try_from(Url::try_from("https://foo.bar").unwrap()).unwrap(),
+        ModuleID::Artificial(Rc::new("foo".to_owned())),
         Rc::new(bgl.to_owned() + " "),
     );
 

@@ -99,6 +99,7 @@ impl From<HashMap<ModuleID, Result<Module, ParseError>>> for ModulesStore {
 pub enum ModuleID {
     Local(Rc<PathBuf>),
     Remote(Rc<Url>),
+    Artificial(Rc<String>),
 }
 
 impl ModuleID {
@@ -157,6 +158,7 @@ impl ModuleID {
 
                 None
             }
+            ModuleID::Artificial(_) => unreachable!(),
         }
     }
 }
@@ -185,6 +187,7 @@ impl Display for ModuleID {
         match self {
             ModuleID::Local(p) => f.write_str(&p.to_string_lossy()),
             ModuleID::Remote(s) => f.write_str(s.as_str()),
+            ModuleID::Artificial(s) => f.write_str(s.as_str()),
         }
     }
 }
