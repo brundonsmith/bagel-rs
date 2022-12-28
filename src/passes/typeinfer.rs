@@ -68,7 +68,7 @@ where
                             platforms: _,
                             decorators: _,
                         } => {
-                            return proc.clone().upcast().infer_type(ctx);
+                            return proc.infer_type(ctx);
                         }
                         ASTDetails::FuncDeclaration {
                             name: _,
@@ -77,7 +77,7 @@ where
                             platforms: _,
                             decorators: _,
                         } => {
-                            return func.clone().upcast().infer_type(ctx);
+                            return func.infer_type(ctx);
                         }
                         ASTDetails::ValueDeclaration {
                             name: _,

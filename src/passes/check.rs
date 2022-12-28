@@ -15,7 +15,7 @@ impl Module {
     pub fn check<'a, F: FnMut(BagelError)>(&self, ctx: CheckContext<'a>, report_error: &mut F) {
         let start = SystemTime::now();
 
-        self.ast.clone().upcast().check(ctx, report_error);
+        self.ast.check(ctx, report_error);
 
         if DEBUG_MODE {
             println!(
@@ -273,7 +273,7 @@ where
                 is_pure,
                 body,
             } => {
-                type_annotation.clone().upcast().check(ctx, report_error);
+                type_annotation.check(ctx, report_error);
                 body.check(ctx, report_error);
 
                 let type_annotation = type_annotation.downcast();
