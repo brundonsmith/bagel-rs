@@ -515,7 +515,72 @@ where
             ASTDetails::ArrayType(element) => element.check(ctx, report_error),
             ASTDetails::TupleType(members) => members.check(ctx, report_error),
             ASTDetails::SpecialType { kind, inner } => todo!(),
-            ASTDetails::ModifierType { kind, inner } => todo!(),
+            ASTDetails::ModifierType { kind, inner } => match kind {
+                ModifierTypeKind::Readonly => {}
+                ModifierTypeKind::Keyof => {
+                    let inner_type = inner.infer_type(ctx.into());
+
+                    match inner_type {
+                        Type::RecordType {
+                            key_type: _,
+                            value_type: _,
+                        } => {}
+                        Type::ObjectType {
+                            entries: _,
+                            is_interface: _,
+                        } => {}
+                        _ => report_error(BagelError::MiscError {
+                            module_id: ctx.current_module.module_id.clone(),
+                            src: self.slice().clone(),
+                            message: format!(
+                                "Cannot apply {} to {}",
+                                blue_string("keyof"),
+                                blue_string(format!("{}", inner_type).as_str())
+                            ),
+                        }),
+                    }
+                }
+                ModifierTypeKind::Valueof => {
+                    let inner_type = inner.infer_type(ctx.into());
+
+                    match inner_type {
+                        Type::RecordType {
+                            key_type: _,
+                            value_type: _,
+                        } => {}
+                        Type::ObjectType {
+                            entries: _,
+                            is_interface: _,
+                        } => {}
+                        _ => report_error(BagelError::MiscError {
+                            module_id: ctx.current_module.module_id.clone(),
+                            src: self.slice().clone(),
+                            message: format!(
+                                "Cannot apply {} to {}",
+                                blue_string("valueof"),
+                                blue_string(format!("{}", inner_type).as_str())
+                            ),
+                        }),
+                    }
+                }
+                ModifierTypeKind::Elementof => {
+                    let inner_type = inner.infer_type(ctx.into());
+
+                    match inner_type {
+                        Type::ArrayType(_) => {}
+                        Type::TupleType(_) => {}
+                        _ => report_error(BagelError::MiscError {
+                            module_id: ctx.current_module.module_id.clone(),
+                            src: self.slice().clone(),
+                            message: format!(
+                                "Cannot apply {} to {}",
+                                blue_string("keyof"),
+                                blue_string(format!("{}", inner_type).as_str())
+                            ),
+                        }),
+                    }
+                }
+            },
             ASTDetails::TypeofType(_) => todo!(),
             ASTDetails::PropertyType {
                 subject,

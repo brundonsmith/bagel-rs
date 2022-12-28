@@ -1,6 +1,6 @@
 use crate::model::{
     ast::*,
-    bgl_type::Type,
+    bgl_type::{SubsumationContext, Type},
     module::{Module, ModulesStore},
 };
 
@@ -113,10 +113,7 @@ impl ASTAny {
                 Type::UnionType(members.iter().map(|m| m.resolve_type(ctx)).collect())
             }
             ASTDetails::MaybeType(inner) => inner.resolve_type(ctx).union(Type::NilType),
-            ASTDetails::NamedType(name) => Type::NamedType {
-                module_id: ctx.current_module.module_id.clone(),
-                name: name.slice().clone(),
-            },
+            ASTDetails::NamedType(name) => Type::NamedType(name.clone()),
             ASTDetails::RegularExpressionType {} => Type::RegularExpressionType {},
             ASTDetails::RecordType {
                 key_type,
@@ -346,6 +343,22 @@ impl<'a> From<CheckContext<'a>> for ResolveContext<'a> {
             modules,
             current_module,
         }: CheckContext<'a>,
+    ) -> Self {
+        Self {
+            modules,
+            current_module,
+        }
+    }
+}
+
+impl<'a> From<SubsumationContext<'a>> for ResolveContext<'a> {
+    fn from(
+        SubsumationContext {
+            modules,
+            current_module,
+            dest_mutability: _,
+            val_mutability: _,
+        }: SubsumationContext<'a>,
     ) -> Self {
         Self {
             modules,

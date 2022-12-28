@@ -1,10 +1,6 @@
 use crate::{
     model::ast::*,
-    model::{
-        ast::ASTDetails,
-        bgl_type::{self, Type},
-        module::Module,
-    },
+    model::{ast::ASTDetails, bgl_type::Type, module::Module},
     passes::check::CheckContext,
     ModulesStore,
 };

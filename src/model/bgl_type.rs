@@ -7,7 +7,11 @@ use crate::{
     ModulesStore,
 };
 
-use super::{module::ModuleID, slice::Slice};
+use super::{
+    ast::{ASTDetails, PlainIdentifier, AST},
+    module::Module,
+    slice::Slice,
+};
 
 #[derive(Clone, Debug, PartialEq, EnumVariantType)]
 pub enum Type {
@@ -67,10 +71,7 @@ pub enum Type {
 
     NilType,
 
-    NamedType {
-        module_id: ModuleID,
-        name: Slice,
-    },
+    NamedType(AST<PlainIdentifier>),
 
     IteratorType(Box<Type>),
 
@@ -146,6 +147,36 @@ impl Type {
         }
 
         match (destination, value) {
+            (Type::NamedType(name), value) => {
+                let destination = name
+                    .resolve_symbol(name.downcast().0.as_str())
+                    .map(|resolved| match resolved.details() {
+                        ASTDetails::TypeDeclaration {
+                            name,
+                            declared_type,
+                            exported,
+                        } => declared_type.resolve_type(ctx.into()),
+                        _ => Type::PoisonedType,
+                    })
+                    .unwrap_or(Type::PoisonedType);
+
+                return destination.subsumation_issues(ctx, value);
+            }
+            (destination, Type::NamedType(name)) => {
+                let value = name
+                    .resolve_symbol(name.downcast().0.as_str())
+                    .map(|resolved| match resolved.details() {
+                        ASTDetails::TypeDeclaration {
+                            name,
+                            declared_type,
+                            exported,
+                        } => declared_type.resolve_type(ctx.into()),
+                        _ => Type::PoisonedType,
+                    })
+                    .unwrap_or(Type::PoisonedType);
+
+                return destination.subsumation_issues(ctx, &value);
+            }
             (Type::ReadonlyType(inner), value) => {
                 return inner
                     .subsumation_issues(ctx.with_dest_mutability(Mutability::Readonly), value);
@@ -313,14 +344,21 @@ impl Type {
 #[derive(Clone, Copy, Debug)]
 pub struct SubsumationContext<'a> {
     pub modules: &'a ModulesStore,
+    pub current_module: &'a Module,
     pub dest_mutability: Mutability,
     pub val_mutability: Mutability,
 }
 
 impl<'a> From<CheckContext<'a>> for SubsumationContext<'a> {
-    fn from(ctx: CheckContext<'a>) -> Self {
+    fn from(
+        CheckContext {
+            modules,
+            current_module,
+        }: CheckContext<'a>,
+    ) -> Self {
         Self {
-            modules: ctx.modules,
+            modules,
+            current_module,
             dest_mutability: Mutability::Mutable,
             val_mutability: Mutability::Mutable,
         }
@@ -328,9 +366,15 @@ impl<'a> From<CheckContext<'a>> for SubsumationContext<'a> {
 }
 
 impl<'a> From<InferTypeContext<'a>> for SubsumationContext<'a> {
-    fn from(ctx: InferTypeContext<'a>) -> Self {
+    fn from(
+        InferTypeContext {
+            modules,
+            current_module,
+        }: InferTypeContext<'a>,
+    ) -> Self {
         Self {
-            modules: ctx.modules,
+            modules,
+            current_module,
             dest_mutability: Mutability::Mutable,
             val_mutability: Mutability::Mutable,
         }
@@ -341,6 +385,7 @@ impl<'a> SubsumationContext<'a> {
     pub fn with_dest_mutability(self, dest_mutability: Mutability) -> Self {
         Self {
             modules: self.modules,
+            current_module: self.current_module,
             dest_mutability,
             val_mutability: self.val_mutability,
         }
@@ -349,6 +394,7 @@ impl<'a> SubsumationContext<'a> {
     pub fn with_val_mutability(self, val_mutability: Mutability) -> Self {
         Self {
             modules: self.modules,
+            current_module: self.current_module,
             dest_mutability: self.dest_mutability,
             val_mutability,
         }
@@ -468,7 +514,7 @@ impl Display for Type {
                 None => f.write_str("boolean"),
             },
             Type::NilType => f.write_str("nil"),
-            Type::NamedType { module_id, name } => f.write_str(name.as_str()),
+            Type::NamedType(name) => f.write_str(name.downcast().0.as_str()),
             Type::IteratorType(inner) => f.write_fmt(format_args!("Iterator<{}>", inner)),
             Type::PlanType(inner) => f.write_fmt(format_args!("Plan<{}>", inner)),
             Type::ErrorType(inner) => f.write_fmt(format_args!("Error<{}>", inner)),
