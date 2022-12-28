@@ -460,8 +460,9 @@ where
                 );
             }
             ASTDetails::ErrorExpression(_) => todo!(),
-            ASTDetails::RegularExpression { expr, flags } => todo!(),
-            ASTDetails::UnionType(_) => todo!(),
+            ASTDetails::UnionType(members) => {
+                members.check(ctx, report_error);
+            }
             ASTDetails::MaybeType(inner) => inner.check(ctx, report_error),
             ASTDetails::GenericParamType { name, extends } => todo!(),
             ASTDetails::ProcType {
@@ -514,7 +515,9 @@ where
             }
             ASTDetails::ArrayType(element) => element.check(ctx, report_error),
             ASTDetails::TupleType(members) => members.check(ctx, report_error),
-            ASTDetails::SpecialType { kind, inner } => todo!(),
+            ASTDetails::SpecialType { kind: _, inner } => {
+                inner.check(ctx, report_error);
+            }
             ASTDetails::ModifierType { kind, inner } => match kind {
                 ModifierTypeKind::Readonly => {}
                 ModifierTypeKind::Keyof => {
@@ -666,6 +669,7 @@ where
             ASTDetails::ExactStringLiteral { tag: _, value: _ } => {}
             ASTDetails::BinaryOperator(_) => {}
             ASTDetails::PlainIdentifier(_) => {}
+            ASTDetails::RegularExpression { expr: _, flags: _ } => {}
 
             ASTDetails::ParenthesizedType(_) => {}
             ASTDetails::RegularExpressionType => {}
