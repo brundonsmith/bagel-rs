@@ -101,6 +101,24 @@ where
                     return Some(found.clone().upcast());
                 }
             }
+            ASTDetails::InlineConstGroup {
+                declarations,
+                inner,
+            } => {
+                if let Some(found) =
+                    declarations
+                        .iter()
+                        .find(|arg| match arg.downcast().destination {
+                            DeclarationDestination::NameAndType(NameAndType {
+                                name,
+                                type_annotation: _,
+                            }) => name.downcast().0.as_str() == symbol,
+                            DeclarationDestination::Destructure(_) => todo!(),
+                        })
+                {
+                    return Some(found.clone().upcast());
+                }
+            }
             _ => {}
         };
 

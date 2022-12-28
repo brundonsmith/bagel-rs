@@ -149,6 +149,11 @@ where
                 declarations,
                 inner,
             } => todo!(),
+            ASTDetails::InlineDeclaration {
+                destination,
+                awaited,
+                value,
+            } => todo!(),
             ASTDetails::Func {
                 type_annotation,
                 is_async,

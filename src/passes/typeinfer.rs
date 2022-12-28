@@ -106,6 +106,22 @@ where
                                 .map(|t| t.resolve_type(ctx.into()))
                                 .unwrap_or(Type::PoisonedType);
                         }
+                        ASTDetails::InlineDeclaration {
+                            destination,
+                            awaited,
+                            value,
+                        } => {
+                            return match destination {
+                                DeclarationDestination::NameAndType(NameAndType {
+                                    name: _,
+                                    type_annotation,
+                                }) => type_annotation
+                                    .as_ref()
+                                    .map(|x| x.resolve_type(ctx.into()))
+                                    .unwrap_or_else(|| value.infer_type(ctx)),
+                                DeclarationDestination::Destructure(_) => todo!(),
+                            }
+                        }
                         _ => todo!(),
                     }
                 }

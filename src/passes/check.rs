@@ -203,33 +203,41 @@ where
                 declarations,
                 inner,
             } => {
-                for InlineDeclaration {
-                    destination,
-                    awaited,
-                    value,
-                } in declarations
-                {
-                    match destination {
-                        DeclarationDestination::NameAndType(NameAndType {
-                            name,
-                            type_annotation,
-                        }) => {
-                            name.check(ctx, report_error);
-                            type_annotation.check(ctx, report_error);
-                        }
-                        DeclarationDestination::Destructure(Destructure {
-                            properties,
-                            spread,
-                            destructure_kind,
-                        }) => {
-                            properties.check(ctx, report_error);
-                            spread.check(ctx, report_error);
+                declarations.check(ctx, report_error);
+                inner.check(ctx, report_error);
+            }
+            ASTDetails::InlineDeclaration {
+                destination,
+                awaited,
+                value,
+            } => {
+                match destination {
+                    DeclarationDestination::NameAndType(NameAndType {
+                        name,
+                        type_annotation,
+                    }) => {
+                        name.check(ctx, report_error);
+                        type_annotation.check(ctx, report_error);
+
+                        if let Some(type_annotation) = type_annotation {
+                            check_subsumation(
+                                &type_annotation.resolve_type(ctx.into()),
+                                value.infer_type(ctx.into()),
+                                value.slice(),
+                                report_error,
+                            );
                         }
                     }
-                    value.check(ctx, report_error);
+                    DeclarationDestination::Destructure(Destructure {
+                        properties,
+                        spread,
+                        destructure_kind,
+                    }) => {
+                        properties.check(ctx, report_error);
+                        spread.check(ctx, report_error);
+                    }
                 }
-
-                inner.check(ctx, report_error);
+                value.check(ctx, report_error);
             }
             ASTDetails::Func {
                 type_annotation,
@@ -259,9 +267,27 @@ where
                 type_annotation.check(ctx, report_error);
                 body.check(ctx, report_error);
             }
-            ASTDetails::Block(statements) => {}
-            ASTDetails::JavascriptEscape(_) => todo!(),
-            ASTDetails::RangeExpression { start, end } => todo!(),
+            ASTDetails::Block(statements) => {
+                statements.check(ctx, report_error);
+            }
+            ASTDetails::RangeExpression { start, end } => {
+                start.check(ctx, report_error);
+                end.check(ctx, report_error);
+
+                check_subsumation(
+                    &Type::ANY_NUMBER,
+                    start.infer_type(ctx.into()),
+                    start.slice(),
+                    report_error,
+                );
+
+                check_subsumation(
+                    &Type::ANY_NUMBER,
+                    end.infer_type(ctx.into()),
+                    end.slice(),
+                    report_error,
+                );
+            }
             ASTDetails::Invocation {
                 subject,
                 args,
@@ -332,22 +358,18 @@ where
             } => {
                 cases.check(ctx, report_error);
                 default_case.check(ctx, report_error);
-
-                let truthiness_safe = Type::get_truthiness_safe_types();
-                for case in cases {
-                    let IfElseExpressionCase { condition, outcome } = case.downcast();
-
-                    check_subsumation(
-                        &truthiness_safe,
-                        condition.infer_type(ctx.into()),
-                        condition.slice(),
-                        report_error,
-                    );
-                }
             }
             ASTDetails::IfElseExpressionCase { condition, outcome } => {
                 condition.check(ctx, report_error);
                 outcome.check(ctx, report_error);
+
+                let truthiness_safe = Type::get_truthiness_safe_types();
+                check_subsumation(
+                    &truthiness_safe,
+                    condition.infer_type(ctx.into()),
+                    condition.slice(),
+                    report_error,
+                );
             }
             ASTDetails::SwitchExpression {
                 value,
@@ -363,15 +385,35 @@ where
                 attributes,
                 children,
             } => todo!(),
-            ASTDetails::AsCast { inner, as_type } => todo!(),
+            ASTDetails::AsCast { inner, as_type } => {
+                inner.check(ctx, report_error);
+                as_type.check(ctx, report_error);
+
+                check_subsumation(
+                    &as_type.resolve_type(ctx.into()),
+                    inner.infer_type(ctx.into()),
+                    inner.slice(),
+                    report_error,
+                );
+            }
             ASTDetails::InstanceOf {
                 inner,
                 possible_type,
-            } => todo!(),
+            } => {
+                inner.check(ctx, report_error);
+                possible_type.check(ctx, report_error);
+
+                check_subsumation(
+                    &inner.infer_type(ctx.into()),
+                    possible_type.resolve_type(ctx.into()),
+                    inner.slice(),
+                    report_error,
+                );
+            }
             ASTDetails::ErrorExpression(_) => todo!(),
             ASTDetails::RegularExpression { expr, flags } => todo!(),
             ASTDetails::UnionType(_) => todo!(),
-            ASTDetails::MaybeType(_) => todo!(),
+            ASTDetails::MaybeType(inner) => inner.check(ctx, report_error),
             ASTDetails::NamedType(_) => todo!(),
             ASTDetails::GenericParamType { name, extends } => todo!(),
             ASTDetails::ProcType {
@@ -444,8 +486,22 @@ where
             ASTDetails::IfElseStatement {
                 cases,
                 default_case,
-            } => todo!(),
-            ASTDetails::IfElseStatementCase { condition, outcome } => todo!(),
+            } => {
+                cases.check(ctx, report_error);
+                default_case.check(ctx, report_error);
+            }
+            ASTDetails::IfElseStatementCase { condition, outcome } => {
+                condition.check(ctx, report_error);
+                outcome.check(ctx, report_error);
+
+                let truthiness_safe = Type::get_truthiness_safe_types();
+                check_subsumation(
+                    &truthiness_safe,
+                    condition.infer_type(ctx.into()),
+                    condition.slice(),
+                    report_error,
+                );
+            }
             ASTDetails::ForLoop {
                 item_identifier,
                 iterator,
@@ -491,6 +547,7 @@ where
             }
 
             // intentionally have nothing to check
+            ASTDetails::JavascriptEscape(_) => {}
             ASTDetails::NilLiteral => {}
             ASTDetails::NumberLiteral(_) => {}
             ASTDetails::BooleanLiteral(_) => {}

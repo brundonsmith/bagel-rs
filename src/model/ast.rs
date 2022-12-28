@@ -315,8 +315,15 @@ pub enum ASTDetails {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     InlineConstGroup {
-        declarations: Vec<InlineDeclaration>,
+        declarations: Vec<AST<InlineDeclaration>>,
         inner: ASTAny,
+    },
+
+    #[evt(derive(Debug, Clone, PartialEq))]
+    InlineDeclaration {
+        destination: DeclarationDestination,
+        awaited: bool,
+        value: ASTAny,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
@@ -664,14 +671,33 @@ pub struct KeyValueType {
 #[derive(Debug, Clone, PartialEq)]
 pub struct SpreadType(pub ASTAny);
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct InlineDeclaration {
-    pub destination: DeclarationDestination,
-    pub awaited: bool,
-    pub value: ASTAny,
-}
-
 union_type!(DeclarationDestination = NameAndType | Destructure);
+
+impl Parentable for DeclarationDestination {
+    fn set_parent<TParentKind>(&mut self, parent: &AST<TParentKind>)
+    where
+        TParentKind: Clone + TryFrom<ASTDetails>,
+        ASTDetails: From<TParentKind>,
+    {
+        match self {
+            DeclarationDestination::NameAndType(NameAndType {
+                name,
+                type_annotation,
+            }) => {
+                name.set_parent(parent);
+                type_annotation.set_parent(parent);
+            }
+            DeclarationDestination::Destructure(Destructure {
+                properties,
+                spread,
+                destructure_kind,
+            }) => {
+                properties.set_parent(parent);
+                spread.set_parent(parent);
+            }
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct NameAndType {

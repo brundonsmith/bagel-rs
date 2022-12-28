@@ -175,7 +175,27 @@ where
             ASTDetails::InlineConstGroup {
                 declarations,
                 inner,
-            } => todo!(),
+            } => {
+                f.write_str("(() => {\n")?;
+                for decl in declarations {
+                    decl.compile(f)?;
+                    f.write_char('\n')?;
+                }
+                f.write_str("return ")?;
+                inner.compile(f)?;
+                f.write_str(";\n})()")
+            }
+            ASTDetails::InlineDeclaration {
+                destination,
+                awaited,
+                value,
+            } => {
+                f.write_str("const ")?;
+                destination.compile(f)?;
+                f.write_str(" = ")?;
+                value.compile(f)?;
+                f.write_char(';')
+            }
             ASTDetails::Func {
                 type_annotation,
                 is_async,
@@ -427,6 +447,26 @@ where
         }
 
         Ok(())
+    }
+}
+
+impl Compilable for DeclarationDestination {
+    fn compile<W: Write>(&self, f: &mut W) -> Result {
+        match self {
+            DeclarationDestination::NameAndType(NameAndType {
+                name,
+                type_annotation,
+            }) => {
+                name.compile(f)?;
+                if let Some(type_annotation) = type_annotation {
+                    f.write_str(": ")?;
+                    type_annotation.compile(f)?;
+                }
+
+                Ok(())
+            }
+            DeclarationDestination::Destructure(_) => todo!(),
+        }
     }
 }
 

@@ -222,6 +222,11 @@ impl ASTAny {
                 declarations,
                 inner,
             } => unreachable!(),
+            ASTDetails::InlineDeclaration {
+                destination,
+                awaited,
+                value,
+            } => unreachable!(),
             ASTDetails::Func {
                 type_annotation,
                 is_async,

@@ -973,7 +973,7 @@ fn expression_inner(l: usize, i: Slice) -> ParseResult<ASTAny> {
         alt((
             if_else_expression,
             switch_expression,
-            // inline_const_group,
+            inline_const_group,
             object_literal,
             array_literal,
             map(exact_string_literal, AST::upcast),
@@ -1344,7 +1344,64 @@ fn func(i: Slice) -> ParseResult<AST<Func>> {
 
 #[memoize]
 fn inline_const_group(i: Slice) -> ParseResult<ASTAny> {
-    todo!()
+    map(
+        seq!(many1(inline_declaration), expression(0)),
+        |(mut declarations, mut inner)| {
+            make_node!(
+                InlineConstGroup,
+                declarations[0].slice().clone().spanning(inner.slice()),
+                declarations,
+                inner
+            )
+        },
+    )(i)
+}
+
+#[memoize]
+fn inline_declaration(i: Slice) -> ParseResult<AST<InlineDeclaration>> {
+    map(
+        seq!(
+            tag("const"),
+            declaration_destination,
+            tag("="),
+            opt(tag("await")),
+            expression(0),
+            tag(",")
+        ),
+        |(start, mut destination, _, awaited, mut value, end)| {
+            let this = InlineDeclaration {
+                destination: destination.clone(),
+                awaited: awaited.is_some(),
+                value: value.clone(),
+            }
+            .with_slice(start.spanning(&end));
+
+            destination.set_parent(&this);
+            value.set_parent(&this);
+
+            this
+        },
+    )(i)
+}
+
+#[memoize]
+fn declaration_destination(i: Slice) -> ParseResult<DeclarationDestination> {
+    // TODO: Destructuring
+    map(
+        seq!(
+            plain_identifier,
+            opt(map(
+                seq!(tag(":"), type_expression(0)),
+                |(_, type_annotation)| type_annotation
+            ))
+        ),
+        |(name, type_annotation)| {
+            DeclarationDestination::NameAndType(NameAndType {
+                name,
+                type_annotation,
+            })
+        },
+    )(i)
 }
 
 fn negation_operation(level: usize) -> impl Fn(Slice) -> ParseResult<ASTAny> {
