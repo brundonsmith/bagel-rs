@@ -1,0 +1,57 @@
+
+export const decodeURIComponent: (str: string) => string = js# globalThis.decodeURIComponent #js
+export const encodeURIComponent: (str: string) => string = js# globalThis.encodeURIComponent #js
+
+export type URI = readonly interface {
+    href: string,
+    protocol: string,
+    origin: string,
+    host: string,
+    hostname: string,
+    pathname: string,
+    port: string?,
+    search: string?,
+    hash: string?,
+    username: string?,
+    password: string?,
+}
+
+export pure js func parseUri(str: string): URI|Error<string> => {#
+    try {
+        const url = new URL(str);
+    } catch (e) {
+        return { kind: ___ERROR_SYM, value: String(e) };
+    }
+
+    const { href, protocol, origin, host, hostname, pathname, 
+        port, search, hash, username, password} = url;
+
+    return {
+        href,
+        protocol,
+        origin,
+        host,
+        hostname,
+        pathname,
+        port: port === '' ? undefined : port,
+        search: search === '' ? undefined : search,
+        hash: hash === '' ? undefined : hash,
+        username: username === '' ? undefined : username,
+        password: password === '' ? undefined : password,
+    }
+#}
+
+export pure js func parseSearchParams(str: string): {[string]: string}? => {#
+    try {
+        const params = new URLSearchParams(str);
+    } catch {
+        return undefined
+    }
+
+    const res = {}
+    for (const [key, value] of params.entries()) {
+        res[key] = value
+    }
+
+    return res
+#}

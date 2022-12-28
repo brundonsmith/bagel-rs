@@ -1,0 +1,74 @@
+
+js#
+import { iter as ___iter } from 'https://raw.githubusercontent.com/brundonsmith/bagel/master/lib/ts/core.ts'
+#js
+
+export js proc log(x: readonly unknown) {#
+    console.log(x);
+#}
+
+export js func logf<T>(x: T): T => {#
+   console.log(x);
+   return x;
+#}
+
+export js func iter<T>(x: readonly T[]): Iterator<T> => {#
+    return ___iter(x)
+#}
+
+export nominal type Loading
+
+export js func planned<T>(plan: Plan<T>): T | Loading => {#
+    const current = ___planned(plan)
+
+    if (current === ___LOADING) {
+        return { sym: ___Loading }
+    } else {
+        return current
+    }
+#}
+
+export type MemoOptions = readonly {
+    maxItems?: number
+}
+
+export func memo(options?: MemoOptions) => <
+    TArgs extends readonly unknown[],
+    TReturn
+>(fn: (...args: TArgs) => readonly TReturn): (...args: TArgs) => readonly TReturn => js# ___memo(fn, options) #js
+
+export js func action<
+    TArgs extends readonly unknown[]
+>(pr: (...args: TArgs) { }): (...args: TArgs) { } => {#
+    return ___action(pr)
+#}
+
+export func assert(condition: boolean, message?: string): Error<string?>? =>
+    if condition {
+        nil
+    } else {
+        Error(message)
+    }
+
+export type UnknownObject = {[string]: unknown} | (readonly {[string]: unknown})
+
+type LintRuleName =
+    | 'unnecessaryParens'
+    | 'funcOrProcAsValue'
+    | 'redundantConditional'
+    | 'stringNumberConditional'
+    | 'explicitBooleansOnly'
+    | 'pureFunctions'
+
+type LintRuleSeverity = 'error'|'warning'|'info'|'off'
+
+export type BagelConfig = {
+    platforms?: ('browser'|'node'|'deno')[],
+    lintRules?: {[LintRuleName]: LintRuleSeverity}
+}
+
+export type Element = {
+    tag: string,
+    attributes: UnknownObject,
+    children: unknown[]
+}

@@ -1,0 +1,14 @@
+
+export pure js func parseBoolean(s: string): boolean? => {#
+    if (s === 'true') {
+        return true
+    } else if (s === 'false') {
+        return false
+    } else {
+        return undefined
+    }
+#}
+
+export pure js func stringifyBoolean(b: boolean): string => {#
+    return String(b)
+#}

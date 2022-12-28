@@ -1,0 +1,18 @@
+
+js#
+import { h as ___h, render as ___render } from 'https://ga.jspm.io/npm:preact@10.6.5/dist/preact.js'
+#js
+
+export js proc render(el: readonly Element) {#
+    function convertToElements(el) {
+        if (el?.tag) {
+            return ___h(el.tag, el.attributes, ...el.children.map(convertToElements))
+        } else if (Array.isArray(el)) {
+            return el.map(convertToElements)
+        } else {
+            return el
+        }
+    }
+
+    ___render(convertToElements(el), document.body)
+#}

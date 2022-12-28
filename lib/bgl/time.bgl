@@ -1,0 +1,30 @@
+
+// export type Instant = readonly interface {
+//     epoch: number,
+//     millisecond: number,
+//     second: number,
+//     minute: number,
+//     hour: number,
+// }
+
+let _now: number = js# Date.now() #js
+
+export js func now(): number => {#
+    startUpdatingTimeIfNeeded();
+    return ___observe(_now, 'value')
+#}
+
+proc updateTime() {
+    _now = js# Date.now(); #js;
+    js#setTimeout(updateTime, 1)#js
+}
+
+js#
+let updateTimeStarted = false;
+export function startUpdatingTimeIfNeeded() {
+    if (!updateTimeStarted) {
+        updateTimeStarted = true;
+        updateTime();
+    }
+}
+#js

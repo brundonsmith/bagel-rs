@@ -1,0 +1,32 @@
+
+// TODO: Or error
+export pure js func parseJson(str: string): JSON|Error<string> => {#
+    try {
+        return JSON.parse(str)
+    } catch (e) {
+        return { kind: ___ERROR_SYM, value: String(e) }
+    }
+#}
+
+export pure js func stringifyJson(val: JSON, indentation: number): string => {#
+    return JSON.stringify(val, x => typeof x === 'undefined' ? null : x, indentation)
+#}
+
+export type JSON =
+    | {[string]: JSON}
+    | JSON[]
+    | string
+    | number
+    | boolean
+    | nil
+
+// export func clone<T extends JSON>(val: T): T =>
+//     if val instanceof {[string]: unknown} {
+//         val.entries()
+//             .map(entry => [entry[0], entry[1].clone()])
+//             .collectObject()
+//     } else if val instanceof unknown[] {
+//         val.map(clone).collectArray()
+//     } else {
+//         val
+//     }

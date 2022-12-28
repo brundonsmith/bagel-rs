@@ -1,0 +1,102 @@
+
+js#
+export { exists as ___exists } from 'https://deno.land/std@0.107.0/fs/mod.ts'
+#js
+
+export async deno func exists(filePath: string): Plan<boolean> => {#
+    return () => ___exists(filePath)
+#}
+
+export async deno func readDir(path: string): Plan<DirEntry[]> => {#
+    return async () => {
+        const all: Deno.DirEntry[] = []
+        for await (const entry of Deno.readDir(path)) {
+            all.push(entry)
+        }
+        return all
+    }
+#}
+
+export async deno proc writeTextFile(path: string, data: string) {#
+    return () => Deno.writeTextFile(path, data)
+#}
+
+export async deno func readTextFile(path: string): Plan<string> => {#
+    return () => Deno.readTextFile(path)
+#}
+
+export async deno func stat(path: string): Plan<FileInfo> => {#
+    return () => Deno.stat(path)
+#}
+
+export type DirEntry = readonly interface {
+    name: string,
+    isFile: boolean,
+    isDirectory: boolean,
+    isSymlink: boolean,
+}
+
+type Date = unknown // TODO
+
+export type FileInfo = readonly {
+    /** True if this is info for a regular file. Mutually exclusive to
+     * `FileInfo.isDirectory` and `FileInfo.isSymlink`. */
+    isFile: boolean,
+    /** True if this is info for a regular directory. Mutually exclusive to
+     * `FileInfo.isFile` and `FileInfo.isSymlink`. */
+    isDirectory: boolean,
+    /** True if this is info for a symlink. Mutually exclusive to
+     * `FileInfo.isFile` and `FileInfo.isDirectory`. */
+    isSymlink: boolean,
+    /** The size of the file, in bytes. */
+    size: number,
+    /** The last modification time of the file. This corresponds to the `mtime`
+     * field from `stat` on Linux/Mac OS and `ftLastWriteTime` on Windows. This
+     * may not be available on all platforms. */
+    mtime: Date?,
+    /** The last access time of the file. This corresponds to the `atime`
+     * field from `stat` on Unix and `ftLastAccessTime` on Windows. This may not
+     * be available on all platforms. */
+    atime: Date?,
+    /** The creation time of the file. This corresponds to the `birthtime`
+     * field from `stat` on Mac/BSD and `ftCreationTime` on Windows. This may
+     * not be available on all platforms. */
+    birthtime: Date?,
+    /** ID of the device containing the file.
+     *
+     * _Linux/Mac OS only._ */
+    dev: number?,
+    /** Inode number.
+     *
+     * _Linux/Mac OS only._ */
+    ino: number?,
+    /** **UNSTABLE**: Match behavior with Go on Windows for `mode`.
+     *
+     * The underlying raw `st_mode` bits that contain the standard Unix
+     * permissions for this file/directory. */
+    mode: number?,
+    /** Number of hard links pointing to this file.
+     *
+     * _Linux/Mac OS only._ */
+    nlink: number?,
+    /** User ID of the owner of this file.
+     *
+     * _Linux/Mac OS only._ */
+    uid: number?,
+    /** Group ID of the owner of this file.
+     *
+     * _Linux/Mac OS only._ */
+    gid: number?,
+    /** Device ID of this file.
+     *
+     * _Linux/Mac OS only._ */
+    rdev: number?,
+    /** Blocksize for filesystem I/O.
+     *
+     * _Linux/Mac OS only._ */
+    blksize: number?,
+    /** Number of blocks allocated to the file, in 512-byte units.
+     *
+     * _Linux/Mac OS only._ */
+    blocks: number?,
+  }
