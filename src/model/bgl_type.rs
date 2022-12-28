@@ -263,6 +263,51 @@ impl Type {
     pub fn union(self, other: Self) -> Self {
         Type::UnionType(vec![self, other])
     }
+
+    pub fn indexed(&self, other: &Self) -> Option<Type> {
+        match (self, other) {
+            (Type::ArrayType(element), Type::NumberType { min: _, max: _ }) => {
+                Some(element.as_ref().clone().union(Type::NilType))
+            }
+            (Type::TupleType(members), Type::NumberType { min, max }) => match min {
+                Some(min) => match max {
+                    Some(max) => {
+                        if *min as usize > members.len() || *max < 0 {
+                            Some(Type::PoisonedType)
+                        } else if min == max {
+                            members.get(*min as usize).cloned()
+                        } else {
+                            Some(Type::UnionType(
+                                (&members[*min as usize..*max as usize])
+                                    .iter()
+                                    .map(|m| m.clone())
+                                    .collect(),
+                            ))
+                        }
+                    }
+                    None => Some(Type::UnionType(
+                        (&members[*min as usize..])
+                            .iter()
+                            .map(|m| m.clone())
+                            .chain(std::iter::once(Type::NilType))
+                            .collect(),
+                    )),
+                },
+                None => match max {
+                    Some(max) => Some(Type::UnionType(
+                        (&members[..*max as usize])
+                            .iter()
+                            .map(|m| m.clone())
+                            .chain(std::iter::once(Type::NilType))
+                            .collect(),
+                    )),
+                    None => Some(Type::UnionType(members.clone())),
+                },
+            },
+            // (Type::RecordType { key_type, value_type }, index) =>
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug)]

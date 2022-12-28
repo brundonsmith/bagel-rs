@@ -284,7 +284,16 @@ where
                 subject,
                 property,
                 optional,
-            } => todo!(),
+            } => {
+                let subject_type = subject.infer_type(ctx);
+                let property_type = property.infer_type(ctx);
+
+                // TODO: optional
+
+                subject_type
+                    .indexed(&property_type)
+                    .unwrap_or(Type::PoisonedType)
+            }
             ASTDetails::IfElseExpression {
                 cases,
                 default_case,

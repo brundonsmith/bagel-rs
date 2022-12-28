@@ -369,7 +369,28 @@ where
                 subject,
                 property,
                 optional,
-            } => todo!(),
+            } => {
+                subject.check(ctx, report_error);
+                property.check(ctx, report_error);
+
+                let subject_type = subject.infer_type(ctx.into());
+                let property_type = property.infer_type(ctx.into());
+
+                // TODO: detect unnecessary optional
+                // TODO: detect valid optional
+
+                if subject_type.indexed(&property_type).is_none() {
+                    report_error(BagelError::MiscError {
+                        module_id: ctx.current_module.module_id.clone(),
+                        src: property.slice().clone(),
+                        message: format!(
+                            "{} cannot be used to index type {}",
+                            blue_string(&format!("{}", property_type)),
+                            blue_string(&format!("{}", subject_type))
+                        ),
+                    })
+                }
+            }
             ASTDetails::IfElseExpression {
                 cases,
                 default_case,
