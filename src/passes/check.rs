@@ -210,7 +210,17 @@ where
             }
             ASTDetails::Parenthesis(inner) => inner.check(ctx, report_error),
             ASTDetails::LocalIdentifier(name) => {
+                // TODO: Make sure it isn't a type
                 if self.resolve_symbol(name.as_str()).is_none() {
+                    report_error(BagelError::NotFoundError {
+                        module_id: ctx.current_module.module_id.clone(),
+                        identifier: self.clone().upcast(),
+                    });
+                }
+            }
+            ASTDetails::NamedType(name) => {
+                // TODO: Make sure it isn't an expression
+                if self.resolve_symbol(name.downcast().0.as_str()).is_none() {
                     report_error(BagelError::NotFoundError {
                         module_id: ctx.current_module.module_id.clone(),
                         identifier: self.clone().upcast(),
@@ -453,7 +463,6 @@ where
             ASTDetails::RegularExpression { expr, flags } => todo!(),
             ASTDetails::UnionType(_) => todo!(),
             ASTDetails::MaybeType(inner) => inner.check(ctx, report_error),
-            ASTDetails::NamedType(_) => todo!(),
             ASTDetails::GenericParamType { name, extends } => todo!(),
             ASTDetails::ProcType {
                 args,
