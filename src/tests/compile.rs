@@ -9,6 +9,7 @@ use crate::{
 };
 
 #[test]
+#[allow(non_snake_case)]
 fn Simple_func_declaration() {
     test_compile(
         "func uid() => '12345'",
@@ -17,11 +18,13 @@ fn Simple_func_declaration() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Abbreviated_func() {
     test_compile("const fn = a => a", "const fn = function (a) { return a };");
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Func_declaration_with_memo() {
     test_compile(
         "
@@ -33,11 +36,13 @@ fn Func_declaration_with_memo() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Binary_operator() {
     test_compile("const x = a < b", "const x = (a <  b);");
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Func_with_constants() {
     test_compile(
         "func uid(n: number) => 
@@ -53,6 +58,7 @@ fn Func_with_constants() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Property_access() {
     test_compile(
         "const x = a.b.c",
@@ -61,26 +67,31 @@ fn Property_access() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Method_call() {
     test_compile("const x = a.b()", "const x = b(a);");
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Double_method_call() {
     test_compile("const x = a.b()()", "const x = b(a)();");
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Deep_method_call() {
     test_compile("const x = a.b.c()", "const x = c(___observe(a, 'b'));");
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Method_chain() {
     test_compile("const x = a.b().c()", "const x = c(b(a));");
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Property_access_with_space() {
     test_compile(
         "const x = a
@@ -91,6 +102,7 @@ fn Property_access_with_space() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Method_chain_with_space() {
     test_compile(
         "const x = a
@@ -101,6 +113,7 @@ fn Method_chain_with_space() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn If_expression() {
     test_compile("func merge() =>
               if arr1.length <= 0 {
@@ -111,6 +124,7 @@ fn If_expression() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Chained_if_expression() {
     test_compile(
         "func merge() =>
@@ -130,6 +144,7 @@ fn Chained_if_expression() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Empty_proc() {
     test_compile(
         "proc foo() { }",
@@ -138,6 +153,7 @@ fn Empty_proc() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Chained_if_statements() {
     test_compile(
         "proc foo() {
@@ -162,6 +178,7 @@ fn Chained_if_statements() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Object_literal_with_spread() {
     test_compile(
         "const a = { foo: 'stuff' }
@@ -172,6 +189,7 @@ fn Object_literal_with_spread() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Array_literal_with_spread() {
     test_compile(
         "
@@ -184,6 +202,7 @@ fn Array_literal_with_spread() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Indexer_expression() {
     test_compile(
         "func uid(arr, i) => arr[i]",
@@ -192,11 +211,13 @@ fn Indexer_expression() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Indexing_an_array() {
     test_compile("const x = [ arr1[0] ]", "const x = [___observe(arr1, 0)];");
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Simple_proc_declaration() {
     test_compile(
         "proc doStuff(a) { }",
@@ -205,6 +226,7 @@ fn Simple_proc_declaration() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Basic_proc_declaration() {
     test_compile(
         "
@@ -229,6 +251,7 @@ fn Basic_proc_declaration() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Proc_declaration_with_statements() {
     test_compile("
         proc doStuff(items: Iterator<number>) {
@@ -272,6 +295,7 @@ fn Proc_declaration_with_statements() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Const_declaration_with_type() {
     test_compile(
         "const foo: FooType = 'stuff'",
@@ -280,6 +304,7 @@ fn Const_declaration_with_type() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Basic_property_access() {
     test_compile(
         "const foo = bar.prop1.prop2",
@@ -288,6 +313,7 @@ fn Basic_property_access() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Typed_func_declaration() {
     test_compile(
         "func foo(a: string, b: number): number => 0",
@@ -296,6 +322,7 @@ fn Typed_func_declaration() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Typed_proc_declaration() {
     test_compile(
         "proc bar(a: string[], b: { foo: number }) { }",
@@ -304,6 +331,7 @@ fn Typed_proc_declaration() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Func_type() {
     test_compile(
         "export type MyFn = (a: number, b: string) => string[]",
@@ -312,6 +340,7 @@ fn Func_type() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Tricky_type_parse_1() {
     test_compile(
         "type Foo = string | number[]",
@@ -320,6 +349,7 @@ fn Tricky_type_parse_1() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Tricky_type_parse_2() {
     test_compile(
         "type Foo = (a: string) => (b: number|boolean) => { foo: nil[] }",
@@ -328,6 +358,7 @@ fn Tricky_type_parse_2() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Comment_test_line() {
     test_compile(
         "func foo() => 13 // foo bar comment
@@ -338,6 +369,7 @@ fn Comment_test_line() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Comment_test_block() {
     test_compile(
         "func foo() => 13 /* foo bar comment

@@ -12,41 +12,49 @@ use crate::{
 };
 
 #[test]
+#[allow(non_snake_case)]
 fn Basic_constant() {
     test_check("const x: string = 'foo'", false);
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Basic_constant_fail() {
     test_check("const x: number = 'foo'", true);
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Binary_operators_1() {
     test_check("const x: boolean = 2 + 2 == 4", false);
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Binary_operators_2() {
     test_check("const x: string = 2 + 'foo' + 'bar'", false);
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Binary_operators_3() {
     test_check("const x: string = 2 * 3 + 'foo' + 'bar'", false);
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Binary_operators_4() {
     test_check("const x: number = 2 * 3 / 12", false);
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Binary_operators_5() {
     test_check("const x = 'foo' == 12", true);
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Basic_function_call() {
     test_check(
         "
@@ -57,6 +65,7 @@ fn Basic_function_call() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Function_as_argument_inference_1() {
     test_check(
         "
@@ -67,6 +76,7 @@ fn Function_as_argument_inference_1() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Function_as_argument_inference_2() {
     test_check(
         "
@@ -77,6 +87,7 @@ fn Function_as_argument_inference_2() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Function_as_argument_inference_3() {
     test_check(
         "
@@ -87,6 +98,7 @@ fn Function_as_argument_inference_3() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Function_as_argument_inference_4() {
     test_check(
         "
@@ -97,6 +109,7 @@ fn Function_as_argument_inference_4() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Function_as_argument_inference_5() {
     test_check(
         "
@@ -109,6 +122,7 @@ fn Function_as_argument_inference_5() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Function_as_argument_inference_6() {
     test_check(
         "
@@ -120,6 +134,7 @@ fn Function_as_argument_inference_6() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Function_and_proc_in_declaration_inference_pass() {
     test_check(
         "
@@ -135,6 +150,7 @@ fn Function_and_proc_in_declaration_inference_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Function_in_declaration_inference_fail() {
     test_check(
         "
@@ -145,6 +161,7 @@ fn Function_in_declaration_inference_fail() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Function_in_object_declaration_inference_pass() {
     test_check(
         "
@@ -159,6 +176,7 @@ fn Function_in_object_declaration_inference_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Function_in_object_declaration_inference_fail() {
     test_check(
         "
@@ -173,6 +191,7 @@ fn Function_in_object_declaration_inference_fail() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Function_in_array_declaration_inference_pass() {
     test_check(
         "
@@ -186,6 +205,7 @@ fn Function_in_array_declaration_inference_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Function_in_array_declaration_inference_fail() {
     test_check(
         "
@@ -199,6 +219,7 @@ fn Function_in_array_declaration_inference_fail() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Function_returned_inference_pass() {
     test_check(
         "
@@ -212,6 +233,7 @@ fn Function_returned_inference_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Function_returned_inference_fail() {
     test_check(
         "
@@ -225,31 +247,37 @@ fn Function_returned_inference_fail() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Basic_constant_inference_pass() {
     test_check("const x = 'foo'\nconst y: string = x", false);
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Basic_constant_inference_fail() {
     test_check("const x = 'foo'\nconst y: number = x", true);
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Basic_function_return() {
     test_check("func fn(a: string): string => 'foo'", false);
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Basic_function_return_fail() {
     test_check("func fn(): number => 'foo'", true);
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Basic_function_fail_2() {
     test_check("func fn(a: string, a: string) => 'foo'", true);
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Basic_function_return_inference() {
     test_check(
         "
@@ -260,6 +288,7 @@ fn Basic_function_return_inference() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Basic_function_return_inference_fail() {
     test_check(
         "
@@ -270,6 +299,7 @@ fn Basic_function_return_inference_fail() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Object_literal_with_spread_pass() {
     test_check(
         "
@@ -280,6 +310,7 @@ fn Object_literal_with_spread_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Object_literal_with_spread_fail() {
     test_check(
         "
@@ -290,6 +321,7 @@ fn Object_literal_with_spread_fail() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Array_literal_with_spread_pass_1() {
     test_check(
         "
@@ -300,6 +332,7 @@ fn Array_literal_with_spread_pass_1() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Array_literal_with_spread_pass_2() {
     test_check(
         "
@@ -310,6 +343,7 @@ fn Array_literal_with_spread_pass_2() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Function_return_type_inference_with_generic() {
     test_check(
         "
@@ -320,6 +354,7 @@ fn Function_return_type_inference_with_generic() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Array_literal_with_spread_fail_1() {
     test_check(
         "
@@ -330,6 +365,7 @@ fn Array_literal_with_spread_fail_1() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Array_literal_with_spread_fail_2() {
     test_check(
         "
@@ -340,6 +376,7 @@ fn Array_literal_with_spread_fail_2() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Object_type_pass() {
     test_check(
         "type MyObj = {
@@ -360,6 +397,7 @@ fn Object_type_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Object_type_fail_1() {
     test_check(
         "type MyObj = {
@@ -380,6 +418,7 @@ fn Object_type_fail_1() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Object_type_fail_2() {
     test_check(
         "type MyObj = {
@@ -395,6 +434,7 @@ fn Object_type_fail_2() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Object_type_fail_3() {
     test_check(
         "type MyObj = {
@@ -409,6 +449,7 @@ fn Object_type_fail_3() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Interface_type_pass() {
     test_check(
         "type MyInterface = interface {
@@ -430,6 +471,7 @@ fn Interface_type_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Interface_type_fail_1() {
     test_check(
         "type MyInterface = interface {
@@ -445,6 +487,7 @@ fn Interface_type_fail_1() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Callback_argument_type_inference() {
     test_check(
         "
@@ -455,6 +498,7 @@ fn Callback_argument_type_inference() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Basic_explicit_generic() {
     test_check(
         "
@@ -465,6 +509,7 @@ fn Basic_explicit_generic() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Basic_explicit_generic_fail_argument() {
     test_check(
         "
@@ -475,6 +520,7 @@ fn Basic_explicit_generic_fail_argument() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Basic_explicit_generic_with_extends() {
     test_check(
         "
@@ -485,6 +531,7 @@ fn Basic_explicit_generic_with_extends() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Basic_explicit_generic_with_outside_extends_fail() {
     test_check(
         "
@@ -495,6 +542,7 @@ fn Basic_explicit_generic_with_outside_extends_fail() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Basic_explicit_generic_with_inside_extends_fail() {
     test_check(
         "
@@ -505,6 +553,7 @@ fn Basic_explicit_generic_with_inside_extends_fail() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Basic_explicit_generic_fail_return() {
     test_check(
         "
@@ -515,6 +564,7 @@ fn Basic_explicit_generic_fail_return() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Basic_generic_with_return_inference() {
     test_check(
         "
@@ -525,6 +575,7 @@ fn Basic_generic_with_return_inference() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Nested_generic_calls() {
     test_check(
         "
@@ -536,6 +587,7 @@ fn Nested_generic_calls() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Nested_generic_calls_fail() {
     test_check(
         "
@@ -547,6 +599,7 @@ fn Nested_generic_calls_fail() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Nested_generic_calls_with_return_inference() {
     test_check(
         "
@@ -558,6 +611,7 @@ fn Nested_generic_calls_with_return_inference() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Nested_generic_calls_with_return_inference_fail() {
     test_check(
         "
@@ -569,6 +623,7 @@ fn Nested_generic_calls_with_return_inference_fail() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Nested_generic_calls_with_same_param_names() {
     test_check(
         "
@@ -580,6 +635,7 @@ fn Nested_generic_calls_with_same_param_names() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Basic_generic_param_inference() {
     test_check(
         "
@@ -590,6 +646,7 @@ fn Basic_generic_param_inference() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Basic_generic_param_inference_fail() {
     test_check(
         "
@@ -600,6 +657,7 @@ fn Basic_generic_param_inference_fail() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Union_generic_param_inference_pass() {
     test_check(
         "
@@ -610,6 +668,7 @@ fn Union_generic_param_inference_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Union_generic_param_inference_fail() {
     test_check(
         "
@@ -620,6 +679,7 @@ fn Union_generic_param_inference_fail() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Method_chain_generic_param_inference_pass() {
     test_check("
       js func iter<T>(x: readonly T[]): Iterator<T> => {# #}
@@ -629,6 +689,7 @@ fn Method_chain_generic_param_inference_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Method_chain_generic_param_inference_fail() {
     test_check("
       js func iter<T>(x: readonly T[]): Iterator<T> => {# #}
@@ -638,6 +699,7 @@ fn Method_chain_generic_param_inference_fail() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Iterator_generic_param_inference_pass() {
     test_check("
       // copied from lib/bgl
@@ -660,6 +722,7 @@ fn Iterator_generic_param_inference_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Complex_generic() {
     test_check(
         "
@@ -670,6 +733,7 @@ fn Complex_generic() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Complex_generic_fail() {
     test_check(
         "
@@ -680,6 +744,7 @@ fn Complex_generic_fail() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Complex_generic_param_inference() {
     test_check(
         "
@@ -695,6 +760,7 @@ fn Complex_generic_param_inference() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Generic_extends_clause_fail() {
     test_check(
         "
@@ -707,6 +773,7 @@ fn Generic_extends_clause_fail() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Function_consts_out_of_order() {
     test_check(
         "
@@ -719,6 +786,7 @@ fn Function_consts_out_of_order() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Function_consts_in_order() {
     test_check(
         "
@@ -731,6 +799,7 @@ fn Function_consts_in_order() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Const_declarations_in_order() {
     test_check(
         "
@@ -741,6 +810,7 @@ fn Const_declarations_in_order() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Const_declarations_out_of_order() {
     test_check(
         "
@@ -751,6 +821,7 @@ fn Const_declarations_out_of_order() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Const_declaration_referencing_self() {
     test_check(
         "
@@ -760,6 +831,7 @@ fn Const_declaration_referencing_self() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Initializing_a_const_from_a_let() {
     test_check(
         "
@@ -770,6 +842,7 @@ fn Initializing_a_const_from_a_let() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Initializing_a_const_from_impure_function() {
     test_check(
         "
@@ -781,6 +854,7 @@ fn Initializing_a_const_from_impure_function() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Let_declarations_out_of_order() {
     test_check(
         "
@@ -793,6 +867,7 @@ fn Let_declarations_out_of_order() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Let_declarations_in_order() {
     test_check(
         "
@@ -805,6 +880,7 @@ fn Let_declarations_in_order() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Duplicate_declaration_name_1() {
     test_check(
         "
@@ -832,6 +908,7 @@ fn Duplicate_declaration_name_1() {
 // });
 
 #[test]
+#[allow(non_snake_case)]
 fn Duplicate_declaration_name_2() {
     test_check_multi(
         vec![
@@ -852,6 +929,7 @@ fn Duplicate_declaration_name_2() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Basic_type_refinement() {
     test_check(
         "
@@ -862,6 +940,7 @@ fn Basic_type_refinement() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Basic_type_refinement_control() {
     test_check(
         "
@@ -872,6 +951,7 @@ fn Basic_type_refinement_control() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Deep_refinement() {
     test_check(
         "
@@ -884,6 +964,7 @@ fn Deep_refinement() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Deep_refinement_control() {
     test_check(
         "
@@ -894,6 +975,7 @@ fn Deep_refinement_control() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Chained_if_else_refinement_pass() {
     test_check(
         "
@@ -908,6 +990,7 @@ fn Chained_if_else_refinement_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Chained_if_else_refinement_fail_1() {
     test_check(
         "
@@ -922,6 +1005,7 @@ fn Chained_if_else_refinement_fail_1() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Chained_if_else_refinement_fail_2() {
     test_check(
         "
@@ -936,6 +1020,7 @@ fn Chained_if_else_refinement_fail_2() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Boolean_refinement_pass() {
     test_check(
         "
@@ -950,6 +1035,7 @@ fn Boolean_refinement_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Boolean_refinement_fail() {
     test_check(
         "
@@ -960,6 +1046,7 @@ fn Boolean_refinement_fail() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Comparison_refinement_pass() {
     test_check(
         "
@@ -995,6 +1082,7 @@ fn Comparison_refinement_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Comparison_refinement_fail() {
     test_check(
         "
@@ -1005,6 +1093,7 @@ fn Comparison_refinement_fail() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Comparison_types_pass() {
     test_check(
         "
@@ -1025,6 +1114,7 @@ fn Comparison_types_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Refinement_invalidation_pass() {
     test_check(
         "
@@ -1044,6 +1134,7 @@ fn Refinement_invalidation_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Refinement_invalidation_fail_1() {
     test_check(
         "
@@ -1058,6 +1149,7 @@ fn Refinement_invalidation_fail_1() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Refinement_invalidation_fail_2() {
     test_check(
         "
@@ -1075,6 +1167,7 @@ fn Refinement_invalidation_fail_2() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Complex_narrowing() {
     test_check(
         "
@@ -1093,6 +1186,7 @@ fn Complex_narrowing() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Complex_narrowing_2() {
     test_check(
         "
@@ -1111,6 +1205,7 @@ fn Complex_narrowing_2() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Object_type_spread_1() {
     test_check(
         "
@@ -1132,6 +1227,7 @@ fn Object_type_spread_1() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Object_type_spread_2() {
     test_check(
         "
@@ -1152,6 +1248,7 @@ fn Object_type_spread_2() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Property_access_pass() {
     test_check(
         "
@@ -1170,6 +1267,7 @@ fn Property_access_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Property_access_fail_1() {
     test_check(
         "
@@ -1186,6 +1284,7 @@ fn Property_access_fail_1() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Property_access_fail_2() {
     test_check(
         "
@@ -1196,6 +1295,7 @@ fn Property_access_fail_2() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Property_access_named_type_pass() {
     test_check(
         "
@@ -1213,6 +1313,7 @@ fn Property_access_named_type_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Destructure_pass() {
     test_check(
         "
@@ -1231,6 +1332,7 @@ fn Destructure_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Destructure_fail_1() {
     test_check(
         "
@@ -1249,6 +1351,7 @@ fn Destructure_fail_1() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Destructure_fail_2() {
     test_check(
         "
@@ -1267,6 +1370,7 @@ fn Destructure_fail_2() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Optional_chain_pass() {
     test_check(
         "
@@ -1286,6 +1390,7 @@ fn Optional_chain_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Optional_chain_fail() {
     test_check(
         "
@@ -1302,6 +1407,7 @@ fn Optional_chain_fail() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Optional_chain_indexer_pass() {
     test_check(
         "
@@ -1318,6 +1424,7 @@ fn Optional_chain_indexer_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Optional_chain_indexer_fail() {
     test_check(
         "
@@ -1334,6 +1441,7 @@ fn Optional_chain_indexer_fail() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Optional_arguments_pass() {
     test_check(
         "
@@ -1346,6 +1454,7 @@ fn Optional_arguments_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Optional_arguments_fail_1() {
     test_check(
         "
@@ -1355,6 +1464,7 @@ fn Optional_arguments_fail_1() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Optional_arguments_fail_2() {
     test_check(
         "
@@ -1367,6 +1477,7 @@ fn Optional_arguments_fail_2() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Optional_arguments_fail_3() {
     test_check(
         "
@@ -1379,6 +1490,7 @@ fn Optional_arguments_fail_3() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Optional_arguments_fail_4() {
     test_check(
         "
@@ -1388,6 +1500,7 @@ fn Optional_arguments_fail_4() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Optional_property_access_pass() {
     test_check(
         "
@@ -1400,6 +1513,7 @@ fn Optional_property_access_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Optional_property_access_fail() {
     test_check(
         "
@@ -1412,6 +1526,7 @@ fn Optional_property_access_fail() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Basic_import_module_pass() {
     test_check_multi(
         vec![
@@ -1428,6 +1543,7 @@ fn Basic_import_module_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Fail_to_import_module() {
     test_check_multi(
         vec![
@@ -1439,6 +1555,7 @@ fn Fail_to_import_module() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Import_type_across_modules_pass() {
     test_check_multi(
         vec![
@@ -1463,6 +1580,7 @@ fn Import_type_across_modules_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Import_type_across_modules_fail() {
     test_check_multi(
         vec![
@@ -1487,6 +1605,7 @@ fn Import_type_across_modules_fail() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Inferred_type_across_modules() {
     test_check_multi(
         vec![
@@ -1507,6 +1626,7 @@ fn Inferred_type_across_modules() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Inferred_type_across_module_with_name_resolution() {
     test_check_multi(
         vec![
@@ -1526,6 +1646,7 @@ fn Inferred_type_across_module_with_name_resolution() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Expose_access_in_module() {
     test_check_multi(
         vec![
@@ -1550,6 +1671,7 @@ fn Expose_access_in_module() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Expose_assignment() {
     test_check_multi(
         vec![
@@ -1567,6 +1689,7 @@ fn Expose_assignment() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Assignment_ops_pass() {
     test_check(
         "
@@ -1588,6 +1711,7 @@ fn Assignment_ops_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Assignment_ops_fail_1() {
     test_check(
         "
@@ -1602,6 +1726,7 @@ fn Assignment_ops_fail_1() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Assignment_ops_fail_2() {
     test_check(
         "
@@ -1615,6 +1740,7 @@ fn Assignment_ops_fail_2() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Negation() {
     test_check(
         "
@@ -1627,6 +1753,7 @@ fn Negation() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Negation_fail() {
     test_check(
         "
@@ -1638,6 +1765,7 @@ fn Negation_fail() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Literal_type() {
     test_check(
         "
@@ -1647,6 +1775,7 @@ fn Literal_type() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn String_insertion_type() {
     test_check(
         "
@@ -1662,6 +1791,7 @@ fn String_insertion_type() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn As_casting_pass() {
     test_check(
         "
@@ -1671,6 +1801,7 @@ fn As_casting_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn As_casting_fail() {
     test_check(
         "
@@ -1680,6 +1811,7 @@ fn As_casting_fail() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Immutability_test_1() {
     test_check(
         "
@@ -1693,6 +1825,7 @@ fn Immutability_test_1() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Immutability_test_2() {
     test_check(
         "
@@ -1704,6 +1837,7 @@ fn Immutability_test_2() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Immutability_test_3() {
     test_check(
         "
@@ -1715,6 +1849,7 @@ fn Immutability_test_3() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Immutability_test_4() {
     test_check(
         "
@@ -1726,6 +1861,7 @@ fn Immutability_test_4() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Immutability_test_5() {
     test_check(
         "
@@ -1737,6 +1873,7 @@ fn Immutability_test_5() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Immutability_test_6() {
     test_check(
         "
@@ -1751,6 +1888,7 @@ fn Immutability_test_6() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Immutability_test_7() {
     test_check(
         "
@@ -1765,6 +1903,7 @@ fn Immutability_test_7() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Immutability_test_8() {
     test_check(
         "
@@ -1776,6 +1915,7 @@ fn Immutability_test_8() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Immutability_test_9() {
     test_check(
         "
@@ -1788,6 +1928,7 @@ fn Immutability_test_9() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Immutability_test_10() {
     test_check(
         "
@@ -1799,6 +1940,7 @@ fn Immutability_test_10() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Immutability_test_11() {
     test_check(
         "
@@ -1810,6 +1952,7 @@ fn Immutability_test_11() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Immutability_test_12() {
     test_check(
         "
@@ -1821,6 +1964,7 @@ fn Immutability_test_12() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Immutability_test_13() {
     test_check(
         "
@@ -1831,6 +1975,7 @@ fn Immutability_test_13() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Immutability_test_14() {
     test_check(
         "
@@ -1844,6 +1989,7 @@ fn Immutability_test_14() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Mutability_test_1() {
     test_check(
         "
@@ -1857,6 +2003,7 @@ fn Mutability_test_1() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Parentehsized_type_pass() {
     test_check(
         "
@@ -1866,6 +2013,7 @@ fn Parentehsized_type_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Parentehsized_type_fail() {
     test_check(
         "
@@ -1875,6 +2023,7 @@ fn Parentehsized_type_fail() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Nullish_coalescing() {
     test_check(
         "
@@ -1884,6 +2033,7 @@ fn Nullish_coalescing() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Nullish_coalescing_fail() {
     test_check(
         "
@@ -1893,6 +2043,7 @@ fn Nullish_coalescing_fail() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Function_method_call() {
     test_check(
         "
@@ -1903,6 +2054,7 @@ fn Function_method_call() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Function_method_call_fail() {
     test_check(
         "
@@ -1913,6 +2065,7 @@ fn Function_method_call_fail() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Function_method_call_with_property_1() {
     test_check(
         "
@@ -1926,6 +2079,7 @@ fn Function_method_call_with_property_1() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Function_method_call_with_property_2() {
     test_check(
         "
@@ -1939,6 +2093,7 @@ fn Function_method_call_with_property_2() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Function_method_call_with_property_3() {
     test_check(
         "
@@ -1952,6 +2107,7 @@ fn Function_method_call_with_property_3() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Proc_declaration_with_statements_pass() {
     test_check(
         "
@@ -1981,6 +2137,7 @@ fn Proc_declaration_with_statements_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Proc_declaration_with_statements_fail_1() {
     test_check(
         "
@@ -1994,6 +2151,7 @@ fn Proc_declaration_with_statements_fail_1() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Proc_declaration_with_statements_fail_2() {
     test_check(
         "
@@ -2011,6 +2169,7 @@ fn Proc_declaration_with_statements_fail_2() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Proc_declaration_with_statements_fail_3() {
     test_check(
         "
@@ -2022,6 +2181,7 @@ fn Proc_declaration_with_statements_fail_3() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Destructuring_statement_pass() {
     test_check(
         "
@@ -2033,6 +2193,7 @@ fn Destructuring_statement_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Destructuring_statement_fail_1() {
     test_check(
         "
@@ -2044,6 +2205,7 @@ fn Destructuring_statement_fail_1() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Destructuring_statement_fail_2() {
     test_check(
         "
@@ -2055,6 +2217,7 @@ fn Destructuring_statement_fail_2() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Destructuring_statement_fail_3() {
     test_check(
         "
@@ -2067,6 +2230,7 @@ fn Destructuring_statement_fail_3() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Destructuring_array_statement_pass() {
     test_check(
         "
@@ -2086,6 +2250,7 @@ fn Destructuring_array_statement_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Destructuring_array_statement_fail_1() {
     test_check(
         "
@@ -2097,6 +2262,7 @@ fn Destructuring_array_statement_fail_1() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Destructuring_array_statement_fail_2() {
     test_check(
         "
@@ -2109,6 +2275,7 @@ fn Destructuring_array_statement_fail_2() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Pure_function() {
     test_check(
         "
@@ -2119,6 +2286,7 @@ fn Pure_function() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Impure_function() {
     test_check(
         "
@@ -2129,6 +2297,7 @@ fn Impure_function() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Import_all_pass() {
     test_check_multi(
         vec![
@@ -2145,6 +2314,7 @@ fn Import_all_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Import_all_fail_1() {
     test_check_multi(
         vec![
@@ -2161,6 +2331,7 @@ fn Import_all_fail_1() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Import_all_fail_2() {
     test_check_multi(
         vec![
@@ -2177,6 +2348,7 @@ fn Import_all_fail_2() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Import_all_fail_3() {
     test_check_multi(
         vec![
@@ -2193,6 +2365,7 @@ fn Import_all_fail_3() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Import_all_fail_4() {
     test_check_multi(
         vec![
@@ -2208,6 +2381,7 @@ fn Import_all_fail_4() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Record_type_pass() {
     test_check(
         "
@@ -2221,6 +2395,7 @@ fn Record_type_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Record_type_fail_1() {
     test_check(
         "
@@ -2231,6 +2406,7 @@ fn Record_type_fail_1() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Record_type_fail_2() {
     test_check(
         "
@@ -2241,6 +2417,7 @@ fn Record_type_fail_2() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Array_type_pass() {
     test_check(
         "
@@ -2256,6 +2433,7 @@ fn Array_type_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Array_type_fail_1() {
     test_check(
         "
@@ -2267,6 +2445,7 @@ fn Array_type_fail_1() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Array_type_fail_2() {
     test_check(
         "
@@ -2278,6 +2457,7 @@ fn Array_type_fail_2() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Tuple_type_pass() {
     test_check(
         "
@@ -2290,6 +2470,7 @@ fn Tuple_type_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Tuple_type_fail_1() {
     test_check(
         "
@@ -2300,6 +2481,7 @@ fn Tuple_type_fail_1() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Tuple_type_fail_2() {
     test_check(
         "
@@ -2310,6 +2492,7 @@ fn Tuple_type_fail_2() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Tuple_type_fail_3() {
     test_check(
         "
@@ -2320,6 +2503,7 @@ fn Tuple_type_fail_3() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Tuple_type_fail_4() {
     test_check(
         "
@@ -2331,6 +2515,7 @@ fn Tuple_type_fail_4() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Tuple_type_fail_5() {
     test_check(
         "
@@ -2341,6 +2526,7 @@ fn Tuple_type_fail_5() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Tuple_type_fail_6() {
     test_check(
         "
@@ -2351,6 +2537,7 @@ fn Tuple_type_fail_6() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Func_type_pass() {
     test_check(
         "
@@ -2362,6 +2549,7 @@ fn Func_type_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Func_type_fail_1() {
     test_check(
         "
@@ -2372,6 +2560,7 @@ fn Func_type_fail_1() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Func_type_fail_2() {
     test_check(
         "
@@ -2382,6 +2571,7 @@ fn Func_type_fail_2() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Proc_type_pass() {
     test_check(
         "
@@ -2393,6 +2583,7 @@ fn Proc_type_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Proc_type_fail_1() {
     test_check(
         "
@@ -2403,6 +2594,7 @@ fn Proc_type_fail_1() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Tuple_length_pass() {
     test_check(
         "
@@ -2414,6 +2606,7 @@ fn Tuple_length_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Tuple_length_fail() {
     test_check(
         "
@@ -2424,6 +2617,7 @@ fn Tuple_length_fail() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Switch_expression_pass() {
     test_check(
         "
@@ -2452,6 +2646,7 @@ fn Switch_expression_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Switch_expression_fail_1() {
     test_check(
         "
@@ -2466,6 +2661,7 @@ fn Switch_expression_fail_1() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Switch_expression_fail_2() {
     test_check(
         "
@@ -2481,6 +2677,7 @@ fn Switch_expression_fail_2() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Switch_expression_fail_3() {
     test_check(
         "
@@ -2496,6 +2693,7 @@ fn Switch_expression_fail_3() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Range_expression_pass() {
     test_check(
         "
@@ -2511,6 +2709,7 @@ fn Range_expression_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Range_expression_fail() {
     test_check(
         "
@@ -2520,6 +2719,7 @@ fn Range_expression_fail() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn String_interpolation_pass() {
     test_check(
         "
@@ -2532,6 +2732,7 @@ fn String_interpolation_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn String_interpolation_fail() {
     test_check(
         "
@@ -2542,6 +2743,7 @@ fn String_interpolation_fail() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Typeof_type_pass() {
     test_check(
         "
@@ -2555,6 +2757,7 @@ fn Typeof_type_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Typeof_type_fail() {
     test_check(
         "
@@ -2568,6 +2771,7 @@ fn Typeof_type_fail() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Keyof_type_pass() {
     test_check(
         "
@@ -2581,6 +2785,7 @@ fn Keyof_type_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Keyof_type_fail() {
     test_check(
         "
@@ -2594,6 +2799,7 @@ fn Keyof_type_fail() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Valueof_type_pass() {
     test_check(
         "
@@ -2607,6 +2813,7 @@ fn Valueof_type_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Valueof_type_fail() {
     test_check(
         "
@@ -2620,6 +2827,7 @@ fn Valueof_type_fail() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Elementof_type_pass() {
     test_check(
         "
@@ -2633,6 +2841,7 @@ fn Elementof_type_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Elementof_type_fail() {
     test_check(
         "
@@ -2646,6 +2855,7 @@ fn Elementof_type_fail() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Indexer_pass() {
     test_check("
     func foo(record: {['foo'|'bar']: number}, obj: { prop1: string, prop2: number }, arr: number[], tuple: [number, number]) =>
@@ -2661,6 +2871,7 @@ fn Indexer_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Indexer_fail_1() {
     test_check(
         "
@@ -2672,6 +2883,7 @@ fn Indexer_fail_1() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Indexer_fail_2() {
     test_check(
         "
@@ -2683,6 +2895,7 @@ fn Indexer_fail_2() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Indexer_fail_3() {
     test_check(
         "
@@ -2694,6 +2907,7 @@ fn Indexer_fail_3() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Indexer_fail_4() {
     test_check(
         "
@@ -2705,6 +2919,7 @@ fn Indexer_fail_4() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Indexer_fail_5() {
     test_check(
         "
@@ -2716,6 +2931,7 @@ fn Indexer_fail_5() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Indexer_fail_6() {
     test_check(
         "
@@ -2727,6 +2943,7 @@ fn Indexer_fail_6() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Indexer_fail_7() {
     test_check(
         "
@@ -2738,6 +2955,7 @@ fn Indexer_fail_7() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Tuple_indexer_pass() {
     test_check(
         "
@@ -2749,6 +2967,7 @@ fn Tuple_indexer_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Tuple_indexer_fail() {
     test_check(
         "
@@ -2760,6 +2979,7 @@ fn Tuple_indexer_fail() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn String_indexer_pass() {
     test_check(
         "
@@ -2771,6 +2991,7 @@ fn String_indexer_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn String_indexer_fail() {
     test_check(
         "
@@ -2782,6 +3003,7 @@ fn String_indexer_fail() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Exact_string_indexer_pass() {
     test_check(
         "
@@ -2794,6 +3016,7 @@ fn Exact_string_indexer_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Exact_string_indexer_fail_1() {
     test_check(
         "
@@ -2805,6 +3028,7 @@ fn Exact_string_indexer_fail_1() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Exact_string_indexer_fail_2() {
     test_check(
         "
@@ -2816,6 +3040,7 @@ fn Exact_string_indexer_fail_2() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Mutability_broadening() {
     test_check(
         "
@@ -2836,6 +3061,7 @@ fn Mutability_broadening() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Throw_statement_pass() {
     test_check(
         "
@@ -2847,6 +3073,7 @@ fn Throw_statement_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Throw_statement_fail() {
     test_check(
         "
@@ -2858,6 +3085,7 @@ fn Throw_statement_fail() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Error_bubble_pass() {
     test_check(
         "
@@ -2873,6 +3101,7 @@ fn Error_bubble_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Error_bubble_fail() {
     test_check(
         "
@@ -2888,6 +3117,7 @@ fn Error_bubble_fail() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Try_catch_pass() {
     test_check(
         "
@@ -2909,6 +3139,7 @@ fn Try_catch_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Try_catch_fail_1() {
     test_check(
         "
@@ -2930,6 +3161,7 @@ fn Try_catch_fail_1() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Try_catch_fail_2() {
     test_check(
         "
@@ -2951,6 +3183,7 @@ fn Try_catch_fail_2() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Throws_declaration_pass() {
     test_check(
         "
@@ -2966,6 +3199,7 @@ fn Throws_declaration_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Throws_declaration_fail_1() {
     test_check(
         "
@@ -2977,6 +3211,7 @@ fn Throws_declaration_fail_1() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Throws_declaration_fail_2() {
     test_check(
         "
@@ -2992,6 +3227,7 @@ fn Throws_declaration_fail_2() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Throws_declaration_fail_3() {
     test_check(
         "
@@ -3013,6 +3249,7 @@ fn Throws_declaration_fail_3() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Circular_type_pass_1() {
     test_check(
         "
@@ -3026,6 +3263,7 @@ fn Circular_type_pass_1() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Circular_type_pass_2() {
     test_check(
         "
@@ -3043,6 +3281,7 @@ fn Circular_type_pass_2() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Circular_type_pass_3() {
     test_check(
         "
@@ -3069,6 +3308,7 @@ fn Circular_type_pass_3() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Circular_type_fail_1() {
     test_check(
         "
@@ -3113,6 +3353,7 @@ fn Circular_type_fail_1() {
 // })
 
 #[test]
+#[allow(non_snake_case)]
 fn Nominal_fail_1() {
     test_check_multi(
         vec![
@@ -3148,6 +3389,7 @@ fn Nominal_fail_1() {
 // })
 
 #[test]
+#[allow(non_snake_case)]
 fn Import_JSON_pass() {
     test_check_multi(
         vec![
@@ -3176,6 +3418,7 @@ fn Import_JSON_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Import_JSON_fail() {
     test_check_multi(
         vec![
@@ -3199,6 +3442,7 @@ fn Import_JSON_fail() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Import_plaintext_pass() {
     test_check_multi(
         vec![
@@ -3216,6 +3460,7 @@ fn Import_plaintext_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Import_plaintext_fail() {
     test_check_multi(
         vec![
@@ -3233,6 +3478,7 @@ fn Import_plaintext_fail() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Element_type_pass() {
     test_check(
         "
@@ -3248,6 +3494,7 @@ fn Element_type_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Element_type_fail_1() {
     test_check(
         "
@@ -3263,6 +3510,7 @@ fn Element_type_fail_1() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Element_type_fail_2() {
     test_check(
         "
@@ -3278,6 +3526,7 @@ fn Element_type_fail_2() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Element_type_fail_3() {
     test_check(
         "
@@ -3293,6 +3542,7 @@ fn Element_type_fail_3() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Awaited_const_decl_pass() {
     test_check(
         "
@@ -3305,6 +3555,7 @@ fn Awaited_const_decl_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Awaited_const_decl_fail_1() {
     test_check(
         "
@@ -3316,6 +3567,7 @@ fn Awaited_const_decl_fail_1() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Awaited_const_decl_fail_2() {
     test_check(
         "
@@ -3327,6 +3579,7 @@ fn Awaited_const_decl_fail_2() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Awaited_const_decl_fail_3() {
     test_check(
         "
@@ -3338,6 +3591,7 @@ fn Awaited_const_decl_fail_3() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Awaited_const_decl_fail_4() {
     test_check(
         "
@@ -3350,6 +3604,7 @@ fn Awaited_const_decl_fail_4() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Object_literal_with_embedded_identifier_pass() {
     test_check(
         "
@@ -3367,6 +3622,7 @@ fn Object_literal_with_embedded_identifier_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Object_literal_with_embedded_identifier_fail() {
     test_check(
         "
@@ -3384,6 +3640,7 @@ fn Object_literal_with_embedded_identifier_fail() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Object_literal_to_record_pass() {
     test_check(
         "
@@ -3399,6 +3656,7 @@ fn Object_literal_to_record_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Object_literal_to_record_fail() {
     test_check(
         "
@@ -3414,6 +3672,7 @@ fn Object_literal_to_record_fail() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Array_spread_pass() {
     test_check(
         "
@@ -3424,6 +3683,7 @@ fn Array_spread_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Array_spread_fail() {
     test_check(
         "
@@ -3436,6 +3696,7 @@ fn Array_spread_fail() {
 // TODO: We could probably figure out the tuple type of `other` here ^
 
 #[test]
+#[allow(non_snake_case)]
 fn Await_statement_pass() {
     test_check(
         "
@@ -3456,6 +3717,7 @@ fn Await_statement_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Await_statement_fail_1() {
     test_check(
         "
@@ -3467,6 +3729,7 @@ fn Await_statement_fail_1() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Await_statement_fail_2() {
     test_check(
         "
@@ -3479,6 +3742,7 @@ fn Await_statement_fail_2() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Await_statement_fail_3() {
     test_check(
         "
@@ -3490,6 +3754,7 @@ fn Await_statement_fail_3() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Async_proc_type_fail() {
     test_check(
         "
@@ -3503,6 +3768,7 @@ fn Async_proc_type_fail() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Property_of_union_type_pass() {
     test_check(
         "
@@ -3519,6 +3785,7 @@ fn Property_of_union_type_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Property_of_union_type_fail() {
     test_check(
         "
@@ -3533,6 +3800,7 @@ fn Property_of_union_type_fail() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Spread_arguments_pass() {
     test_check(
         "
@@ -3551,6 +3819,7 @@ fn Spread_arguments_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Spread_arguments_fail_1() {
     test_check(
         "
@@ -3563,6 +3832,7 @@ fn Spread_arguments_fail_1() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Spread_arguments_fail_2() {
     test_check(
         "
@@ -3577,6 +3847,7 @@ fn Spread_arguments_fail_2() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Decorators_pass() {
     test_check(
         "
@@ -3606,6 +3877,7 @@ fn Decorators_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Decorators_fail_1() {
     test_check(
         "
@@ -3619,6 +3891,7 @@ fn Decorators_fail_1() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Decorators_fail_2() {
     test_check(
         "
@@ -3633,6 +3906,7 @@ fn Decorators_fail_2() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Decorators_fail_3() {
     test_check(
         "
@@ -3645,6 +3919,7 @@ fn Decorators_fail_3() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Decorators_fail_4() {
     test_check(
         "
@@ -3658,6 +3933,7 @@ fn Decorators_fail_4() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Memo_decorator_pass() {
     test_check(
         "
@@ -3677,6 +3953,7 @@ fn Memo_decorator_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Memo_decorator_fail() {
     test_check(
         "
@@ -3693,6 +3970,7 @@ fn Memo_decorator_fail() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Regular_expression_pass() {
     test_check(
         "
@@ -3703,6 +3981,7 @@ fn Regular_expression_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Regular_expression_fail_1() {
     test_check(
         "
@@ -3713,6 +3992,7 @@ fn Regular_expression_fail_1() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Regular_expression_fail_2() {
     test_check(
         "
@@ -3723,6 +4003,7 @@ fn Regular_expression_fail_2() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Regular_expression_fail_3() {
     test_check(
         "
@@ -3733,6 +4014,7 @@ fn Regular_expression_fail_3() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Tests_pass() {
     test_check(
         "
@@ -3756,6 +4038,7 @@ fn Tests_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Tests_fail_1() {
     test_check(
         "
@@ -3772,6 +4055,7 @@ fn Tests_fail_1() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Tests_fail_2() {
     test_check(
         "
@@ -3782,6 +4066,7 @@ fn Tests_fail_2() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Tests_fail_3() {
     test_check(
         "
@@ -3793,6 +4078,7 @@ fn Tests_fail_3() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Number_type_addition_pass() {
     test_check(
         "
@@ -3804,6 +4090,7 @@ fn Number_type_addition_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Number_type_addition_fail() {
     test_check(
         "
@@ -3815,6 +4102,7 @@ fn Number_type_addition_fail() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn String_type_addition_pass() {
     test_check(
         "
@@ -3826,6 +4114,7 @@ fn String_type_addition_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn String_type_addition_fail() {
     test_check(
         "
@@ -3837,6 +4126,7 @@ fn String_type_addition_fail() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Complex_function_type_inference_pass() {
     test_check(
         "
@@ -3852,6 +4142,7 @@ fn Complex_function_type_inference_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Pure_functions_pass() {
     test_check(
         "
@@ -3875,6 +4166,7 @@ fn Pure_functions_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Pure_functions_fail_1() {
     test_check(
         "
@@ -3887,6 +4179,7 @@ fn Pure_functions_fail_1() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Pure_functions_fail_2() {
     test_check(
         "
@@ -3903,6 +4196,7 @@ fn Pure_functions_fail_2() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Pure_functions_fail_3() {
     test_check(
         "
@@ -3916,6 +4210,7 @@ fn Pure_functions_fail_3() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Pure_procs_pass() {
     test_check(
         "
@@ -3943,6 +4238,7 @@ fn Pure_procs_pass() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Pure_procs_fail_1() {
     test_check(
         "
@@ -3957,6 +4253,7 @@ fn Pure_procs_fail_1() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Pure_procs_fail_2() {
     test_check(
         "
@@ -3975,6 +4272,7 @@ fn Pure_procs_fail_2() {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn Pure_procs_fail_3() {
     test_check(
         "
