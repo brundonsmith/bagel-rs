@@ -453,7 +453,7 @@ where
                         src: subject.slice().clone(),
                         message: format!(
                             "{} is of type {} and cannot be called",
-                            blue_string(&subject),
+                            blue_string(&subject.clone().upcast()),
                             blue_string(&subject_type),
                         ),
                     });

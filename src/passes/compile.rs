@@ -56,7 +56,7 @@ where
                     &type_annotation.args,
                     false,
                     type_annotation.returns.as_ref(),
-                    &func.body,
+                    &func.body.upcast(),
                 )?;
                 f.write_str(";")
             }
@@ -214,7 +214,7 @@ where
                     &type_annotation.args,
                     false,
                     type_annotation.returns.as_ref(),
-                    body,
+                    &body.clone().upcast(),
                 )
             }
             ASTDetails::Proc {

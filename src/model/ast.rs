@@ -266,7 +266,7 @@ pub enum ASTDetails {
     ValueDeclaration {
         name: AST<PlainIdentifier>,
         type_annotation: Option<ASTAny>,
-        value: ASTAny,
+        value: AST<Expression>,
         is_const: bool,
         exported: bool,
         platforms: PlatformSet,
@@ -275,7 +275,7 @@ pub enum ASTDetails {
     #[evt(derive(Debug, Clone, PartialEq))]
     TestExprDeclaration {
         name: AST<ExactStringLiteral>,
-        expr: ASTAny,
+        expr: AST<Expression>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
@@ -292,6 +292,7 @@ pub enum ASTDetails {
     },
 
     // --- Expressions ---
+    #[evt(derive(Debug, Clone, PartialEq))]
     NilLiteral,
 
     #[evt(derive(Debug, Clone, PartialEq))]
@@ -320,19 +321,19 @@ pub enum ASTDetails {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     BinaryOperation {
-        left: ASTAny,
+        left: AST<Expression>,
         op: AST<BinaryOperator>,
-        right: ASTAny,
+        right: AST<Expression>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     BinaryOperator(BinaryOperatorOp),
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    NegationOperation(ASTAny),
+    NegationOperation(AST<Expression>),
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    Parenthesis(ASTAny),
+    Parenthesis(AST<Expression>),
 
     #[evt(derive(Debug, Clone, PartialEq))]
     LocalIdentifier(Slice),
@@ -340,14 +341,14 @@ pub enum ASTDetails {
     #[evt(derive(Debug, Clone, PartialEq))]
     InlineConstGroup {
         declarations: Vec<AST<InlineDeclaration>>,
-        inner: ASTAny,
+        inner: AST<Expression>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     InlineDeclaration {
         destination: DeclarationDestination,
         awaited: bool,
-        value: ASTAny,
+        value: AST<Expression>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
@@ -355,7 +356,7 @@ pub enum ASTDetails {
         type_annotation: AST<FuncType>,
         is_async: bool,
         is_pure: bool,
-        body: ASTAny,
+        body: AST<Expression>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
@@ -374,14 +375,14 @@ pub enum ASTDetails {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     RangeExpression {
-        start: ASTAny,
-        end: ASTAny,
+        start: AST<Expression>,
+        end: AST<Expression>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     Invocation {
-        subject: ASTAny,
-        args: Vec<ASTAny>,
+        subject: AST<Expression>,
+        args: Vec<AST<Expression>>,
         spread_args: Option<ASTAny>,
         type_args: Vec<ASTAny>,
         bubbles: bool,
@@ -398,52 +399,52 @@ pub enum ASTDetails {
     #[evt(derive(Debug, Clone, PartialEq))]
     IfElseExpression {
         cases: Vec<AST<IfElseExpressionCase>>,
-        default_case: Option<ASTAny>,
+        default_case: Option<AST<Expression>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     IfElseExpressionCase {
-        condition: ASTAny,
-        outcome: ASTAny,
+        condition: AST<Expression>,
+        outcome: AST<Expression>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     SwitchExpression {
-        value: ASTAny,
+        value: AST<Expression>,
         cases: Vec<AST<SwitchExpressionCase>>,
-        default_case: Option<ASTAny>,
+        default_case: Option<AST<Expression>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     SwitchExpressionCase {
         type_filter: ASTAny,
-        outcome: ASTAny,
+        outcome: AST<Expression>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    SpreadExpression(ASTAny),
+    SpreadExpression(AST<Expression>),
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ElementTag {
         tag_name: AST<PlainIdentifier>,
         attributes: Vec<KeyValue>,
-        children: Vec<ASTAny>,
+        children: Vec<AST<Expression>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     AsCast {
-        inner: ASTAny,
+        inner: AST<Expression>,
         as_type: ASTAny,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     InstanceOf {
-        inner: ASTAny,
+        inner: AST<Expression>,
         possible_type: ASTAny,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    ErrorExpression(ASTAny),
+    ErrorExpression(AST<Expression>),
 
     #[evt(derive(Debug, Clone, PartialEq))]
     RegularExpression {
@@ -561,7 +562,7 @@ pub enum ASTDetails {
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    TypeofType(ASTAny),
+    TypeofType(AST<Expression>),
 
     UnknownType,
 
@@ -578,7 +579,7 @@ pub enum ASTDetails {
     #[evt(derive(Debug, Clone, PartialEq))]
     DeclarationStatement {
         destination: DeclarationDestination,
-        value: ASTAny,
+        value: AST<Expression>,
         awaited: bool,
         is_const: bool,
     },
@@ -591,27 +592,27 @@ pub enum ASTDetails {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     IfElseStatementCase {
-        condition: ASTAny,
+        condition: AST<Expression>,
         outcome: AST<Block>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ForLoop {
         item_identifier: AST<PlainIdentifier>,
-        iterator: ASTAny,
+        iterator: AST<Expression>,
         body: AST<Block>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     WhileLoop {
-        condition: ASTAny,
+        condition: AST<Expression>,
         body: AST<Block>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     Assignment {
         target: ASTAny,
-        value: ASTAny,
+        value: AST<Expression>,
         operator: Option<AST<BinaryOperator>>,
     },
 
@@ -624,13 +625,13 @@ pub enum ASTDetails {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ThrowStatement {
-        error_expression: ASTAny,
+        error_expression: AST<Expression>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
     Autorun {
         effect_block: AST<Block>,
-        until: Option<ASTAny>,
+        until: Option<AST<Expression>>,
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
@@ -638,115 +639,6 @@ pub enum ASTDetails {
 }
 
 // --- Pieces of AST nodes ---
-
-ast_union_type!(
-    Declaration = ImportAllDeclaration
-        | ImportDeclaration
-        | TypeDeclaration
-        | FuncDeclaration
-        | ProcDeclaration
-        | ValueDeclaration
-        | TestExprDeclaration
-        | TestBlockDeclaration
-        | TestTypeDeclaration
-);
-
-impl TryFrom<ASTDetails> for Declaration {
-    type Error = ();
-
-    fn try_from(value: ASTDetails) -> Result<Self, Self::Error> {
-        match value {
-            ASTDetails::ImportAllDeclaration { name, path } => {
-                Ok(Declaration::ImportAllDeclaration(ImportAllDeclaration {
-                    name,
-                    path,
-                }))
-            }
-            ASTDetails::ImportDeclaration { imports, path } => {
-                Ok(Declaration::ImportDeclaration(ImportDeclaration {
-                    imports,
-                    path,
-                }))
-            }
-            ASTDetails::TypeDeclaration {
-                name,
-                declared_type,
-                exported,
-            } => Ok(Declaration::TypeDeclaration(TypeDeclaration {
-                name,
-                declared_type,
-                exported,
-            })),
-            ASTDetails::FuncDeclaration {
-                name,
-                func,
-                exported,
-                platforms,
-                decorators,
-            } => Ok(Declaration::FuncDeclaration(FuncDeclaration {
-                name,
-                func,
-                exported,
-                platforms,
-                decorators,
-            })),
-            ASTDetails::ProcDeclaration {
-                name,
-                proc,
-                exported,
-                platforms,
-                decorators,
-            } => Ok(Declaration::ProcDeclaration(ProcDeclaration {
-                name,
-                proc,
-                exported,
-                platforms,
-                decorators,
-            })),
-            ASTDetails::ValueDeclaration {
-                name,
-                type_annotation,
-                value,
-                is_const,
-                exported,
-                platforms,
-            } => Ok(Declaration::ValueDeclaration(ValueDeclaration {
-                name,
-                type_annotation,
-                value,
-                is_const,
-                exported,
-                platforms,
-            })),
-            ASTDetails::TestExprDeclaration { name, expr } => {
-                Ok(Declaration::TestExprDeclaration(TestExprDeclaration {
-                    name,
-                    expr,
-                }))
-            }
-            ASTDetails::TestBlockDeclaration { name, block } => {
-                Ok(Declaration::TestBlockDeclaration(TestBlockDeclaration {
-                    name,
-                    block,
-                }))
-            }
-            ASTDetails::TestTypeDeclaration {
-                name,
-                destination_type,
-                value_type,
-            } => Ok(Declaration::TestTypeDeclaration(TestTypeDeclaration {
-                name,
-                destination_type,
-                value_type,
-            })),
-            _ => Err(()),
-        }
-    }
-}
-
-fn foo(x: AST<Declaration>) {
-    let dc = x.downcast();
-}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
 pub enum SpecialTypeKind {
@@ -772,15 +664,15 @@ pub enum ModifierTypeKind {
 #[derive(Clone, Debug, PartialEq)]
 pub enum StringLiteralSegment {
     Slice(Slice),
-    AST(ASTAny),
+    AST(AST<Expression>),
 }
 impl From<Slice> for StringLiteralSegment {
     fn from(s: Slice) -> Self {
         Self::Slice(s)
     }
 }
-impl From<ASTAny> for StringLiteralSegment {
-    fn from(s: ASTAny) -> Self {
+impl From<AST<Expression>> for StringLiteralSegment {
+    fn from(s: AST<Expression>) -> Self {
         Self::AST(s)
     }
 }
@@ -790,7 +682,7 @@ union_type!(ObjectLiteralEntry = KeyValue | SpreadExpression);
 #[derive(Debug, Clone, PartialEq)]
 pub struct KeyValue {
     pub key: ASTAny,
-    pub value: ASTAny,
+    pub value: AST<Expression>,
 }
 
 union_type!(ObjectTypeEntry = KeyValueType | SpreadType);
@@ -932,6 +824,287 @@ impl PlatformSet {
             node: true,
             deno: true,
             browser: true,
+        }
+    }
+}
+
+// --- AST subgroups ---
+
+ast_union_type!(
+    Declaration = ImportAllDeclaration
+        | ImportDeclaration
+        | TypeDeclaration
+        | FuncDeclaration
+        | ProcDeclaration
+        | ValueDeclaration
+        | TestExprDeclaration
+        | TestBlockDeclaration
+        | TestTypeDeclaration
+);
+
+impl TryFrom<ASTDetails> for Declaration {
+    type Error = ();
+
+    fn try_from(value: ASTDetails) -> Result<Self, Self::Error> {
+        match value {
+            ASTDetails::ImportAllDeclaration { name, path } => {
+                Ok(Declaration::ImportAllDeclaration(ImportAllDeclaration {
+                    name,
+                    path,
+                }))
+            }
+            ASTDetails::ImportDeclaration { imports, path } => {
+                Ok(Declaration::ImportDeclaration(ImportDeclaration {
+                    imports,
+                    path,
+                }))
+            }
+            ASTDetails::TypeDeclaration {
+                name,
+                declared_type,
+                exported,
+            } => Ok(Declaration::TypeDeclaration(TypeDeclaration {
+                name,
+                declared_type,
+                exported,
+            })),
+            ASTDetails::FuncDeclaration {
+                name,
+                func,
+                exported,
+                platforms,
+                decorators,
+            } => Ok(Declaration::FuncDeclaration(FuncDeclaration {
+                name,
+                func,
+                exported,
+                platforms,
+                decorators,
+            })),
+            ASTDetails::ProcDeclaration {
+                name,
+                proc,
+                exported,
+                platforms,
+                decorators,
+            } => Ok(Declaration::ProcDeclaration(ProcDeclaration {
+                name,
+                proc,
+                exported,
+                platforms,
+                decorators,
+            })),
+            ASTDetails::ValueDeclaration {
+                name,
+                type_annotation,
+                value,
+                is_const,
+                exported,
+                platforms,
+            } => Ok(Declaration::ValueDeclaration(ValueDeclaration {
+                name,
+                type_annotation,
+                value,
+                is_const,
+                exported,
+                platforms,
+            })),
+            ASTDetails::TestExprDeclaration { name, expr } => {
+                Ok(Declaration::TestExprDeclaration(TestExprDeclaration {
+                    name,
+                    expr,
+                }))
+            }
+            ASTDetails::TestBlockDeclaration { name, block } => {
+                Ok(Declaration::TestBlockDeclaration(TestBlockDeclaration {
+                    name,
+                    block,
+                }))
+            }
+            ASTDetails::TestTypeDeclaration {
+                name,
+                destination_type,
+                value_type,
+            } => Ok(Declaration::TestTypeDeclaration(TestTypeDeclaration {
+                name,
+                destination_type,
+                value_type,
+            })),
+            _ => Err(()),
+        }
+    }
+}
+
+ast_union_type!(
+    Expression = NilLiteral
+        | BooleanLiteral
+        | NumberLiteral
+        | StringLiteral
+        | ExactStringLiteral
+        | ArrayLiteral
+        | ObjectLiteral
+        | BinaryOperation
+        | NegationOperation
+        | Parenthesis
+        | LocalIdentifier
+        | InlineConstGroup
+        | Func
+        | Proc
+        | JavascriptEscape
+        | RangeExpression
+        | Invocation
+        | PropertyAccessor
+        | IfElseExpression
+        | SwitchExpression
+        | ElementTag
+        | AsCast
+        | InstanceOf
+        | ErrorExpression
+        | RegularExpression
+);
+
+impl TryFrom<ASTDetails> for Expression {
+    type Error = ();
+
+    fn try_from(value: ASTDetails) -> Result<Self, Self::Error> {
+        match value {
+            ASTDetails::NilLiteral => Ok(Expression::NilLiteral(NilLiteral)),
+            ASTDetails::BooleanLiteral(value) => {
+                Ok(Expression::BooleanLiteral(BooleanLiteral(value)))
+            }
+            ASTDetails::StringLiteral { tag, segments } => {
+                Ok(Expression::StringLiteral(StringLiteral { tag, segments }))
+            }
+            ASTDetails::ExactStringLiteral { tag, value } => {
+                Ok(Expression::ExactStringLiteral(ExactStringLiteral {
+                    tag,
+                    value,
+                }))
+            }
+            ASTDetails::ArrayLiteral(entries) => {
+                Ok(Expression::ArrayLiteral(ArrayLiteral(entries)))
+            }
+            ASTDetails::ObjectLiteral(entries) => {
+                Ok(Expression::ObjectLiteral(ObjectLiteral(entries)))
+            }
+            ASTDetails::BinaryOperation { left, op, right } => {
+                Ok(Expression::BinaryOperation(BinaryOperation {
+                    left,
+                    op,
+                    right,
+                }))
+            }
+            ASTDetails::NegationOperation(inner) => {
+                Ok(Expression::NegationOperation(NegationOperation(inner)))
+            }
+            ASTDetails::Parenthesis(inner) => Ok(Expression::Parenthesis(Parenthesis(inner))),
+            ASTDetails::LocalIdentifier(inner) => {
+                Ok(Expression::LocalIdentifier(LocalIdentifier(inner)))
+            }
+            ASTDetails::InlineConstGroup {
+                declarations,
+                inner,
+            } => Ok(Expression::InlineConstGroup(InlineConstGroup {
+                declarations,
+                inner,
+            })),
+            ASTDetails::Func {
+                type_annotation,
+                is_async,
+                is_pure,
+                body,
+            } => Ok(Expression::Func(Func {
+                type_annotation,
+                is_async,
+                is_pure,
+                body,
+            })),
+            ASTDetails::Proc {
+                type_annotation,
+                is_async,
+                is_pure,
+                body,
+            } => Ok(Expression::Proc(Proc {
+                type_annotation,
+                is_async,
+                is_pure,
+                body,
+            })),
+            ASTDetails::JavascriptEscape(contents) => {
+                Ok(Expression::JavascriptEscape(JavascriptEscape(contents)))
+            }
+            ASTDetails::RangeExpression { start, end } => {
+                Ok(Expression::RangeExpression(RangeExpression { start, end }))
+            }
+            ASTDetails::Invocation {
+                subject,
+                args,
+                spread_args,
+                type_args,
+                bubbles,
+                awaited_or_detached,
+            } => Ok(Expression::Invocation(Invocation {
+                subject,
+                args,
+                spread_args,
+                type_args,
+                bubbles,
+                awaited_or_detached,
+            })),
+            ASTDetails::PropertyAccessor {
+                subject,
+                property,
+                optional,
+            } => Ok(Expression::PropertyAccessor(PropertyAccessor {
+                subject,
+                property,
+                optional,
+            })),
+            ASTDetails::IfElseExpression {
+                cases,
+                default_case,
+            } => Ok(Expression::IfElseExpression(IfElseExpression {
+                cases,
+                default_case,
+            })),
+            ASTDetails::SwitchExpression {
+                value,
+                cases,
+                default_case,
+            } => Ok(Expression::SwitchExpression(SwitchExpression {
+                value,
+                cases,
+                default_case,
+            })),
+            ASTDetails::ElementTag {
+                tag_name,
+                attributes,
+                children,
+            } => Ok(Expression::ElementTag(ElementTag {
+                tag_name,
+                attributes,
+                children,
+            })),
+            ASTDetails::AsCast { inner, as_type } => {
+                Ok(Expression::AsCast(AsCast { inner, as_type }))
+            }
+            ASTDetails::InstanceOf {
+                inner,
+                possible_type,
+            } => Ok(Expression::InstanceOf(InstanceOf {
+                inner,
+                possible_type,
+            })),
+            ASTDetails::ErrorExpression(inner) => {
+                Ok(Expression::ErrorExpression(ErrorExpression(inner)))
+            }
+            ASTDetails::RegularExpression { expr, flags } => {
+                Ok(Expression::RegularExpression(RegularExpression {
+                    expr,
+                    flags,
+                }))
+            }
+            _ => Err(()),
         }
     }
 }

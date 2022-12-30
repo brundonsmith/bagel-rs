@@ -150,6 +150,19 @@ macro_rules! parse_level {
     };
 }
 
+macro_rules! parse_level_expression {
+    ($level:expr, $this_level:expr, $i:expr, $a:expr) => {
+        $this_level += 1;
+        if $level <= $this_level {
+            let res = map($a, AST::recast::<Expression>)($i.clone());
+
+            if res.is_ok() {
+                return res;
+            }
+        }
+    };
+}
+
 fn module(i: Slice) -> ParseResult<AST<Module>> {
     map(
         complete(terminated(many0(w(declaration)), whitespace)),
@@ -589,6 +602,8 @@ fn type_expression_inner(l: usize, i: Slice) -> ParseResult<ASTAny> {
                 tag(">"),
             ),
             |(mut generic, _, mut type_args, end)| {
+                let mut generic = generic.upcast();
+
                 if let Some(name) = generic.try_downcast::<LocalIdentifier>() {
                     if type_args.len() == 1 {
                         let kind = match name.0.as_str() {
@@ -853,7 +868,7 @@ fn statement(i: Slice) -> ParseResult<ASTAny> {
                 invocation_accessor_chain(11), // HACK: Has to be kept in sync with expression() function!
                 tag(";")
             ),
-            |(invocation, _)| invocation,
+            |(invocation, _)| invocation.upcast(),
         ),
     ))(i)
 }
@@ -957,7 +972,10 @@ fn while_loop(i: Slice) -> ParseResult<ASTAny> {
 fn assignment(i: Slice) -> ParseResult<ASTAny> {
     map(
         seq!(
-            alt((invocation_accessor_chain(11), local_identifier)),
+            alt((
+                map(invocation_accessor_chain(11), AST::recast::<Expression>),
+                map(local_identifier, AST::recast::<Expression>)
+            )),
             pair(
                 opt(map(
                     alt((
@@ -981,7 +999,7 @@ fn assignment(i: Slice) -> ParseResult<ASTAny> {
         ),
         |(mut target, (operator, _), mut value, end)| {
             let this = ASTDetails::Assignment {
-                target: target.clone(),
+                target: target.clone().upcast(),
                 value: value.clone(),
                 operator,
             }
@@ -1033,16 +1051,16 @@ fn autorun(i: Slice) -> ParseResult<ASTAny> {
 
 // --- Expression ---
 
-fn expression(l: usize) -> impl Fn(Slice) -> ParseResult<ASTAny> {
-    move |i: Slice| -> ParseResult<ASTAny> { expression_inner(l, i) }
+fn expression(l: usize) -> impl Fn(Slice) -> ParseResult<AST<Expression>> {
+    move |i: Slice| -> ParseResult<AST<Expression>> { expression_inner(l, i) }
 }
 
 #[memoize]
-fn expression_inner(l: usize, i: Slice) -> ParseResult<ASTAny> {
+fn expression_inner(l: usize, i: Slice) -> ParseResult<AST<Expression>> {
     let mut tl = 0;
 
-    // parse_level!(level, this_level, i, ); // debug, javascriptEscape, elementTag
-    parse_level!(
+    // parse_level_expression!(level, this_level, i, ); // debug, javascriptEscape, elementTag
+    parse_level_expression!(
         l,
         tl,
         i,
@@ -1051,43 +1069,51 @@ fn expression_inner(l: usize, i: Slice) -> ParseResult<ASTAny> {
             // map(proc, |x| x.map(ASTDetails::from)),
         ))
     );
-    parse_level!(l, tl, i, binary_operation_1(tl, "??"));
-    parse_level!(l, tl, i, binary_operation_1(tl, "||"));
-    parse_level!(l, tl, i, binary_operation_1(tl, "&&"));
-    parse_level!(l, tl, i, binary_operation_2(tl, "==", "!="));
-    parse_level!(l, tl, i, binary_operation_4(tl, "<=", ">=", "<", ">"));
-    parse_level!(l, tl, i, binary_operation_2(tl, "+", "-"));
-    parse_level!(l, tl, i, binary_operation_2(tl, "*", "/"));
-    parse_level!(l, tl, i, alt((as_cast(tl), instance_of(tl))));
-    parse_level!(l, tl, i, negation_operation(tl));
-
-    // indexer
-
-    // parse_level!(l, tl, i, error_expression);
-
-    parse_level!(l, tl, i, invocation_accessor_chain(tl));
-
-    parse_level!(l, tl, i, range_expression);
-
-    parse_level!(l, tl, i, parenthesis(tl));
-
-    parse_level!(
+    parse_level_expression!(l, tl, i, binary_operation_1(tl, "??"));
+    parse_level_expression!(l, tl, i, binary_operation_1(tl, "||"));
+    parse_level_expression!(l, tl, i, binary_operation_1(tl, "&&"));
+    parse_level_expression!(l, tl, i, binary_operation_2(tl, "==", "!="));
+    parse_level_expression!(l, tl, i, binary_operation_4(tl, "<=", ">=", "<", ">"));
+    parse_level_expression!(l, tl, i, binary_operation_2(tl, "+", "-"));
+    parse_level_expression!(l, tl, i, binary_operation_2(tl, "*", "/"));
+    parse_level_expression!(
         l,
         tl,
         i,
         alt((
-            if_else_expression,
-            switch_expression,
-            inline_const_group,
-            object_literal,
-            array_literal,
-            map(exact_string_literal, AST::upcast),
-            number_literal,
-            boolean_literal,
-            nil_literal,
+            map(as_cast(tl), AST::recast::<Expression>),
+            map(instance_of(tl), AST::recast::<Expression>)
         ))
     );
-    parse_level!(
+    parse_level_expression!(l, tl, i, negation_operation(tl));
+
+    // indexer
+
+    // parse_level_expression!(l, tl, i, error_expression);
+
+    parse_level_expression!(l, tl, i, invocation_accessor_chain(tl));
+
+    parse_level_expression!(l, tl, i, range_expression);
+
+    parse_level_expression!(l, tl, i, parenthesis(tl));
+
+    parse_level_expression!(
+        l,
+        tl,
+        i,
+        alt((
+            map(if_else_expression, AST::recast::<Expression>),
+            map(switch_expression, AST::recast::<Expression>),
+            map(inline_const_group, AST::recast::<Expression>),
+            map(object_literal, AST::recast::<Expression>),
+            map(array_literal, AST::recast::<Expression>),
+            map(exact_string_literal, AST::recast::<Expression>),
+            map(number_literal, AST::recast::<Expression>),
+            map(boolean_literal, AST::recast::<Expression>),
+            map(nil_literal, AST::recast::<Expression>),
+        ),)
+    );
+    parse_level_expression!(
         l,
         tl,
         i,
@@ -1103,12 +1129,12 @@ fn expression_inner(l: usize, i: Slice) -> ParseResult<ASTAny> {
     }))
 }
 
-fn invocation_accessor_chain(level: usize) -> impl Fn(Slice) -> ParseResult<ASTAny> {
-    move |i: Slice| -> ParseResult<ASTAny> { invocation_accessor_chain_inner(level, i) }
+fn invocation_accessor_chain(level: usize) -> impl Fn(Slice) -> ParseResult<AST<Expression>> {
+    move |i: Slice| -> ParseResult<AST<Expression>> { invocation_accessor_chain_inner(level, i) }
 }
 
 #[memoize]
-fn invocation_accessor_chain_inner(level: usize, i: Slice) -> ParseResult<ASTAny> {
+fn invocation_accessor_chain_inner(level: usize, i: Slice) -> ParseResult<AST<Expression>> {
     map(
         seq!(
             await_or_detach,
@@ -1127,7 +1153,7 @@ fn invocation_accessor_chain_inner(level: usize, i: Slice) -> ParseResult<ASTAny
 
                 match clause {
                     InvocationOrPropertyAccess::InvokingWith(mut args, args_slice) => {
-                        subject = ASTDetails::Invocation {
+                        subject = Invocation {
                             subject: old_subject.clone(),
                             args: args.clone(),
                             spread_args: None,     // TODO
@@ -1135,18 +1161,20 @@ fn invocation_accessor_chain_inner(level: usize, i: Slice) -> ParseResult<ASTAny
                             bubbles: false,        // TODO
                             awaited_or_detached,
                         }
-                        .with_slice(old_subject.slice().clone().spanning(&args_slice));
+                        .with_slice(old_subject.slice().clone().spanning(&args_slice))
+                        .recast::<Expression>();
 
                         old_subject.set_parent(&subject);
                         args.set_parent(&subject);
                     }
                     InvocationOrPropertyAccess::Accessing(mut property, indexer_slice) => {
-                        subject = ASTDetails::PropertyAccessor {
-                            subject: old_subject.clone(),
+                        subject = PropertyAccessor {
+                            subject: old_subject.clone().upcast(),
                             property: property.clone(),
                             optional: false, // TODO
                         }
-                        .with_slice(old_subject.slice().clone().spanning(&indexer_slice));
+                        .with_slice(old_subject.slice().clone().spanning(&indexer_slice))
+                        .recast::<Expression>();
 
                         old_subject.set_parent(&subject);
                         property.set_parent(&subject);
@@ -1203,20 +1231,20 @@ fn dot_property_access(i: Slice) -> ParseResult<InvocationOrPropertyAccess> {
 
 #[derive(Debug, Clone)]
 enum InvocationOrPropertyAccess {
-    InvokingWith(Vec<ASTAny>, Slice),
+    InvokingWith(Vec<AST<Expression>>, Slice),
     Accessing(ASTAny, Slice),
 }
 
 macro_rules! parse_binary_operation {
     ($level:expr, $operator:expr) => {
-        move |i: Slice| -> ParseResult<ASTAny> {
+        move |i: Slice| -> ParseResult<AST<Expression>> {
             map(
                 tuple((
                     expression($level + 1),
                     many1(pair(w($operator), w(expression($level + 1)))),
                 )),
                 |(base, clauses)| {
-                    let mut left = base;
+                    let mut left: AST<Expression> = base;
 
                     for (op, mut right) in clauses {
                         let mut old_left = left.clone();
@@ -1224,12 +1252,13 @@ macro_rules! parse_binary_operation {
                             BinaryOperator(BinaryOperatorOp::from_str(op.as_str()).unwrap())
                                 .with_slice(op);
 
-                        left = ASTDetails::BinaryOperation {
+                        left = BinaryOperation {
                             left: old_left.clone(),
                             op: op.clone(),
                             right: right.clone(),
                         }
-                        .with_slice(old_left.slice().clone().spanning(right.slice()));
+                        .with_slice(old_left.slice().clone().spanning(right.slice()))
+                        .recast::<Expression>();
 
                         old_left.set_parent(&left);
                         op.set_parent(&left);
@@ -1243,7 +1272,10 @@ macro_rules! parse_binary_operation {
     };
 }
 
-fn binary_operation_1(level: usize, a: &'static str) -> impl Fn(Slice) -> ParseResult<ASTAny> {
+fn binary_operation_1(
+    level: usize,
+    a: &'static str,
+) -> impl Fn(Slice) -> ParseResult<AST<Expression>> {
     parse_binary_operation!(level, tag(a))
 }
 
@@ -1251,7 +1283,7 @@ fn binary_operation_2(
     level: usize,
     a: &'static str,
     b: &'static str,
-) -> impl Fn(Slice) -> ParseResult<ASTAny> {
+) -> impl Fn(Slice) -> ParseResult<AST<Expression>> {
     parse_binary_operation!(level, alt((tag(a), tag(b))))
 }
 
@@ -1261,24 +1293,24 @@ fn binary_operation_4(
     b: &'static str,
     c: &'static str,
     d: &'static str,
-) -> impl Fn(Slice) -> ParseResult<ASTAny> {
+) -> impl Fn(Slice) -> ParseResult<AST<Expression>> {
     parse_binary_operation!(level, alt((tag(a), tag(b), tag(c), tag(d))))
 }
 
-fn regular_expression(i: Slice) -> ParseResult<ASTAny> {
+fn regular_expression(i: Slice) -> ParseResult<AST<RegularExpression>> {
     todo!()
 }
 
-fn error_expression(i: Slice) -> ParseResult<ASTAny> {
+fn error_expression(i: Slice) -> ParseResult<AST<ErrorExpression>> {
     todo!()
 }
 
-fn instance_of(level: usize) -> impl Fn(Slice) -> ParseResult<ASTAny> {
-    move |i: Slice| -> ParseResult<ASTAny> {
+fn instance_of(level: usize) -> impl Fn(Slice) -> ParseResult<AST<InstanceOf>> {
+    move |i: Slice| -> ParseResult<AST<InstanceOf>> {
         map(
             seq!(expression(level + 1), tag("instanceof"), type_expression(0)),
             |(mut inner, _, mut possible_type)| {
-                make_node!(
+                make_node_typed!(
                     InstanceOf,
                     inner.slice().clone().spanning(possible_type.slice()),
                     inner,
@@ -1289,12 +1321,12 @@ fn instance_of(level: usize) -> impl Fn(Slice) -> ParseResult<ASTAny> {
     }
 }
 
-fn as_cast(level: usize) -> impl Fn(Slice) -> ParseResult<ASTAny> {
-    move |i: Slice| -> ParseResult<ASTAny> {
+fn as_cast(level: usize) -> impl Fn(Slice) -> ParseResult<AST<AsCast>> {
+    move |i: Slice| -> ParseResult<AST<AsCast>> {
         map(
             seq!(expression(level + 1), tag("as"), type_expression(0)),
             |(mut inner, _, mut as_type)| {
-                make_node!(
+                make_node_typed!(
                     AsCast,
                     inner.slice().clone().spanning(as_type.slice()),
                     inner,
@@ -1306,12 +1338,12 @@ fn as_cast(level: usize) -> impl Fn(Slice) -> ParseResult<ASTAny> {
 }
 
 #[memoize]
-fn element_tag(i: Slice) -> ParseResult<ASTAny> {
+fn element_tag(i: Slice) -> ParseResult<AST<ElementTag>> {
     todo!()
 }
 
 #[memoize]
-fn if_else_expression(i: Slice) -> ParseResult<ASTAny> {
+fn if_else_expression(i: Slice) -> ParseResult<AST<IfElseExpression>> {
     map(
         seq!(
             separated_list1(w(tag("else")), w(if_else_expression_case)),
@@ -1321,7 +1353,7 @@ fn if_else_expression(i: Slice) -> ParseResult<ASTAny> {
             )),
         ),
         |(mut cases, mut default_case)| {
-            make_node!(
+            make_node_typed!(
                 IfElseExpression,
                 covering(&cases).unwrap(),
                 cases,
@@ -1347,7 +1379,7 @@ fn if_else_expression_case(i: Slice) -> ParseResult<AST<IfElseExpressionCase>> {
 }
 
 #[memoize]
-fn switch_expression(i: Slice) -> ParseResult<ASTAny> {
+fn switch_expression(i: Slice) -> ParseResult<AST<SwitchExpression>> {
     map(
         seq!(
             tag("switch"),
@@ -1373,7 +1405,7 @@ fn switch_expression(i: Slice) -> ParseResult<ASTAny> {
             tag("}"),
         ),
         |(start, mut value, _, mut cases, mut default_case, end)| {
-            make_node!(
+            make_node_typed!(
                 SwitchExpression,
                 start.spanning(&end),
                 value,
@@ -1385,11 +1417,14 @@ fn switch_expression(i: Slice) -> ParseResult<ASTAny> {
 }
 
 #[memoize]
-fn range_expression(i: Slice) -> ParseResult<ASTAny> {
+fn range_expression(i: Slice) -> ParseResult<AST<RangeExpression>> {
     map(
         seq!(number_literal, tag(".."), number_literal),
         |(mut start, _, mut end)| {
-            make_node!(
+            let mut start = start.recast::<Expression>();
+            let mut end = end.recast::<Expression>();
+
+            make_node_typed!(
                 RangeExpression,
                 start.slice().clone().spanning(end.slice()),
                 start,
@@ -1410,12 +1445,12 @@ fn spread_expression(i: Slice) -> ParseResult<AST<SpreadExpression>> {
 }
 
 #[memoize]
-fn javascript_escape_expression(i: Slice) -> ParseResult<ASTAny> {
+fn javascript_escape_expression(i: Slice) -> ParseResult<AST<JavascriptEscape>> {
     todo!()
 }
 
 #[memoize]
-fn proc(i: Slice) -> ParseResult<ASTAny> {
+fn proc(i: Slice) -> ParseResult<AST<Proc>> {
     todo!()
 }
 
@@ -1470,11 +1505,11 @@ fn func(i: Slice) -> ParseResult<AST<Func>> {
 }
 
 #[memoize]
-fn inline_const_group(i: Slice) -> ParseResult<ASTAny> {
+fn inline_const_group(i: Slice) -> ParseResult<AST<InlineConstGroup>> {
     map(
         seq!(many1(inline_declaration), expression(0)),
         |(mut declarations, mut inner)| {
-            make_node!(
+            make_node_typed!(
                 InlineConstGroup,
                 declarations[0].slice().clone().spanning(inner.slice()),
                 declarations,
@@ -1531,30 +1566,30 @@ fn declaration_destination(i: Slice) -> ParseResult<DeclarationDestination> {
     )(i)
 }
 
-fn negation_operation(level: usize) -> impl Fn(Slice) -> ParseResult<ASTAny> {
-    move |i: Slice| -> ParseResult<ASTAny> {
+fn negation_operation(level: usize) -> impl Fn(Slice) -> ParseResult<AST<NegationOperation>> {
+    move |i: Slice| -> ParseResult<AST<NegationOperation>> {
         map(
             seq!(tag("!"), expression(level + 1)),
             |(start, mut expr)| {
-                make_node_tuple!(NegationOperation, start.spanning(expr.slice()), expr)
+                make_node_tuple_typed!(NegationOperation, start.spanning(expr.slice()), expr)
             },
         )(i)
     }
 }
 
-fn parenthesis(level: usize) -> impl Fn(Slice) -> ParseResult<ASTAny> {
-    move |i: Slice| -> ParseResult<ASTAny> {
+fn parenthesis(level: usize) -> impl Fn(Slice) -> ParseResult<AST<Parenthesis>> {
+    move |i: Slice| -> ParseResult<AST<Parenthesis>> {
         map(
             seq!(tag("("), expression(level + 1), tag(")")),
             |(open_paren, mut inner, close_paren)| {
-                make_node_tuple!(Parenthesis, open_paren.spanning(&close_paren), inner)
+                make_node_tuple_typed!(Parenthesis, open_paren.spanning(&close_paren), inner)
             },
         )(i)
     }
 }
 
 #[memoize]
-fn object_literal(i: Slice) -> ParseResult<ASTAny> {
+fn object_literal(i: Slice) -> ParseResult<AST<ObjectLiteral>> {
     map(
         seq!(
             tag("{"),
@@ -1562,8 +1597,8 @@ fn object_literal(i: Slice) -> ParseResult<ASTAny> {
             tag("}"),
         ),
         |(open_bracket, mut entries, close_bracket)| {
-            let this = ASTDetails::ObjectLiteral(entries.clone())
-                .with_slice(open_bracket.spanning(&close_bracket));
+            let this =
+                ObjectLiteral(entries.clone()).with_slice(open_bracket.spanning(&close_bracket));
 
             for entry in entries.iter_mut() {
                 match entry {
@@ -1596,28 +1631,31 @@ fn key_value_expression(i: Slice) -> ParseResult<ObjectLiteralEntry> {
 }
 
 #[memoize]
-fn array_literal(i: Slice) -> ParseResult<ASTAny> {
+fn array_literal(i: Slice) -> ParseResult<AST<ArrayLiteral>> {
     map(
         seq!(
             tag("["),
             separated_list0(
                 w(char(',')),
-                w(alt((map(spread_expression, AST::upcast), expression(0),)))
+                w(alt((
+                    map(spread_expression, AST::upcast),
+                    map(expression(0), AST::upcast),
+                )))
             ),
             tag("]"),
         ),
         |(open_bracket, mut entries, close_bracket)| {
-            make_node_tuple!(ArrayLiteral, open_bracket.spanning(&close_bracket), entries)
+            make_node_tuple_typed!(ArrayLiteral, open_bracket.spanning(&close_bracket), entries)
         },
     )(i)
 }
 
 #[memoize]
-fn string_literal(i: Slice) -> ParseResult<ASTAny> {
+fn string_literal(i: Slice) -> ParseResult<AST<StringLiteral>> {
     map(
         seq!(tag("\'"), many0(string_literal_segment), tag("\'")),
         |(open_quote, mut segments, close_quote)| {
-            let this = ASTDetails::StringLiteral {
+            let this = StringLiteral {
                 tag: None, // TODO
                 segments: segments.clone(),
             }
@@ -1659,7 +1697,7 @@ fn string_literal_segment(i: Slice) -> ParseResult<StringLiteralSegment> {
 }
 
 #[memoize]
-fn number_literal(i: Slice) -> ParseResult<ASTAny> {
+fn number_literal(i: Slice) -> ParseResult<AST<NumberLiteral>> {
     map(
         seq!(opt(tag("-")), numeric, opt(seq!(tag("."), numeric))),
         |(neg, int, tail)| {
@@ -1667,35 +1705,33 @@ fn number_literal(i: Slice) -> ParseResult<ASTAny> {
             let back = tail.map(|(_, decimal)| decimal).unwrap_or(int);
             let full = front.spanning(&back);
 
-            ASTDetails::NumberLiteral(full.clone()).with_slice(full)
+            NumberLiteral(full.clone()).with_slice(full)
         },
     )(i)
 }
 
 #[memoize]
-fn boolean_literal(input: Slice) -> ParseResult<ASTAny> {
+fn boolean_literal(input: Slice) -> ParseResult<AST<BooleanLiteral>> {
     let parse_true = map(tag("true"), |src: Slice| {
-        ASTDetails::BooleanLiteral(true).with_slice(src)
+        BooleanLiteral(true).with_slice(src)
     });
 
     let parse_false = map(tag("false"), |src: Slice| {
-        ASTDetails::BooleanLiteral(false).with_slice(src)
+        BooleanLiteral(false).with_slice(src)
     });
 
     alt((parse_true, parse_false))(input)
 }
 
 #[memoize]
-fn nil_literal(input: Slice) -> ParseResult<ASTAny> {
-    map(tag("nil"), |src: Slice| {
-        ASTDetails::NilLiteral.with_slice(src)
-    })(input)
+fn nil_literal(input: Slice) -> ParseResult<AST<NilLiteral>> {
+    map(tag("nil"), |src: Slice| NilLiteral.with_slice(src))(input)
 }
 
 #[memoize]
-fn local_identifier(i: Slice) -> ParseResult<ASTAny> {
+fn local_identifier(i: Slice) -> ParseResult<AST<LocalIdentifier>> {
     map(identifier_like, |name| {
-        ASTDetails::LocalIdentifier(name.clone()).with_slice(name)
+        LocalIdentifier(name.clone()).with_slice(name)
     })(i)
 }
 
