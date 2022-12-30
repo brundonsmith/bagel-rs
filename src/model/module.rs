@@ -1,4 +1,6 @@
-use super::ast::{self, ASTAny, ASTDetails, AST};
+use super::ast::{
+    self, ASTDetails, Declaration, FuncDeclaration, ProcDeclaration, ValueDeclaration, AST,
+};
 use super::errors::ParseError;
 use super::slice::Slice;
 use crate::passes::parse::parse;
@@ -237,35 +239,45 @@ pub struct Module {
 }
 
 impl Module {
-    pub fn get_declaration(&self, item_name: &str, must_be_exported: bool) -> Option<ASTAny> {
+    pub fn get_declaration(
+        &self,
+        item_name: &str,
+        must_be_exported: bool,
+    ) -> Option<AST<Declaration>> {
         self.ast
             .downcast()
             .declarations
             .iter()
-            .find(|decl| match decl.details() {
-                ASTDetails::ValueDeclaration {
+            .find(|decl| match decl.downcast() {
+                Declaration::ValueDeclaration(ValueDeclaration {
                     name,
                     exported,
                     type_annotation: _,
                     value: _,
                     is_const: _,
                     platforms: _,
-                } => (!must_be_exported || *exported) && name.downcast().0.as_str() == item_name,
-                ASTDetails::FuncDeclaration {
+                }) => (!must_be_exported || exported) && name.downcast().0.as_str() == item_name,
+                Declaration::FuncDeclaration(FuncDeclaration {
                     name,
                     exported,
                     func: _,
                     platforms: _,
                     decorators: _,
-                } => (!must_be_exported || *exported) && name.downcast().0.as_str() == item_name,
-                ASTDetails::ProcDeclaration {
+                }) => (!must_be_exported || exported) && name.downcast().0.as_str() == item_name,
+                Declaration::ProcDeclaration(ProcDeclaration {
                     name,
                     exported,
                     proc: _,
                     platforms: _,
                     decorators: _,
-                } => (!must_be_exported || *exported) && name.downcast().0.as_str() == item_name,
-                _ => unreachable!(),
+                }) => (!must_be_exported || exported) && name.downcast().0.as_str() == item_name,
+                Declaration::TypeDeclaration(_) => todo!(),
+
+                Declaration::ImportAllDeclaration(_) => false,
+                Declaration::ImportDeclaration(_) => false,
+                Declaration::TestExprDeclaration(_) => false,
+                Declaration::TestBlockDeclaration(_) => false,
+                Declaration::TestTypeDeclaration(_) => false,
             })
             .cloned()
     }

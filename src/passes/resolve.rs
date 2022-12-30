@@ -75,7 +75,7 @@ where
 
                     None
                 }) {
-                    return Some(found);
+                    return Some(found.upcast());
                 }
             }
             Some(ASTDetails::Func {

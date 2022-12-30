@@ -35,6 +35,22 @@ macro_rules! union_type {
     };
 }
 
+macro_rules! ast_union_type {
+    ($name:ident = $( $s:ident )|*) => {
+        union_type!($name = $($s)|*);
+
+        impl From<$name> for ASTDetails {
+            fn from(un: $name) -> Self {
+                match un {
+                    $(
+                        $name::$s(inner) => ASTDetails::from(inner),
+                    )*
+                }
+            }
+        }
+    }
+}
+
 macro_rules! simple_enum {
     ($name:ident = $( $s:ident )|*) => {
         #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -92,6 +108,14 @@ where
 
     pub fn upcast(self) -> ASTAny {
         AST::<ASTDetails>(self.0, PhantomData)
+    }
+
+    pub fn recast<TExpected>(self) -> AST<TExpected>
+    where
+        TExpected: Clone + TryFrom<ASTDetails>,
+        ASTDetails: From<TExpected>,
+    {
+        AST::<TExpected>(self.0, PhantomData)
     }
 }
 
@@ -185,7 +209,7 @@ impl PartialEq for ASTInner {
 pub enum ASTDetails {
     #[evt(derive(Debug, Clone, PartialEq))]
     Module {
-        declarations: Vec<ASTAny>,
+        declarations: Vec<AST<Declaration>>,
     },
 
     // --- Declarations ---
@@ -614,6 +638,115 @@ pub enum ASTDetails {
 }
 
 // --- Pieces of AST nodes ---
+
+ast_union_type!(
+    Declaration = ImportAllDeclaration
+        | ImportDeclaration
+        | TypeDeclaration
+        | FuncDeclaration
+        | ProcDeclaration
+        | ValueDeclaration
+        | TestExprDeclaration
+        | TestBlockDeclaration
+        | TestTypeDeclaration
+);
+
+impl TryFrom<ASTDetails> for Declaration {
+    type Error = ();
+
+    fn try_from(value: ASTDetails) -> Result<Self, Self::Error> {
+        match value {
+            ASTDetails::ImportAllDeclaration { name, path } => {
+                Ok(Declaration::ImportAllDeclaration(ImportAllDeclaration {
+                    name,
+                    path,
+                }))
+            }
+            ASTDetails::ImportDeclaration { imports, path } => {
+                Ok(Declaration::ImportDeclaration(ImportDeclaration {
+                    imports,
+                    path,
+                }))
+            }
+            ASTDetails::TypeDeclaration {
+                name,
+                declared_type,
+                exported,
+            } => Ok(Declaration::TypeDeclaration(TypeDeclaration {
+                name,
+                declared_type,
+                exported,
+            })),
+            ASTDetails::FuncDeclaration {
+                name,
+                func,
+                exported,
+                platforms,
+                decorators,
+            } => Ok(Declaration::FuncDeclaration(FuncDeclaration {
+                name,
+                func,
+                exported,
+                platforms,
+                decorators,
+            })),
+            ASTDetails::ProcDeclaration {
+                name,
+                proc,
+                exported,
+                platforms,
+                decorators,
+            } => Ok(Declaration::ProcDeclaration(ProcDeclaration {
+                name,
+                proc,
+                exported,
+                platforms,
+                decorators,
+            })),
+            ASTDetails::ValueDeclaration {
+                name,
+                type_annotation,
+                value,
+                is_const,
+                exported,
+                platforms,
+            } => Ok(Declaration::ValueDeclaration(ValueDeclaration {
+                name,
+                type_annotation,
+                value,
+                is_const,
+                exported,
+                platforms,
+            })),
+            ASTDetails::TestExprDeclaration { name, expr } => {
+                Ok(Declaration::TestExprDeclaration(TestExprDeclaration {
+                    name,
+                    expr,
+                }))
+            }
+            ASTDetails::TestBlockDeclaration { name, block } => {
+                Ok(Declaration::TestBlockDeclaration(TestBlockDeclaration {
+                    name,
+                    block,
+                }))
+            }
+            ASTDetails::TestTypeDeclaration {
+                name,
+                destination_type,
+                value_type,
+            } => Ok(Declaration::TestTypeDeclaration(TestTypeDeclaration {
+                name,
+                destination_type,
+                value_type,
+            })),
+            _ => Err(()),
+        }
+    }
+}
+
+fn foo(x: AST<Declaration>) {
+    let dc = x.downcast();
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
 pub enum SpecialTypeKind {

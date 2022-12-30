@@ -171,22 +171,22 @@ fn module(i: Slice) -> ParseResult<AST<Module>> {
 // --- Declaration
 
 #[memoize]
-fn declaration(i: Slice) -> ParseResult<ASTAny> {
+fn declaration(i: Slice) -> ParseResult<AST<Declaration>> {
     alt((
-        import_all_declaration,
-        import_declaration,
-        type_declaration,
-        func_declaration,
-        proc_declaration,
-        value_declaration,
-        test_expr_declaration,
-        test_block_declaration,
+        map(import_all_declaration, AST::recast::<Declaration>),
+        map(import_declaration, AST::recast::<Declaration>),
+        map(type_declaration, AST::recast::<Declaration>),
+        map(func_declaration, AST::recast::<Declaration>),
+        map(proc_declaration, AST::recast::<Declaration>),
+        map(value_declaration, AST::recast::<Declaration>),
+        map(test_expr_declaration, AST::recast::<Declaration>),
+        map(test_block_declaration, AST::recast::<Declaration>),
         // test_type_declaration,
     ))(i)
 }
 
 #[memoize]
-fn import_all_declaration(i: Slice) -> ParseResult<ASTAny> {
+fn import_all_declaration(i: Slice) -> ParseResult<AST<ImportAllDeclaration>> {
     map(
         seq!(
             tag("import"),
@@ -195,7 +195,7 @@ fn import_all_declaration(i: Slice) -> ParseResult<ASTAny> {
             plain_identifier,
         ),
         |(start, mut path, _, mut name)| {
-            make_node!(
+            make_node_typed!(
                 ImportAllDeclaration,
                 start.spanning(name.slice()),
                 path,
@@ -206,7 +206,7 @@ fn import_all_declaration(i: Slice) -> ParseResult<ASTAny> {
 }
 
 #[memoize]
-fn import_declaration(i: Slice) -> ParseResult<ASTAny> {
+fn import_declaration(i: Slice) -> ParseResult<AST<ImportDeclaration>> {
     map(
         seq!(
             tag("from"),
@@ -217,7 +217,7 @@ fn import_declaration(i: Slice) -> ParseResult<ASTAny> {
             tag("}"),
         ),
         |(start, mut path, _, _, mut imports, end)| {
-            make_node!(ImportDeclaration, start.spanning(&end), path, imports)
+            make_node_typed!(ImportDeclaration, start.spanning(&end), path, imports)
         },
     )(i)
 }
@@ -246,7 +246,7 @@ fn import_item(i: Slice) -> ParseResult<AST<ImportItem>> {
 }
 
 #[memoize]
-fn type_declaration(i: Slice) -> ParseResult<ASTAny> {
+fn type_declaration(i: Slice) -> ParseResult<AST<TypeDeclaration>> {
     map(
         seq!(
             opt(tag("export")),
@@ -256,7 +256,7 @@ fn type_declaration(i: Slice) -> ParseResult<ASTAny> {
             type_expression(0),
         ),
         |(export, keyword, mut name, _, mut declared_type)| {
-            let this = ASTDetails::TypeDeclaration {
+            let this = TypeDeclaration {
                 name: name.clone(),
                 declared_type: declared_type.clone(),
                 exported: export.is_some(),
@@ -272,7 +272,7 @@ fn type_declaration(i: Slice) -> ParseResult<ASTAny> {
 }
 
 #[memoize]
-fn func_declaration(i: Slice) -> ParseResult<ASTAny> {
+fn func_declaration(i: Slice) -> ParseResult<AST<FuncDeclaration>> {
     map(
         seq!(
             opt(tag("export")),
@@ -320,7 +320,7 @@ fn func_declaration(i: Slice) -> ParseResult<ASTAny> {
             type_annotation.set_parent(&func);
             body.set_parent(&func);
 
-            let this = ASTDetails::FuncDeclaration {
+            let this = FuncDeclaration {
                 name: name.clone(),
                 func: func.clone(),
                 exported: export.is_some(),
@@ -388,7 +388,7 @@ fn args_parenthesized(i: Slice) -> ParseResult<Vec<AST<Arg>>> {
 }
 
 #[memoize]
-fn proc_declaration(i: Slice) -> ParseResult<ASTAny> {
+fn proc_declaration(i: Slice) -> ParseResult<AST<ProcDeclaration>> {
     map(
         seq!(
             opt(tag("export")),
@@ -407,7 +407,7 @@ fn proc_declaration(i: Slice) -> ParseResult<ASTAny> {
                 .unwrap_or(pure.unwrap_or(asyn.unwrap_or(keyword)))
                 .spanning(body.slice());
 
-            ASTDetails::ProcDeclaration {
+            ProcDeclaration {
                 name,
                 proc: Proc {
                     type_annotation: ProcType {
@@ -449,7 +449,7 @@ fn block(i: Slice) -> ParseResult<AST<Block>> {
 }
 
 #[memoize]
-fn value_declaration(i: Slice) -> ParseResult<ASTAny> {
+fn value_declaration(i: Slice) -> ParseResult<AST<ValueDeclaration>> {
     map(
         seq!(
             opt(tag("export")),
@@ -464,7 +464,7 @@ fn value_declaration(i: Slice) -> ParseResult<ASTAny> {
             let is_const = keyword.as_str() == "const";
             let src = export.unwrap_or(keyword).spanning(value.slice());
 
-            let this = ASTDetails::ValueDeclaration {
+            let this = ValueDeclaration {
                 name: name.clone(),
                 type_annotation: type_annotation.clone(),
                 value: value.clone(),
@@ -484,7 +484,7 @@ fn value_declaration(i: Slice) -> ParseResult<ASTAny> {
 }
 
 #[memoize]
-fn test_expr_declaration(i: Slice) -> ParseResult<ASTAny> {
+fn test_expr_declaration(i: Slice) -> ParseResult<AST<TestExprDeclaration>> {
     map(
         seq!(
             tag("test"),
@@ -494,7 +494,7 @@ fn test_expr_declaration(i: Slice) -> ParseResult<ASTAny> {
             expression(0),
         ),
         |(start, _, mut name, _, mut expr)| {
-            make_node!(
+            make_node_typed!(
                 TestExprDeclaration,
                 start.spanning(expr.slice()),
                 name,
@@ -505,11 +505,11 @@ fn test_expr_declaration(i: Slice) -> ParseResult<ASTAny> {
 }
 
 #[memoize]
-fn test_block_declaration(i: Slice) -> ParseResult<ASTAny> {
+fn test_block_declaration(i: Slice) -> ParseResult<AST<TestBlockDeclaration>> {
     map(
         seq!(tag("test"), tag("block"), exact_string_literal, block),
         |(start, _, mut name, mut block)| {
-            make_node!(
+            make_node_typed!(
                 TestBlockDeclaration,
                 start.spanning(block.slice()),
                 name,
