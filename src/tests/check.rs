@@ -1,7 +1,5 @@
 use std::{collections::HashMap, ops::Add, rc::Rc};
 
-use reqwest::Url;
-
 use crate::{
     gather_errors,
     model::{

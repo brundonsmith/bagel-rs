@@ -10,7 +10,6 @@ use crate::{
         errors::blue_string,
         slice::Slice,
     },
-    passes::typeinfer::InferTypeContext,
     DEBUG_MODE,
 };
 use std::fmt::Debug;

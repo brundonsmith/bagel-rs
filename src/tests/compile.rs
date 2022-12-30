@@ -1,7 +1,6 @@
 use std::rc::Rc;
 
 use regex::Regex;
-use reqwest::Url;
 
 use crate::{
     model::{errors::BagelError, module::ModuleID},
