@@ -112,7 +112,7 @@ where
 
     pub fn recast<TExpected>(self) -> AST<TExpected>
     where
-        TExpected: Clone + TryFrom<ASTDetails>,
+        TExpected: Clone + TryFrom<ASTDetails> + From<TKind>,
         ASTDetails: From<TExpected>,
     {
         AST::<TExpected>(self.0, PhantomData)
