@@ -117,6 +117,16 @@ where
     {
         AST::<TExpected>(self.0, PhantomData)
     }
+
+    pub fn try_recast<TExpected>(self) -> Option<AST<TExpected>>
+    where
+        TExpected: Clone + TryFrom<ASTDetails> + TryFrom<TKind>,
+        ASTDetails: From<TExpected>,
+    {
+        TExpected::try_from(self.0.details.clone())
+            .ok()
+            .map(|_| AST::<TExpected>(self.0, PhantomData))
+    }
 }
 
 pub trait Parentable {
@@ -314,7 +324,7 @@ pub enum ASTDetails {
     },
 
     #[evt(derive(Debug, Clone, PartialEq))]
-    ArrayLiteral(Vec<ASTAny>),
+    ArrayLiteral(Vec<AST<ArrayLiteralEntry>>),
 
     #[evt(derive(Debug, Clone, PartialEq))]
     ObjectLiteral(Vec<ObjectLiteralEntry>),
@@ -383,7 +393,7 @@ pub enum ASTDetails {
     Invocation {
         subject: AST<Expression>,
         args: Vec<AST<Expression>>,
-        spread_args: Option<ASTAny>,
+        spread_args: Option<AST<Expression>>,
         type_args: Vec<ASTAny>,
         bubbles: bool,
         awaited_or_detached: Option<AwaitOrDetach>,
@@ -391,7 +401,9 @@ pub enum ASTDetails {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     PropertyAccessor {
-        subject: ASTAny,
+        subject: AST<Expression>,
+
+        /// Expression or PlainIdentifier
         property: ASTAny,
         optional: bool,
     },
@@ -611,7 +623,7 @@ pub enum ASTDetails {
 
     #[evt(derive(Debug, Clone, PartialEq))]
     Assignment {
-        target: ASTAny,
+        target: AST<Expression>,
         value: AST<Expression>,
         operator: Option<AST<BinaryOperator>>,
     },
@@ -935,6 +947,23 @@ impl TryFrom<ASTDetails> for Declaration {
     }
 }
 
+ast_union_type!(ArrayLiteralEntry = Expression | SpreadExpression);
+
+impl TryFrom<ASTDetails> for ArrayLiteralEntry {
+    type Error = ();
+
+    fn try_from(value: ASTDetails) -> Result<Self, Self::Error> {
+        Expression::try_from(value.clone())
+            .map(ArrayLiteralEntry::Expression)
+            .or_else(|_| match value {
+                ASTDetails::SpreadExpression(inner) => {
+                    Ok(ArrayLiteralEntry::SpreadExpression(SpreadExpression(inner)))
+                }
+                _ => Err(()),
+            })
+    }
+}
+
 ast_union_type!(
     Expression = NilLiteral
         | BooleanLiteral
@@ -972,6 +1001,7 @@ impl TryFrom<ASTDetails> for Expression {
             ASTDetails::BooleanLiteral(value) => {
                 Ok(Expression::BooleanLiteral(BooleanLiteral(value)))
             }
+            ASTDetails::NumberLiteral(value) => Ok(Expression::NumberLiteral(NumberLiteral(value))),
             ASTDetails::StringLiteral { tag, segments } => {
                 Ok(Expression::StringLiteral(StringLiteral { tag, segments }))
             }

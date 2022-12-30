@@ -999,7 +999,7 @@ fn assignment(i: Slice) -> ParseResult<ASTAny> {
         ),
         |(mut target, (operator, _), mut value, end)| {
             let this = ASTDetails::Assignment {
-                target: target.clone().upcast(),
+                target: target.clone(),
                 value: value.clone(),
                 operator,
             }
@@ -1169,7 +1169,7 @@ fn invocation_accessor_chain_inner(level: usize, i: Slice) -> ParseResult<AST<Ex
                     }
                     InvocationOrPropertyAccess::Accessing(mut property, indexer_slice) => {
                         subject = PropertyAccessor {
-                            subject: old_subject.clone().upcast(),
+                            subject: old_subject.clone(),
                             property: property.clone(),
                             optional: false, // TODO
                         }
@@ -1638,8 +1638,8 @@ fn array_literal(i: Slice) -> ParseResult<AST<ArrayLiteral>> {
             separated_list0(
                 w(char(',')),
                 w(alt((
-                    map(spread_expression, AST::upcast),
-                    map(expression(0), AST::upcast),
+                    map(spread_expression, AST::recast::<ArrayLiteralEntry>),
+                    map(expression(0), AST::recast::<ArrayLiteralEntry>),
                 )))
             ),
             tag("]"),

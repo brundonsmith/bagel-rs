@@ -471,7 +471,11 @@ where
                 property.check(ctx);
 
                 let subject_type = subject.infer_type(ctx.into());
-                let property_type = property.infer_type(ctx.into());
+                let property_type = property
+                    .clone()
+                    .try_recast::<Expression>()
+                    .unwrap()
+                    .infer_type(ctx.into());
 
                 // TODO: detect unnecessary optional
                 // TODO: detect valid optional
@@ -612,7 +616,7 @@ where
             ASTDetails::ModifierType { kind, inner } => match kind {
                 ModifierTypeKind::Readonly => {}
                 ModifierTypeKind::Keyof => {
-                    let inner_type = inner.infer_type(ctx.into());
+                    let inner_type = inner.resolve_type(ctx.into());
 
                     match inner_type {
                         Type::RecordType {
@@ -635,7 +639,7 @@ where
                     }
                 }
                 ModifierTypeKind::Valueof => {
-                    let inner_type = inner.infer_type(ctx.into());
+                    let inner_type = inner.resolve_type(ctx.into());
 
                     match inner_type {
                         Type::RecordType {
@@ -658,7 +662,7 @@ where
                     }
                 }
                 ModifierTypeKind::Elementof => {
-                    let inner_type = inner.infer_type(ctx.into());
+                    let inner_type = inner.resolve_type(ctx.into());
 
                     match inner_type {
                         Type::ArrayType(_) => {}
