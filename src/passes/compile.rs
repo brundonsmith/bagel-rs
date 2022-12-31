@@ -274,14 +274,12 @@ where
                 subject.compile(f)?;
                 f.write_str(", ")?;
 
-                match property.details() {
-                    Any::PlainIdentifier(_) => {
+                match property {
+                    Property::Expression(expr) => expr.compile(f)?,
+                    Property::PlainIdentifier(ident) => {
                         f.write_char('\'')?;
-                        property.compile(f)?;
+                        ident.compile(f)?;
                         f.write_char('\'')?;
-                    }
-                    _ => {
-                        property.compile(f)?;
                     }
                 }
 

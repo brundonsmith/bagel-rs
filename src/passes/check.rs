@@ -461,14 +461,21 @@ where
                 optional,
             }) => {
                 subject.check(ctx);
-                property.check(ctx);
+                match property {
+                    Property::Expression(expr) => expr.check(ctx),
+                    Property::PlainIdentifier(ident) => ident.check(ctx),
+                };
 
                 let subject_type = subject.infer_type(ctx.into());
-                let property_type = property
-                    .clone()
-                    .try_recast::<Expression>()
-                    .unwrap()
-                    .infer_type(ctx.into());
+                let (property_type, property_slice) = match property {
+                    Property::Expression(expr) => {
+                        (expr.infer_type(ctx.into()), expr.slice().clone())
+                    }
+                    Property::PlainIdentifier(ident) => (
+                        Type::StringType(Some(ident.downcast().0.clone())),
+                        ident.slice().clone(),
+                    ),
+                };
 
                 // TODO: detect unnecessary optional
                 // TODO: detect valid optional
@@ -476,7 +483,7 @@ where
                 if subject_type.indexed(&property_type).is_none() {
                     ctx.report_error(BagelError::MiscError {
                         module_id: ctx.current_module.module_id.clone(),
-                        src: property.slice().clone(),
+                        src: property_slice,
                         message: format!(
                             "{} cannot be used to index type {}",
                             blue_string(&property_type),

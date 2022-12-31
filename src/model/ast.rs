@@ -64,15 +64,6 @@ macro_rules! union_subtype {
     };
 }
 
-macro_rules! simple_enum {
-    ($name:ident = $( $s:ident )|*) => {
-        #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-        pub enum $name {
-            $($s),*
-        }
-    };
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct AST<TKind>(Rc<ASTInner>, PhantomData<TKind>)
 where
@@ -226,32 +217,6 @@ impl PartialEq for ASTInner {
             && self.slice == other.slice
             && self.details == other.details
     }
-}
-
-union_type! {
-    Any = Module
-        | ImportAllDeclaration
-        | ImportDeclaration
-        | ImportItem
-        | TypeDeclaration
-        | FuncDeclaration
-        | ProcDeclaration
-        | Decorator
-        | ValueDeclaration
-        | TestExprDeclaration
-        | TestBlockDeclaration
-        |      TestTypeDeclaration | NilLiteral | BooleanLiteral | NumberLiteral | StringLiteral | ExactStringLiteral
-       | ArrayLiteral | ObjectLiteral | BinaryOperation | BinaryOperator | NegationOperation | Parenthesis
-       | LocalIdentifier | InlineConstGroup | InlineDeclaration | Func | Proc | Block | JavascriptEscape
-       | RangeExpression | Invocation | PropertyAccessor | IfElseExpression | IfElseExpressionCase
-       | SwitchExpression | SwitchExpressionCase | SpreadExpression | ElementTag | AsCast
-       | InstanceOf | ErrorExpression | RegularExpression | UnionType | MaybeType | NamedType
-       | GenericParamType | ProcType | FuncType | Arg | GenericType | TypeParam | BoundGenericType
-       | ObjectType | RecordType | ArrayType | TupleType | StringLiteralType | NumberLiteralType
-       | BooleanLiteralType | StringType | NumberType | BooleanType | NilType | ParenthesizedType
-       | SpecialType | ModifierType | TypeofType | UnknownType | RegularExpressionType
-       | PropertyType | DeclarationStatement | IfElseStatement | IfElseStatementCase
-       | ForLoop | WhileLoop | Assignment | TryCatch | ThrowStatement | Autorun | PlainIdentifier
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -418,7 +383,7 @@ pub struct Proc {
 pub struct Block(pub Vec<AST<Statement>>);
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct JavascriptEscape(pub String);
+pub struct JavascriptEscape(pub Slice);
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct RangeExpression {
@@ -439,9 +404,7 @@ pub struct Invocation {
 #[derive(Debug, Clone, PartialEq)]
 pub struct PropertyAccessor {
     pub subject: AST<Expression>,
-
-    /// Expression or PlainIdentifier
-    pub property: ASTAny,
+    pub property: Property,
     pub optional: bool,
 }
 
@@ -497,7 +460,7 @@ pub struct ErrorExpression(pub AST<Expression>);
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct RegularExpression {
-    pub expr: String,
+    pub expr: Slice,
     pub flags: Vec<RegularExpressionFlag>,
 }
 
@@ -713,8 +676,6 @@ pub enum ModifierTypeKind {
     Elementof,
 }
 
-// union_type!(StringLiteralSegment = Slice | ASTAny);
-
 #[derive(Clone, Debug, PartialEq)]
 pub enum StringLiteralSegment {
     Slice(Slice),
@@ -791,7 +752,11 @@ pub struct Destructure {
     pub destructure_kind: DestructureKind,
 }
 
-simple_enum!(DestructureKind = Array | Object);
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum DestructureKind {
+    Array,
+    Object,
+}
 
 // --- Utils ---
 
@@ -831,9 +796,22 @@ where
 
 // --- Misc data ---
 
-simple_enum!(RegularExpressionFlag = D | G | I | M | S | U | Y);
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum RegularExpressionFlag {
+    D,
+    G,
+    I,
+    M,
+    S,
+    U,
+    Y,
+}
 
-simple_enum!(AwaitOrDetach = Await | Detach);
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum AwaitOrDetach {
+    Await,
+    Detach,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
 pub enum BinaryOperatorOp {
@@ -869,6 +847,7 @@ pub enum BinaryOperatorOp {
 pub struct PlatformSet {
     pub node: bool,
     pub deno: bool,
+    pub bun: bool,
     pub browser: bool,
 }
 
@@ -877,12 +856,115 @@ impl PlatformSet {
         PlatformSet {
             node: true,
             deno: true,
+            bun: true,
             browser: true,
         }
     }
 }
 
-// --- AST subgroups ---
+#[derive(Debug, Clone, PartialEq)]
+pub enum ArrayLiteralEntry {
+    Expression(AST<Expression>),
+    Spread(AST<SpreadExpression>),
+}
+
+// #[derive(Debug, Clone, PartialEq)]
+// pub enum ObjectLiteralEntry {
+//     KeyValue(AST<Expression>),
+//     Spread(AST<SpreadExpression>),
+// }
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Property {
+    Expression(AST<Expression>),
+    PlainIdentifier(AST<PlainIdentifier>),
+}
+
+// --- AST groups ---
+
+union_type! {
+    Any = Module
+        | ImportAllDeclaration
+        | ImportDeclaration
+        | ImportItem
+        | TypeDeclaration
+        | FuncDeclaration
+        | ProcDeclaration
+        | Decorator
+        | ValueDeclaration
+        | TestExprDeclaration
+        | TestBlockDeclaration
+        | TestTypeDeclaration
+        | NilLiteral
+        | BooleanLiteral
+        | NumberLiteral
+        | StringLiteral
+        | ExactStringLiteral
+        | ArrayLiteral
+        | ObjectLiteral
+        | BinaryOperation
+        | BinaryOperator
+        | NegationOperation
+        | Parenthesis
+        | LocalIdentifier
+        | InlineConstGroup
+        | InlineDeclaration
+        | Func
+        | Proc
+        | Block
+        | JavascriptEscape
+        | RangeExpression
+        | Invocation
+        | PropertyAccessor
+        | IfElseExpression
+        | IfElseExpressionCase
+        | SwitchExpression
+        | SwitchExpressionCase
+        | SpreadExpression
+        | ElementTag
+        | AsCast
+        | InstanceOf
+        | ErrorExpression
+        | RegularExpression
+        | UnionType
+        | MaybeType
+        | NamedType
+        | GenericParamType
+        | ProcType
+        | FuncType
+        | Arg
+        | GenericType
+        | TypeParam
+        | BoundGenericType
+        | ObjectType
+        | RecordType
+        | ArrayType
+        | TupleType
+        | StringLiteralType
+        | NumberLiteralType
+        | BooleanLiteralType
+        | StringType
+        | NumberType
+        | BooleanType
+        | NilType
+        | ParenthesizedType
+        | SpecialType
+        | ModifierType
+        | TypeofType
+        | UnknownType
+        | RegularExpressionType
+        | PropertyType
+        | DeclarationStatement
+        | IfElseStatement
+        | IfElseStatementCase
+        | ForLoop
+        | WhileLoop
+        | Assignment
+        | TryCatch
+        | ThrowStatement
+        | Autorun
+        | PlainIdentifier
+}
 
 union_subtype!(
     Declaration = ImportAllDeclaration
@@ -895,12 +977,6 @@ union_subtype!(
         | TestBlockDeclaration
         | TestTypeDeclaration
 );
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum ArrayLiteralEntry {
-    Expression(AST<Expression>),
-    Spread(AST<SpreadExpression>),
-}
 
 union_subtype!(
     Expression = NilLiteral

@@ -322,8 +322,13 @@ impl AST<Expression> {
                 property,
                 optional,
             }) => {
-                let subject_type = subject.try_recast::<Expression>().unwrap().infer_type(ctx);
-                let property_type = property.try_recast::<Expression>().unwrap().infer_type(ctx);
+                let subject_type = subject.infer_type(ctx);
+                let property_type = match property {
+                    Property::Expression(expr) => expr.infer_type(ctx.into()),
+                    Property::PlainIdentifier(ident) => {
+                        Type::StringType(Some(ident.downcast().0.clone()))
+                    }
+                };
 
                 // TODO: optional
 

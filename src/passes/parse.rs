@@ -1193,7 +1193,11 @@ fn invocation_accessor_chain_inner(level: usize, i: Slice) -> ParseResult<AST<Ex
                         .recast::<Expression>();
 
                         old_subject.set_parent(&subject);
-                        property.set_parent(&subject);
+
+                        match &mut property {
+                            Property::Expression(expr) => expr.set_parent(&subject),
+                            Property::PlainIdentifier(ident) => ident.set_parent(&subject),
+                        };
                     }
                 }
             }
@@ -1231,7 +1235,10 @@ fn indexer_expression(i: Slice) -> ParseResult<InvocationOrPropertyAccess> {
     map(
         seq!(tag("["), expression(0), tag("]")),
         |(open, property, close)| {
-            InvocationOrPropertyAccess::Accessing(property.upcast(), open.spanning(&close))
+            InvocationOrPropertyAccess::Accessing(
+                Property::Expression(property),
+                open.spanning(&close),
+            )
         },
     )(i)
 }
@@ -1241,14 +1248,14 @@ fn dot_property_access(i: Slice) -> ParseResult<InvocationOrPropertyAccess> {
     map(seq!(tag("."), plain_identifier), |(dot, property)| {
         let src = dot.spanning(property.slice());
 
-        InvocationOrPropertyAccess::Accessing(property.upcast(), src)
+        InvocationOrPropertyAccess::Accessing(Property::PlainIdentifier(property), src)
     })(i)
 }
 
 #[derive(Debug, Clone)]
 enum InvocationOrPropertyAccess {
     InvokingWith(Vec<AST<Expression>>, Slice),
-    Accessing(ASTAny, Slice),
+    Accessing(Property, Slice),
 }
 
 macro_rules! parse_binary_operation {
