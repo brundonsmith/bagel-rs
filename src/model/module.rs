@@ -1,5 +1,6 @@
 use super::ast::{
-    self, ASTDetails, Declaration, FuncDeclaration, ProcDeclaration, ValueDeclaration, AST,
+    self, Any, Declaration, FuncDeclaration, ImportAllDeclaration, ImportDeclaration,
+    ProcDeclaration, ValueDeclaration, AST,
 };
 use super::errors::ParseError;
 use super::slice::Slice;
@@ -47,21 +48,11 @@ impl ModulesStore {
                 let imported: Vec<String> = declarations
                     .iter()
                     .filter_map(|decl| match decl.details() {
-                        ASTDetails::ImportAllDeclaration { name: _, path } => {
-                            match path.details() {
-                                ASTDetails::ExactStringLiteral { tag: _, value } => {
-                                    Some(value.as_str().to_owned())
-                                }
-                                _ => None,
-                            }
+                        Any::ImportAllDeclaration(ImportAllDeclaration { name: _, path }) => {
+                            Some(path.downcast().value.as_str().to_owned())
                         }
-                        ASTDetails::ImportDeclaration { imports: _, path } => {
-                            match path.details() {
-                                ASTDetails::ExactStringLiteral { tag: _, value } => {
-                                    Some(value.as_str().to_owned())
-                                }
-                                _ => None,
-                            }
+                        Any::ImportDeclaration(ImportDeclaration { imports: _, path }) => {
+                            Some(path.downcast().value.as_str().to_owned())
                         }
                         _ => None,
                     })

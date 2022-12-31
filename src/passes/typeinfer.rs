@@ -1,6 +1,6 @@
 use crate::{
     model::ast::*,
-    model::{ast::ASTDetails, bgl_type::Type, errors::BagelError, module::Module},
+    model::{ast::Any, bgl_type::Type, errors::BagelError, module::Module},
     passes::check::CheckContext,
     ModulesStore,
 };
@@ -12,7 +12,7 @@ impl AST<Expression> {
         match self.downcast() {
             Expression::BinaryOperation(BinaryOperation { left, op, right }) => {
                 match op.details() {
-                    ASTDetails::BinaryOperator(op) => match op {
+                    Any::BinaryOperator(BinaryOperator(op)) => match op {
                         BinaryOperatorOp::NullishCoalescing => todo!(),
                         BinaryOperatorOp::Or => todo!(),
                         BinaryOperatorOp::And => todo!(),
@@ -59,8 +59,8 @@ impl AST<Expression> {
 
                 if let Some(resolved) = resolved {
                     match resolved.details() {
-                        ASTDetails::ImportAllDeclaration { name, path } => todo!(),
-                        ASTDetails::ImportDeclaration { imports: _, path } => {
+                        Any::ImportAllDeclaration(ImportAllDeclaration { name, path }) => todo!(),
+                        Any::ImportDeclaration(ImportDeclaration { imports: _, path }) => {
                             return ctx
                                 .modules
                                 .import(
@@ -75,52 +75,52 @@ impl AST<Expression> {
                                 .flatten()
                                 .unwrap_or(Type::PoisonedType);
                         }
-                        ASTDetails::ProcDeclaration {
+                        Any::ProcDeclaration(ProcDeclaration {
                             name: _,
                             proc,
                             exported: _,
                             platforms: _,
                             decorators: _,
-                        } => {
+                        }) => {
                             return proc.clone().recast::<Expression>().infer_type(ctx);
                         }
-                        ASTDetails::FuncDeclaration {
+                        Any::FuncDeclaration(FuncDeclaration {
                             name: _,
                             func,
                             exported: _,
                             platforms: _,
                             decorators: _,
-                        } => {
+                        }) => {
                             return func.clone().recast::<Expression>().infer_type(ctx);
                         }
-                        ASTDetails::ValueDeclaration {
+                        Any::ValueDeclaration(ValueDeclaration {
                             name: _,
                             type_annotation,
                             value,
                             is_const: _,
                             exported: _,
                             platforms: _,
-                        } => {
+                        }) => {
                             return type_annotation
                                 .as_ref()
                                 .map(|t| t.resolve_type(ctx.into()))
                                 .unwrap_or_else(|| value.infer_type(ctx));
                         }
-                        ASTDetails::Arg {
+                        Any::Arg(Arg {
                             name,
                             type_annotation,
                             optional,
-                        } => {
+                        }) => {
                             return type_annotation
                                 .as_ref()
                                 .map(|t| t.resolve_type(ctx.into()))
                                 .unwrap_or(Type::PoisonedType);
                         }
-                        ASTDetails::InlineDeclaration {
+                        Any::InlineDeclaration(InlineDeclaration {
                             destination,
                             awaited,
                             value,
-                        } => {
+                        }) => {
                             return match destination {
                                 DeclarationDestination::NameAndType(NameAndType {
                                     name: _,
@@ -132,12 +132,12 @@ impl AST<Expression> {
                                 DeclarationDestination::Destructure(_) => todo!(),
                             }
                         }
-                        ASTDetails::DeclarationStatement {
+                        Any::DeclarationStatement(DeclarationStatement {
                             destination,
                             value,
                             awaited,
                             is_const,
-                        } => {
+                        }) => {
                             return match destination {
                                 DeclarationDestination::NameAndType(NameAndType {
                                     name: _,
@@ -184,14 +184,15 @@ impl AST<Expression> {
             Expression::ArrayLiteral(ArrayLiteral(members)) => {
                 if members
                     .iter()
-                    .any(|member| member.try_downcast::<SpreadExpression>().is_some())
+                    .any(|member| matches!(member, ArrayLiteralEntry::Spread(_)))
                 {
                     let mut member_types: Vec<Type> = vec![];
                     let mut bail_out_to_union = false;
 
                     for member in members {
-                        match member.try_downcast::<SpreadExpression>() {
-                            Some(SpreadExpression(spread_inner)) => {
+                        match member {
+                            ArrayLiteralEntry::Spread(spread_expr) => {
+                                let spread_inner = spread_expr.downcast().0;
                                 let spread_type = spread_inner.infer_type(ctx);
 
                                 match spread_type {
@@ -207,8 +208,9 @@ impl AST<Expression> {
                                     _ => todo!(),
                                 }
                             }
-                            None => member_types
-                                .push(member.try_recast::<Expression>().unwrap().infer_type(ctx)),
+                            ArrayLiteralEntry::Expression(expr) => {
+                                member_types.push(expr.infer_type(ctx))
+                            }
                         }
                     }
 
@@ -221,12 +223,11 @@ impl AST<Expression> {
                     Type::TupleType(
                         members
                             .iter()
-                            .map(|member| {
-                                member
-                                    .clone()
-                                    .try_recast::<Expression>()
-                                    .unwrap()
-                                    .infer_type(ctx)
+                            .map(|member| match member {
+                                ArrayLiteralEntry::Expression(expr) => expr.infer_type(ctx),
+                                ArrayLiteralEntry::Spread(_) => {
+                                    unreachable!("Handled in if-clause above")
+                                }
                             })
                             .collect(),
                     )

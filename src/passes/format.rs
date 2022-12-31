@@ -1,4 +1,7 @@
-use crate::model::{ast::*, module::Module};
+use crate::model::{
+    ast::{self, *},
+    module::Module,
+};
 use std::fmt::{Display, Formatter, Result, Write};
 
 impl Module {
@@ -19,12 +22,12 @@ pub trait Formattable {
 
 impl<TKind> Formattable for AST<TKind>
 where
-    TKind: Clone + TryFrom<ASTDetails>,
-    ASTDetails: From<TKind>,
+    TKind: Clone + TryFrom<Any>,
+    Any: From<TKind>,
 {
     fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
         match self.details() {
-            ASTDetails::Module { declarations } => {
+            Any::Module(ast::Module { declarations }) => {
                 for decl in declarations {
                     decl.format(f, opts)?;
                     f.write_str("\n\n")?;
@@ -32,37 +35,37 @@ where
 
                 Ok(())
             }
-            ASTDetails::ImportAllDeclaration { name, path } => todo!(),
-            ASTDetails::ImportDeclaration { imports, path } => todo!(),
-            ASTDetails::ImportItem { name, alias } => todo!(),
-            ASTDetails::TypeDeclaration {
+            Any::ImportAllDeclaration(ImportAllDeclaration { name, path }) => todo!(),
+            Any::ImportDeclaration(ImportDeclaration { imports, path }) => todo!(),
+            Any::ImportItem(ImportItem { name, alias }) => todo!(),
+            Any::TypeDeclaration(TypeDeclaration {
                 name,
                 declared_type,
                 exported,
-            } => todo!(),
-            ASTDetails::FuncDeclaration {
+            }) => todo!(),
+            Any::FuncDeclaration(FuncDeclaration {
                 name,
                 func,
                 exported,
                 platforms,
                 decorators,
-            } => todo!(),
-            ASTDetails::ProcDeclaration {
+            }) => todo!(),
+            Any::ProcDeclaration(ProcDeclaration {
                 name,
                 proc,
                 exported,
                 platforms,
                 decorators,
-            } => todo!(),
-            ASTDetails::Decorator { name } => todo!(),
-            ASTDetails::ValueDeclaration {
+            }) => todo!(),
+            Any::Decorator(Decorator { name }) => todo!(),
+            Any::ValueDeclaration(ValueDeclaration {
                 name,
                 type_annotation,
                 value,
                 is_const,
                 exported,
                 platforms,
-            } => {
+            }) => {
                 if *exported {
                     f.write_str("export ")?;
                 }
@@ -76,26 +79,26 @@ where
                 f.write_str(" = ")?;
                 value.format(f, opts)
             }
-            ASTDetails::TestExprDeclaration { name, expr } => todo!(),
-            ASTDetails::TestBlockDeclaration { name, block } => todo!(),
-            ASTDetails::TestTypeDeclaration {
+            Any::TestExprDeclaration(TestExprDeclaration { name, expr }) => todo!(),
+            Any::TestBlockDeclaration(TestBlockDeclaration { name, block }) => todo!(),
+            Any::TestTypeDeclaration(TestTypeDeclaration {
                 name,
                 destination_type,
                 value_type,
-            } => todo!(),
-            ASTDetails::NilLiteral => f.write_str("nil"),
-            ASTDetails::BooleanLiteral(value) => f.write_str(match value {
+            }) => todo!(),
+            Any::NilLiteral(_) => f.write_str("nil"),
+            Any::BooleanLiteral(BooleanLiteral(value)) => f.write_str(match value {
                 true => "true",
                 false => "false",
             }),
-            ASTDetails::NumberLiteral(value) => f.write_str(value.as_str()),
-            ASTDetails::StringLiteral { tag, segments } => todo!(),
-            ASTDetails::ExactStringLiteral { tag, value } => {
+            Any::NumberLiteral(NumberLiteral(value)) => f.write_str(value.as_str()),
+            Any::StringLiteral(StringLiteral { tag, segments }) => todo!(),
+            Any::ExactStringLiteral(ExactStringLiteral { tag, value }) => {
                 f.write_str("\"")?;
                 f.write_str(value.as_str())?;
                 f.write_str("\"")
             }
-            ASTDetails::ArrayLiteral(entries) => {
+            Any::ArrayLiteral(ArrayLiteral(entries)) => {
                 f.write_char('[')?;
                 for (index, entry) in entries.iter().enumerate() {
                     if index > 0 {
@@ -103,11 +106,18 @@ where
                     }
 
                     f.write_char(' ')?;
-                    entry.format(f, opts)?;
+                    match entry {
+                        ArrayLiteralEntry::Expression(expr) => {
+                            expr.format(f, opts)?;
+                        }
+                        ArrayLiteralEntry::Spread(spread_expr) => {
+                            spread_expr.format(f, opts)?;
+                        }
+                    }
                 }
                 f.write_str(" ]")
             }
-            ASTDetails::ObjectLiteral(entries) => {
+            Any::ObjectLiteral(ObjectLiteral(entries)) => {
                 f.write_char('{')?;
                 for (index, entry) in entries.iter().enumerate() {
                     if index > 0 {
@@ -130,40 +140,40 @@ where
                 }
                 f.write_str(" }")
             }
-            ASTDetails::SpreadExpression(inner) => {
+            Any::SpreadExpression(SpreadExpression(inner)) => {
                 f.write_str("...")?;
                 inner.format(f, opts)
             }
-            ASTDetails::BinaryOperation { left, op, right } => {
+            Any::BinaryOperation(BinaryOperation { left, op, right }) => {
                 left.format(f, opts)?;
                 f.write_char(' ')?;
                 op.format(f, opts)?;
                 f.write_char(' ')?;
                 right.format(f, opts)
             }
-            ASTDetails::BinaryOperator(op) => f.write_str(op.into()),
-            ASTDetails::NegationOperation(_) => todo!(),
-            ASTDetails::Parenthesis(inner) => {
+            Any::BinaryOperator(BinaryOperator(op)) => f.write_str(op.into()),
+            Any::NegationOperation(NegationOperation(_)) => todo!(),
+            Any::Parenthesis(Parenthesis(inner)) => {
                 f.write_char('(')?;
                 inner.format(f, opts)?;
                 f.write_char(')')
             }
-            ASTDetails::LocalIdentifier(name) => f.write_str(name.as_str()),
-            ASTDetails::InlineConstGroup {
+            Any::LocalIdentifier(LocalIdentifier(name)) => f.write_str(name.as_str()),
+            Any::InlineConstGroup(InlineConstGroup {
                 declarations,
                 inner,
-            } => todo!(),
-            ASTDetails::InlineDeclaration {
+            }) => todo!(),
+            Any::InlineDeclaration(InlineDeclaration {
                 destination,
                 awaited,
                 value,
-            } => todo!(),
-            ASTDetails::Func {
+            }) => todo!(),
+            Any::Func(Func {
                 type_annotation,
                 is_async,
                 is_pure,
                 body,
-            } => {
+            }) => {
                 let type_annotation = type_annotation.downcast();
 
                 f.write_char('(')?;
@@ -174,55 +184,57 @@ where
 
                 body.format(f, opts)
             }
-            ASTDetails::Proc {
+            Any::Proc(Proc {
                 type_annotation,
                 is_async,
                 is_pure,
                 body,
-            } => todo!(),
-            ASTDetails::Block(_) => todo!(),
-            ASTDetails::JavascriptEscape(_) => todo!(),
-            ASTDetails::RangeExpression { start, end } => todo!(),
-            ASTDetails::Invocation {
+            }) => todo!(),
+            Any::Block(Block(_)) => todo!(),
+            Any::JavascriptEscape(JavascriptEscape(_)) => todo!(),
+            Any::RangeExpression(RangeExpression { start, end }) => todo!(),
+            Any::Invocation(Invocation {
                 subject,
                 args,
                 spread_args,
                 type_args,
                 bubbles,
                 awaited_or_detached,
-            } => todo!(),
-            ASTDetails::PropertyAccessor {
+            }) => todo!(),
+            Any::PropertyAccessor(PropertyAccessor {
                 subject,
                 property,
                 optional,
-            } => todo!(),
-            ASTDetails::IfElseExpression {
+            }) => todo!(),
+            Any::IfElseExpression(IfElseExpression {
                 cases,
                 default_case,
-            } => todo!(),
-            ASTDetails::IfElseExpressionCase { condition, outcome } => todo!(),
-            ASTDetails::SwitchExpression {
+            }) => todo!(),
+            Any::IfElseExpressionCase(IfElseExpressionCase { condition, outcome }) => {
+                todo!()
+            }
+            Any::SwitchExpression(SwitchExpression {
                 value,
                 cases,
                 default_case,
-            } => todo!(),
-            ASTDetails::SwitchExpressionCase {
+            }) => todo!(),
+            Any::SwitchExpressionCase(SwitchExpressionCase {
                 type_filter,
                 outcome,
-            } => todo!(),
-            ASTDetails::ElementTag {
+            }) => todo!(),
+            Any::ElementTag(ElementTag {
                 tag_name,
                 attributes,
                 children,
-            } => todo!(),
-            ASTDetails::AsCast { inner, as_type } => todo!(),
-            ASTDetails::InstanceOf {
+            }) => todo!(),
+            Any::AsCast(AsCast { inner, as_type }) => todo!(),
+            Any::InstanceOf(InstanceOf {
                 inner,
                 possible_type,
-            } => todo!(),
-            ASTDetails::ErrorExpression(_) => todo!(),
-            ASTDetails::RegularExpression { expr, flags } => todo!(),
-            ASTDetails::UnionType(members) => {
+            }) => todo!(),
+            Any::ErrorExpression(ErrorExpression(_)) => todo!(),
+            Any::RegularExpression(RegularExpression { expr, flags }) => todo!(),
+            Any::UnionType(UnionType(members)) => {
                 for (index, member) in members.iter().enumerate() {
                     if index > 0 {
                         f.write_str(" | ")?;
@@ -233,23 +245,23 @@ where
 
                 Ok(())
             }
-            ASTDetails::MaybeType(_) => todo!(),
-            ASTDetails::NamedType(_) => todo!(),
-            ASTDetails::GenericParamType { name, extends } => todo!(),
-            ASTDetails::ProcType {
+            Any::MaybeType(MaybeType(_)) => todo!(),
+            Any::NamedType(NamedType(_)) => todo!(),
+            Any::GenericParamType(GenericParamType { name, extends }) => todo!(),
+            Any::ProcType(ProcType {
                 args,
                 args_spread,
                 is_pure,
                 is_async,
                 throws,
-            } => todo!(),
-            ASTDetails::FuncType {
+            }) => todo!(),
+            Any::FuncType(FuncType {
                 args,
                 args_spread,
                 is_pure,
                 is_async,
                 returns,
-            } => {
+            }) => {
                 f.write_char('(')?;
                 for arg in args {
                     arg.format(f, opts)?;
@@ -266,88 +278,88 @@ where
 
                 Ok(())
             }
-            ASTDetails::Arg {
+            Any::Arg(Arg {
                 name,
                 type_annotation,
                 optional,
-            } => {
+            }) => {
                 name.format(f, opts)?;
                 if *optional {
                     f.write_char('?')?;
                 }
                 format_type_annotation(f, opts, type_annotation.as_ref())
             }
-            ASTDetails::GenericType { type_params, inner } => todo!(),
-            ASTDetails::TypeParam { name, extends } => todo!(),
-            ASTDetails::BoundGenericType { type_args, generic } => todo!(),
-            ASTDetails::ObjectType {
+            Any::GenericType(GenericType { type_params, inner }) => todo!(),
+            Any::TypeParam(TypeParam { name, extends }) => todo!(),
+            Any::BoundGenericType(BoundGenericType { type_args, generic }) => todo!(),
+            Any::ObjectType(ObjectType {
                 entries,
                 is_interface,
-            } => todo!(),
-            ASTDetails::RecordType {
+            }) => todo!(),
+            Any::RecordType(RecordType {
                 key_type,
                 value_type,
-            } => todo!(),
-            ASTDetails::ArrayType(_) => todo!(),
-            ASTDetails::TupleType(_) => todo!(),
-            ASTDetails::SpecialType { kind, inner } => todo!(),
-            ASTDetails::ModifierType { kind, inner } => todo!(),
-            ASTDetails::StringLiteralType(value) => {
+            }) => todo!(),
+            Any::ArrayType(ArrayType(_)) => todo!(),
+            Any::TupleType(TupleType(_)) => todo!(),
+            Any::SpecialType(SpecialType { kind, inner }) => todo!(),
+            Any::ModifierType(ModifierType { kind, inner }) => todo!(),
+            Any::StringLiteralType(StringLiteralType(value)) => {
                 f.write_char('\'')?;
                 f.write_str(value.as_str())?;
                 f.write_char('\'')
             }
-            ASTDetails::NumberLiteralType(value) => f.write_str(value.as_str()),
-            ASTDetails::BooleanLiteralType(value) => f.write_str(match value {
+            Any::NumberLiteralType(NumberLiteralType(value)) => f.write_str(value.as_str()),
+            Any::BooleanLiteralType(BooleanLiteralType(value)) => f.write_str(match value {
                 true => "true",
                 false => "false",
             }),
-            ASTDetails::StringType => f.write_str("string"),
-            ASTDetails::NumberType => f.write_str("number"),
-            ASTDetails::BooleanType => f.write_str("boolean"),
-            ASTDetails::NilType => f.write_str("nil"),
-            ASTDetails::ParenthesizedType(_) => todo!(),
-            ASTDetails::TypeofType(_) => todo!(),
-            ASTDetails::UnknownType => todo!(),
-            ASTDetails::RegularExpressionType => todo!(),
-            ASTDetails::PropertyType {
+            Any::StringType(_) => f.write_str("string"),
+            Any::NumberType(_) => f.write_str("number"),
+            Any::BooleanType(_) => f.write_str("boolean"),
+            Any::NilType(_) => f.write_str("nil"),
+            Any::ParenthesizedType(ParenthesizedType(_)) => todo!(),
+            Any::TypeofType(TypeofType(_)) => todo!(),
+            Any::UnknownType(_) => todo!(),
+            Any::RegularExpressionType(_) => todo!(),
+            Any::PropertyType(PropertyType {
                 subject,
                 property,
                 optional,
-            } => todo!(),
-            ASTDetails::DeclarationStatement {
+            }) => todo!(),
+            Any::DeclarationStatement(DeclarationStatement {
                 destination,
                 value,
                 awaited,
                 is_const,
-            } => todo!(),
-            ASTDetails::IfElseStatement {
+            }) => todo!(),
+            Any::IfElseStatement(IfElseStatement {
                 cases,
                 default_case,
-            } => todo!(),
-            ASTDetails::IfElseStatementCase { condition, outcome } => todo!(),
-            ASTDetails::ForLoop {
+            }) => todo!(),
+            Any::IfElseStatementCase(IfElseStatementCase { condition, outcome }) => todo!(),
+            Any::ForLoop(ForLoop {
                 item_identifier,
                 iterator,
                 body,
-            } => todo!(),
-            ASTDetails::WhileLoop { condition, body } => todo!(),
-            ASTDetails::Assignment {
+            }) => todo!(),
+            Any::WhileLoop(WhileLoop { condition, body }) => todo!(),
+            Any::Assignment(Assignment {
                 target,
                 value,
                 operator,
-            } => todo!(),
-            ASTDetails::TryCatch {
+            }) => todo!(),
+            Any::TryCatch(TryCatch {
                 try_block,
                 error_identifier,
                 catch_block,
-            } => todo!(),
-            ASTDetails::ThrowStatement { error_expression } => todo!(),
-            ASTDetails::Autorun {
+            }) => todo!(),
+            Any::ThrowStatement(ThrowStatement { error_expression }) => todo!(),
+            Any::Autorun(Autorun {
                 effect_block,
                 until,
-            } => todo!(),
-            ASTDetails::PlainIdentifier(name) => f.write_str(name.as_str()),
+            }) => todo!(),
+            Any::PlainIdentifier(PlainIdentifier(name)) => f.write_str(name.as_str()),
         }
     }
 }
@@ -399,7 +411,7 @@ where
 fn format_type_annotation<W: Write>(
     f: &mut W,
     opts: FormatOptions,
-    type_annotation: Option<&ASTAny>,
+    type_annotation: Option<&AST<TypeExpression>>,
 ) -> Result {
     if let Some(type_annotation) = type_annotation {
         f.write_str(": ")?;

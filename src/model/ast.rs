@@ -1,5 +1,4 @@
 use crate::model::slice::Slice;
-use enum_variant_type::EnumVariantType;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::{
@@ -17,16 +16,17 @@ macro_rules! union_type {
 
         $(
             impl From<$s> for $name {
-                fn from(s: $s) -> Self {
-                    Self::$s(s)
+                fn from(variant: $s) -> Self {
+                    $name::$s(variant)
                 }
             }
+
             impl TryFrom<$name> for $s {
                 type Error = ();
 
-                fn try_from(s: $name) -> Result<Self, ()> {
-                    match s {
-                        $name::$s(s) => Ok(s),
+                fn try_from(un: $name) -> Result<Self, Self::Error> {
+                    match un {
+                        $name::$s(variant) => Ok(variant),
                         _ => Err(())
                     }
                 }
@@ -35,20 +35,33 @@ macro_rules! union_type {
     };
 }
 
-macro_rules! ast_union_type {
+macro_rules! union_subtype {
     ($name:ident = $( $s:ident )|*) => {
         union_type!($name = $($s)|*);
 
-        impl From<$name> for ASTDetails {
-            fn from(un: $name) -> Self {
-                match un {
+        impl From<$name> for Any {
+            fn from(sub: $name) -> Self {
+                match sub {
                     $(
-                        $name::$s(inner) => ASTDetails::from(inner),
+                        $name::$s(s) => Any::$s(s),
                     )*
                 }
             }
         }
-    }
+
+        impl TryFrom<Any> for $name {
+            type Error = ();
+
+            fn try_from(det: Any) -> Result<Self, Self::Error> {
+                match det {
+                    $(
+                        Any::$s(s) => Ok($name::$s(s)),
+                    )*
+                    _ => Err(())
+                }
+            }
+        }
+    };
 }
 
 macro_rules! simple_enum {
@@ -63,21 +76,21 @@ macro_rules! simple_enum {
 #[derive(Debug, Clone, PartialEq)]
 pub struct AST<TKind>(Rc<ASTInner>, PhantomData<TKind>)
 where
-    TKind: Clone + TryFrom<ASTDetails>,
-    ASTDetails: From<TKind>;
+    TKind: Clone + TryFrom<Any>,
+    Any: From<TKind>;
 
-pub type ASTAny = AST<ASTDetails>;
+pub type ASTAny = AST<Any>;
 
 impl<TKind> AST<TKind>
 where
-    TKind: Clone + TryFrom<ASTDetails>,
-    ASTDetails: From<TKind>,
+    TKind: Clone + TryFrom<Any>,
+    Any: From<TKind>,
 {
     pub fn slice(&self) -> &Slice {
         &self.0.slice
     }
 
-    pub fn details(&self) -> &ASTDetails {
+    pub fn details(&self) -> &Any {
         &self.0.details
     }
 
@@ -88,7 +101,7 @@ where
             .as_ref()
             .map(|weak| weak.upgrade())
             .flatten()
-            .map(|node| AST::<ASTDetails>(node, PhantomData))
+            .map(|node| AST::<Any>(node, PhantomData))
     }
 
     pub fn downcast(&self) -> TKind {
@@ -100,28 +113,28 @@ where
 
     pub fn try_downcast<TExpected>(&self) -> Option<TExpected>
     where
-        TExpected: TryFrom<ASTDetails>,
-        ASTDetails: From<TExpected>,
+        TExpected: TryFrom<Any>,
+        Any: From<TExpected>,
     {
         TExpected::try_from(self.0.details.clone()).ok()
     }
 
     pub fn upcast(self) -> ASTAny {
-        AST::<ASTDetails>(self.0, PhantomData)
+        AST::<Any>(self.0, PhantomData)
     }
 
     pub fn recast<TExpected>(self) -> AST<TExpected>
     where
-        TExpected: Clone + TryFrom<ASTDetails> + From<TKind>,
-        ASTDetails: From<TExpected>,
+        TExpected: Clone + TryFrom<Any> + From<TKind>,
+        Any: From<TExpected>,
     {
         AST::<TExpected>(self.0, PhantomData)
     }
 
     pub fn try_recast<TExpected>(self) -> Option<AST<TExpected>>
     where
-        TExpected: Clone + TryFrom<ASTDetails> + TryFrom<TKind>,
-        ASTDetails: From<TExpected>,
+        TExpected: Clone + TryFrom<Any> + TryFrom<TKind>,
+        Any: From<TExpected>,
     {
         TExpected::try_from(self.0.details.clone())
             .ok()
@@ -132,19 +145,19 @@ where
 pub trait Parentable {
     fn set_parent<TParentKind>(&mut self, parent: &AST<TParentKind>)
     where
-        TParentKind: Clone + TryFrom<ASTDetails>,
-        ASTDetails: From<TParentKind>;
+        TParentKind: Clone + TryFrom<Any>,
+        Any: From<TParentKind>;
 }
 
 impl<TKind> Parentable for AST<TKind>
 where
-    TKind: Clone + TryFrom<ASTDetails>,
-    ASTDetails: From<TKind>,
+    TKind: Clone + TryFrom<Any>,
+    Any: From<TKind>,
 {
     fn set_parent<TParentKind>(&mut self, parent: &AST<TParentKind>)
     where
-        TParentKind: Clone + TryFrom<ASTDetails>,
-        ASTDetails: From<TParentKind>,
+        TParentKind: Clone + TryFrom<Any>,
+        Any: From<TParentKind>,
     {
         self.0
             .as_ref()
@@ -159,8 +172,8 @@ where
 {
     fn set_parent<TParentKind>(&mut self, parent: &AST<TParentKind>)
     where
-        TParentKind: Clone + TryFrom<ASTDetails>,
-        ASTDetails: From<TParentKind>,
+        TParentKind: Clone + TryFrom<Any>,
+        Any: From<TParentKind>,
     {
         if let Some(s) = self {
             s.set_parent(parent);
@@ -174,8 +187,8 @@ where
 {
     fn set_parent<TParentKind>(&mut self, parent: &AST<TParentKind>)
     where
-        TParentKind: Clone + TryFrom<ASTDetails>,
-        ASTDetails: From<TParentKind>,
+        TParentKind: Clone + TryFrom<Any>,
+        Any: From<TParentKind>,
     {
         for ast in self.iter_mut() {
             ast.set_parent(parent);
@@ -186,8 +199,8 @@ where
 impl Parentable for ObjectTypeEntry {
     fn set_parent<TParentKind>(&mut self, parent: &AST<TParentKind>)
     where
-        TParentKind: Clone + TryFrom<ASTDetails>,
-        ASTDetails: From<TParentKind>,
+        TParentKind: Clone + TryFrom<Any>,
+        Any: From<TParentKind>,
     {
         match self {
             ObjectTypeEntry::KeyValueType(KeyValueType { key, value }) => {
@@ -201,9 +214,9 @@ impl Parentable for ObjectTypeEntry {
 
 #[derive(Debug, Clone)]
 pub struct ASTInner {
-    parent: RefCell<Option<Weak<ASTInner>>>,
-    slice: Slice,
-    details: ASTDetails,
+    pub parent: RefCell<Option<Weak<ASTInner>>>,
+    pub slice: Slice,
+    pub details: Any,
 }
 
 impl PartialEq for ASTInner {
@@ -215,440 +228,469 @@ impl PartialEq for ASTInner {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, EnumVariantType)]
-pub enum ASTDetails {
-    #[evt(derive(Debug, Clone, PartialEq))]
-    Module {
-        declarations: Vec<AST<Declaration>>,
-    },
-
-    // --- Declarations ---
-    #[evt(derive(Debug, Clone, PartialEq))]
-    ImportAllDeclaration {
-        name: AST<PlainIdentifier>,
-        path: AST<ExactStringLiteral>,
-    },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    ImportDeclaration {
-        imports: Vec<AST<ImportItem>>,
-        path: AST<ExactStringLiteral>,
-    },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    ImportItem {
-        name: AST<PlainIdentifier>,
-        alias: Option<AST<PlainIdentifier>>,
-    },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    TypeDeclaration {
-        name: AST<PlainIdentifier>,
-        declared_type: ASTAny,
-        exported: bool,
-    },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    FuncDeclaration {
-        name: AST<PlainIdentifier>,
-        func: AST<Func>,
-        exported: bool,
-        platforms: PlatformSet,
-        decorators: Vec<AST<Decorator>>,
-    },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    ProcDeclaration {
-        name: AST<PlainIdentifier>,
-        proc: AST<Proc>,
-        exported: bool,
-        platforms: PlatformSet,
-        decorators: Vec<AST<Decorator>>,
-    },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    Decorator {
-        name: AST<PlainIdentifier>,
-        // TODO: arguments
-    },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    ValueDeclaration {
-        name: AST<PlainIdentifier>,
-        type_annotation: Option<ASTAny>,
-        value: AST<Expression>,
-        is_const: bool,
-        exported: bool,
-        platforms: PlatformSet,
-    },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    TestExprDeclaration {
-        name: AST<ExactStringLiteral>,
-        expr: AST<Expression>,
-    },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    TestBlockDeclaration {
-        name: AST<ExactStringLiteral>,
-        block: AST<Block>,
-    },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    TestTypeDeclaration {
-        name: AST<ExactStringLiteral>,
-        destination_type: ASTAny,
-        value_type: ASTAny,
-    },
-
-    // --- Expressions ---
-    #[evt(derive(Debug, Clone, PartialEq))]
-    NilLiteral,
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    BooleanLiteral(bool),
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    NumberLiteral(Slice),
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    StringLiteral {
-        tag: Option<AST<PlainIdentifier>>,
-        segments: Vec<StringLiteralSegment>,
-    },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    ExactStringLiteral {
-        tag: Option<AST<PlainIdentifier>>,
-        value: Slice,
-    },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    ArrayLiteral(Vec<AST<ArrayLiteralEntry>>),
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    ObjectLiteral(Vec<ObjectLiteralEntry>),
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    BinaryOperation {
-        left: AST<Expression>,
-        op: AST<BinaryOperator>,
-        right: AST<Expression>,
-    },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    BinaryOperator(BinaryOperatorOp),
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    NegationOperation(AST<Expression>),
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    Parenthesis(AST<Expression>),
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    LocalIdentifier(Slice),
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    InlineConstGroup {
-        declarations: Vec<AST<InlineDeclaration>>,
-        inner: AST<Expression>,
-    },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    InlineDeclaration {
-        destination: DeclarationDestination,
-        awaited: bool,
-        value: AST<Expression>,
-    },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    Func {
-        type_annotation: AST<FuncType>,
-        is_async: bool,
-        is_pure: bool,
-        body: AST<Expression>,
-    },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    Proc {
-        type_annotation: AST<ProcType>,
-        is_async: bool,
-        is_pure: bool,
-        body: AST<Block>,
-    },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    Block(Vec<ASTAny>),
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    JavascriptEscape(String),
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    RangeExpression {
-        start: AST<Expression>,
-        end: AST<Expression>,
-    },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    Invocation {
-        subject: AST<Expression>,
-        args: Vec<AST<Expression>>,
-        spread_args: Option<AST<Expression>>,
-        type_args: Vec<ASTAny>,
-        bubbles: bool,
-        awaited_or_detached: Option<AwaitOrDetach>,
-    },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    PropertyAccessor {
-        subject: AST<Expression>,
-
-        /// Expression or PlainIdentifier
-        property: ASTAny,
-        optional: bool,
-    },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    IfElseExpression {
-        cases: Vec<AST<IfElseExpressionCase>>,
-        default_case: Option<AST<Expression>>,
-    },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    IfElseExpressionCase {
-        condition: AST<Expression>,
-        outcome: AST<Expression>,
-    },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    SwitchExpression {
-        value: AST<Expression>,
-        cases: Vec<AST<SwitchExpressionCase>>,
-        default_case: Option<AST<Expression>>,
-    },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    SwitchExpressionCase {
-        type_filter: ASTAny,
-        outcome: AST<Expression>,
-    },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    SpreadExpression(AST<Expression>),
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    ElementTag {
-        tag_name: AST<PlainIdentifier>,
-        attributes: Vec<KeyValue>,
-        children: Vec<AST<Expression>>,
-    },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    AsCast {
-        inner: AST<Expression>,
-        as_type: ASTAny,
-    },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    InstanceOf {
-        inner: AST<Expression>,
-        possible_type: ASTAny,
-    },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    ErrorExpression(AST<Expression>),
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    RegularExpression {
-        expr: String,
-        flags: Vec<RegularExpressionFlag>,
-    },
-
-    // --- Type expressions ---
-    #[evt(derive(Debug, Clone, PartialEq))]
-    UnionType(Vec<ASTAny>),
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    MaybeType(ASTAny),
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    NamedType(AST<PlainIdentifier>),
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    GenericParamType {
-        name: AST<PlainIdentifier>,
-        extends: Option<ASTAny>,
-    },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    ProcType {
-        args: Vec<AST<Arg>>,
-        args_spread: Option<ASTAny>,
-        is_pure: bool,
-        is_async: bool,
-        throws: Option<ASTAny>,
-    },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    FuncType {
-        args: Vec<AST<Arg>>,
-        args_spread: Option<ASTAny>,
-        is_pure: bool,
-        is_async: bool,
-        returns: Option<ASTAny>,
-    },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    Arg {
-        name: AST<PlainIdentifier>,
-        type_annotation: Option<ASTAny>,
-        optional: bool,
-    },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    GenericType {
-        type_params: Vec<AST<TypeParam>>,
-        inner: ASTAny,
-    },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    TypeParam {
-        name: AST<PlainIdentifier>,
-        extends: Option<ASTAny>,
-    },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    BoundGenericType {
-        type_args: Vec<ASTAny>,
-        generic: ASTAny,
-    },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    ObjectType {
-        entries: Vec<ObjectTypeEntry>,
-        is_interface: bool,
-    },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    RecordType {
-        key_type: ASTAny,
-        value_type: ASTAny,
-    },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    ArrayType(ASTAny),
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    TupleType(Vec<ASTAny>),
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    StringLiteralType(Slice),
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    NumberLiteralType(Slice),
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    BooleanLiteralType(bool),
-
-    StringType,
-
-    NumberType,
-
-    BooleanType,
-
-    NilType,
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    ParenthesizedType(ASTAny),
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    SpecialType {
-        kind: SpecialTypeKind,
-        inner: ASTAny,
-    },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    ModifierType {
-        kind: ModifierTypeKind,
-        inner: ASTAny,
-    },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    TypeofType(AST<Expression>),
-
-    UnknownType,
-
-    RegularExpressionType, // TODO: Number of match groups?
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    PropertyType {
-        subject: ASTAny,
-        property: ASTAny,
-        optional: bool,
-    },
-
-    // --- Statements ---
-    #[evt(derive(Debug, Clone, PartialEq))]
-    DeclarationStatement {
-        destination: DeclarationDestination,
-        value: AST<Expression>,
-        awaited: bool,
-        is_const: bool,
-    },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    IfElseStatement {
-        cases: Vec<AST<IfElseStatementCase>>,
-        default_case: Option<AST<Block>>,
-    },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    IfElseStatementCase {
-        condition: AST<Expression>,
-        outcome: AST<Block>,
-    },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    ForLoop {
-        item_identifier: AST<PlainIdentifier>,
-        iterator: AST<Expression>,
-        body: AST<Block>,
-    },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    WhileLoop {
-        condition: AST<Expression>,
-        body: AST<Block>,
-    },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    Assignment {
-        target: AST<Expression>,
-        value: AST<Expression>,
-        operator: Option<AST<BinaryOperator>>,
-    },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    TryCatch {
-        try_block: AST<Block>,
-        error_identifier: AST<PlainIdentifier>,
-        catch_block: AST<Block>,
-    },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    ThrowStatement {
-        error_expression: AST<Expression>,
-    },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    Autorun {
-        effect_block: AST<Block>,
-        until: Option<AST<Expression>>,
-    },
-
-    #[evt(derive(Debug, Clone, PartialEq))]
-    PlainIdentifier(Slice),
+union_type! {
+    Any = Module
+        | ImportAllDeclaration
+        | ImportDeclaration
+        | ImportItem
+        | TypeDeclaration
+        | FuncDeclaration
+        | ProcDeclaration
+        | Decorator
+        | ValueDeclaration
+        | TestExprDeclaration
+        | TestBlockDeclaration
+        |      TestTypeDeclaration | NilLiteral | BooleanLiteral | NumberLiteral | StringLiteral | ExactStringLiteral
+       | ArrayLiteral | ObjectLiteral | BinaryOperation | BinaryOperator | NegationOperation | Parenthesis
+       | LocalIdentifier | InlineConstGroup | InlineDeclaration | Func | Proc | Block | JavascriptEscape
+       | RangeExpression | Invocation | PropertyAccessor | IfElseExpression | IfElseExpressionCase
+       | SwitchExpression | SwitchExpressionCase | SpreadExpression | ElementTag | AsCast
+       | InstanceOf | ErrorExpression | RegularExpression | UnionType | MaybeType | NamedType
+       | GenericParamType | ProcType | FuncType | Arg | GenericType | TypeParam | BoundGenericType
+       | ObjectType | RecordType | ArrayType | TupleType | StringLiteralType | NumberLiteralType
+       | BooleanLiteralType | StringType | NumberType | BooleanType | NilType | ParenthesizedType
+       | SpecialType | ModifierType | TypeofType | UnknownType | RegularExpressionType
+       | PropertyType | DeclarationStatement | IfElseStatement | IfElseStatementCase
+       | ForLoop | WhileLoop | Assignment | TryCatch | ThrowStatement | Autorun | PlainIdentifier
 }
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Module {
+    pub declarations: Vec<AST<Declaration>>,
+}
+
+// --- Declarations ---
+#[derive(Debug, Clone, PartialEq)]
+pub struct ImportAllDeclaration {
+    pub name: AST<PlainIdentifier>,
+    pub path: AST<ExactStringLiteral>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ImportDeclaration {
+    pub imports: Vec<AST<ImportItem>>,
+    pub path: AST<ExactStringLiteral>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ImportItem {
+    pub name: AST<PlainIdentifier>,
+    pub alias: Option<AST<PlainIdentifier>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TypeDeclaration {
+    pub name: AST<PlainIdentifier>,
+    pub declared_type: AST<TypeExpression>,
+    pub exported: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct FuncDeclaration {
+    pub name: AST<PlainIdentifier>,
+    pub func: AST<Func>,
+    pub exported: bool,
+    pub platforms: PlatformSet,
+    pub decorators: Vec<AST<Decorator>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ProcDeclaration {
+    pub name: AST<PlainIdentifier>,
+    pub proc: AST<Proc>,
+    pub exported: bool,
+    pub platforms: PlatformSet,
+    pub decorators: Vec<AST<Decorator>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Decorator {
+    pub name: AST<PlainIdentifier>,
+    // TODO: arguments
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ValueDeclaration {
+    pub name: AST<PlainIdentifier>,
+    pub type_annotation: Option<AST<TypeExpression>>,
+    pub value: AST<Expression>,
+    pub is_const: bool,
+    pub exported: bool,
+    pub platforms: PlatformSet,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TestExprDeclaration {
+    pub name: AST<ExactStringLiteral>,
+    pub expr: AST<Expression>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TestBlockDeclaration {
+    pub name: AST<ExactStringLiteral>,
+    pub block: AST<Block>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TestTypeDeclaration {
+    pub name: AST<ExactStringLiteral>,
+    pub destination_type: AST<TypeExpression>,
+    pub value_type: AST<TypeExpression>,
+}
+
+// --- Expressions ---
+#[derive(Debug, Clone, PartialEq)]
+pub struct NilLiteral;
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct BooleanLiteral(pub bool);
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct NumberLiteral(pub Slice);
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct StringLiteral {
+    pub tag: Option<AST<PlainIdentifier>>,
+    pub segments: Vec<StringLiteralSegment>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ExactStringLiteral {
+    pub tag: Option<AST<PlainIdentifier>>,
+    pub value: Slice,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ArrayLiteral(pub Vec<ArrayLiteralEntry>);
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ObjectLiteral(pub Vec<ObjectLiteralEntry>);
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct BinaryOperation {
+    pub left: AST<Expression>,
+    pub op: AST<BinaryOperator>,
+    pub right: AST<Expression>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct BinaryOperator(pub BinaryOperatorOp);
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct NegationOperation(pub AST<Expression>);
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Parenthesis(pub AST<Expression>);
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LocalIdentifier(pub Slice);
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct InlineConstGroup {
+    pub declarations: Vec<AST<InlineDeclaration>>,
+    pub inner: AST<Expression>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct InlineDeclaration {
+    pub destination: DeclarationDestination,
+    pub awaited: bool,
+    pub value: AST<Expression>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Func {
+    pub type_annotation: AST<FuncType>,
+    pub is_async: bool,
+    pub is_pure: bool,
+    pub body: AST<Expression>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Proc {
+    pub type_annotation: AST<ProcType>,
+    pub is_async: bool,
+    pub is_pure: bool,
+    pub body: AST<Block>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Block(pub Vec<AST<Statement>>);
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct JavascriptEscape(pub String);
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RangeExpression {
+    pub start: AST<Expression>,
+    pub end: AST<Expression>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Invocation {
+    pub subject: AST<Expression>,
+    pub args: Vec<AST<Expression>>,
+    pub spread_args: Option<AST<Expression>>,
+    pub type_args: Vec<AST<TypeExpression>>,
+    pub bubbles: bool,
+    pub awaited_or_detached: Option<AwaitOrDetach>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PropertyAccessor {
+    pub subject: AST<Expression>,
+
+    /// Expression or PlainIdentifier
+    pub property: ASTAny,
+    pub optional: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct IfElseExpression {
+    pub cases: Vec<AST<IfElseExpressionCase>>,
+    pub default_case: Option<AST<Expression>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct IfElseExpressionCase {
+    pub condition: AST<Expression>,
+    pub outcome: AST<Expression>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SwitchExpression {
+    pub value: AST<Expression>,
+    pub cases: Vec<AST<SwitchExpressionCase>>,
+    pub default_case: Option<AST<Expression>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SwitchExpressionCase {
+    pub type_filter: AST<TypeExpression>,
+    pub outcome: AST<Expression>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SpreadExpression(pub AST<Expression>);
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ElementTag {
+    pub tag_name: AST<PlainIdentifier>,
+    pub attributes: Vec<KeyValue>,
+    pub children: Vec<AST<Expression>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AsCast {
+    pub inner: AST<Expression>,
+    pub as_type: AST<TypeExpression>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct InstanceOf {
+    pub inner: AST<Expression>,
+    pub possible_type: AST<TypeExpression>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ErrorExpression(pub AST<Expression>);
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RegularExpression {
+    pub expr: String,
+    pub flags: Vec<RegularExpressionFlag>,
+}
+
+// --- Type expressions ---
+#[derive(Debug, Clone, PartialEq)]
+pub struct UnionType(pub Vec<AST<TypeExpression>>);
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MaybeType(pub AST<TypeExpression>);
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct NamedType(pub AST<LocalIdentifier>);
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct GenericParamType {
+    pub name: AST<PlainIdentifier>,
+    pub extends: Option<AST<TypeExpression>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ProcType {
+    pub args: Vec<AST<Arg>>,
+    pub args_spread: Option<AST<TypeExpression>>,
+    pub is_pure: bool,
+    pub is_async: bool,
+    pub throws: Option<AST<TypeExpression>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct FuncType {
+    pub args: Vec<AST<Arg>>,
+    pub args_spread: Option<AST<TypeExpression>>,
+    pub is_pure: bool,
+    pub is_async: bool,
+    pub returns: Option<AST<TypeExpression>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Arg {
+    pub name: AST<PlainIdentifier>,
+    pub type_annotation: Option<AST<TypeExpression>>,
+    pub optional: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct GenericType {
+    pub type_params: Vec<AST<TypeParam>>,
+    pub inner: AST<TypeExpression>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TypeParam {
+    pub name: AST<PlainIdentifier>,
+    pub extends: Option<AST<TypeExpression>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct BoundGenericType {
+    pub type_args: Vec<AST<TypeExpression>>,
+    pub generic: AST<TypeExpression>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ObjectType {
+    pub entries: Vec<ObjectTypeEntry>,
+    pub is_interface: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RecordType {
+    pub key_type: AST<TypeExpression>,
+    pub value_type: AST<TypeExpression>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ArrayType(pub AST<TypeExpression>);
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TupleType(pub Vec<AST<TypeExpression>>);
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct StringLiteralType(pub Slice);
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct NumberLiteralType(pub Slice);
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct BooleanLiteralType(pub bool);
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct StringType;
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct NumberType;
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct BooleanType;
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct NilType;
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ParenthesizedType(pub AST<TypeExpression>);
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SpecialType {
+    pub kind: SpecialTypeKind,
+    pub inner: AST<TypeExpression>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ModifierType {
+    pub kind: ModifierTypeKind,
+    pub inner: AST<TypeExpression>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TypeofType(pub AST<Expression>);
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct UnknownType;
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RegularExpressionType; // TODO: Number of match groups?
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PropertyType {
+    pub subject: AST<TypeExpression>,
+    pub property: AST<TypeExpression>,
+    pub optional: bool,
+}
+
+// --- Statements ---
+#[derive(Debug, Clone, PartialEq)]
+pub struct DeclarationStatement {
+    pub destination: DeclarationDestination,
+    pub value: AST<Expression>,
+    pub awaited: bool,
+    pub is_const: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct IfElseStatement {
+    pub cases: Vec<AST<IfElseStatementCase>>,
+    pub default_case: Option<AST<Block>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct IfElseStatementCase {
+    pub condition: AST<Expression>,
+    pub outcome: AST<Block>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ForLoop {
+    pub item_identifier: AST<PlainIdentifier>,
+    pub iterator: AST<Expression>,
+    pub body: AST<Block>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct WhileLoop {
+    pub condition: AST<Expression>,
+    pub body: AST<Block>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Assignment {
+    pub target: AST<Expression>,
+    pub value: AST<Expression>,
+    pub operator: Option<AST<BinaryOperator>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TryCatch {
+    pub try_block: AST<Block>,
+    pub error_identifier: AST<PlainIdentifier>,
+    pub catch_block: AST<Block>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ThrowStatement {
+    pub error_expression: AST<Expression>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Autorun {
+    pub effect_block: AST<Block>,
+    pub until: Option<AST<Expression>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PlainIdentifier(pub Slice);
 
 // --- Pieces of AST nodes ---
 
@@ -702,19 +744,19 @@ union_type!(ObjectTypeEntry = KeyValueType | SpreadType);
 #[derive(Debug, Clone, PartialEq)]
 pub struct KeyValueType {
     pub key: ASTAny,
-    pub value: ASTAny,
+    pub value: AST<TypeExpression>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct SpreadType(pub ASTAny);
+pub struct SpreadType(pub AST<TypeExpression>);
 
 union_type!(DeclarationDestination = NameAndType | Destructure);
 
 impl Parentable for DeclarationDestination {
     fn set_parent<TParentKind>(&mut self, parent: &AST<TParentKind>)
     where
-        TParentKind: Clone + TryFrom<ASTDetails>,
-        ASTDetails: From<TParentKind>,
+        TParentKind: Clone + TryFrom<Any>,
+        Any: From<TParentKind>,
     {
         match self {
             DeclarationDestination::NameAndType(NameAndType {
@@ -739,7 +781,7 @@ impl Parentable for DeclarationDestination {
 #[derive(Debug, Clone, PartialEq)]
 pub struct NameAndType {
     pub name: AST<PlainIdentifier>,
-    pub type_annotation: Option<ASTAny>,
+    pub type_annotation: Option<AST<TypeExpression>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -755,8 +797,8 @@ simple_enum!(DestructureKind = Array | Object);
 
 pub fn covering<TKind>(vec: &Vec<AST<TKind>>) -> Option<Slice>
 where
-    TKind: Clone + TryFrom<ASTDetails>,
-    ASTDetails: From<TKind>,
+    TKind: Clone + TryFrom<Any>,
+    Any: From<TKind>,
 {
     vec.get(0)
         .map(|first| first.slice().clone().spanning(vec[vec.len() - 1].slice()))
@@ -764,18 +806,18 @@ where
 
 pub trait WithSlice: Sized
 where
-    Self: Clone + TryFrom<ASTDetails>,
-    ASTDetails: From<Self>,
+    Self: Clone + TryFrom<Any>,
+    Any: From<Self>,
 {
-    fn with_slice(self, src: Slice) -> AST<Self>;
+    fn as_ast(self, src: Slice) -> AST<Self>;
 }
 
 impl<TKind> WithSlice for TKind
 where
-    TKind: Clone + TryFrom<ASTDetails>,
-    ASTDetails: From<TKind>,
+    TKind: Clone + TryFrom<Any>,
+    Any: From<TKind>,
 {
-    fn with_slice(self, src: Slice) -> AST<TKind> {
+    fn as_ast(self, src: Slice) -> AST<TKind> {
         AST(
             Rc::new(ASTInner {
                 parent: RefCell::new(None),
@@ -842,7 +884,7 @@ impl PlatformSet {
 
 // --- AST subgroups ---
 
-ast_union_type!(
+union_subtype!(
     Declaration = ImportAllDeclaration
         | ImportDeclaration
         | TypeDeclaration
@@ -854,117 +896,13 @@ ast_union_type!(
         | TestTypeDeclaration
 );
 
-impl TryFrom<ASTDetails> for Declaration {
-    type Error = ();
-
-    fn try_from(value: ASTDetails) -> Result<Self, Self::Error> {
-        match value {
-            ASTDetails::ImportAllDeclaration { name, path } => {
-                Ok(Declaration::ImportAllDeclaration(ImportAllDeclaration {
-                    name,
-                    path,
-                }))
-            }
-            ASTDetails::ImportDeclaration { imports, path } => {
-                Ok(Declaration::ImportDeclaration(ImportDeclaration {
-                    imports,
-                    path,
-                }))
-            }
-            ASTDetails::TypeDeclaration {
-                name,
-                declared_type,
-                exported,
-            } => Ok(Declaration::TypeDeclaration(TypeDeclaration {
-                name,
-                declared_type,
-                exported,
-            })),
-            ASTDetails::FuncDeclaration {
-                name,
-                func,
-                exported,
-                platforms,
-                decorators,
-            } => Ok(Declaration::FuncDeclaration(FuncDeclaration {
-                name,
-                func,
-                exported,
-                platforms,
-                decorators,
-            })),
-            ASTDetails::ProcDeclaration {
-                name,
-                proc,
-                exported,
-                platforms,
-                decorators,
-            } => Ok(Declaration::ProcDeclaration(ProcDeclaration {
-                name,
-                proc,
-                exported,
-                platforms,
-                decorators,
-            })),
-            ASTDetails::ValueDeclaration {
-                name,
-                type_annotation,
-                value,
-                is_const,
-                exported,
-                platforms,
-            } => Ok(Declaration::ValueDeclaration(ValueDeclaration {
-                name,
-                type_annotation,
-                value,
-                is_const,
-                exported,
-                platforms,
-            })),
-            ASTDetails::TestExprDeclaration { name, expr } => {
-                Ok(Declaration::TestExprDeclaration(TestExprDeclaration {
-                    name,
-                    expr,
-                }))
-            }
-            ASTDetails::TestBlockDeclaration { name, block } => {
-                Ok(Declaration::TestBlockDeclaration(TestBlockDeclaration {
-                    name,
-                    block,
-                }))
-            }
-            ASTDetails::TestTypeDeclaration {
-                name,
-                destination_type,
-                value_type,
-            } => Ok(Declaration::TestTypeDeclaration(TestTypeDeclaration {
-                name,
-                destination_type,
-                value_type,
-            })),
-            _ => Err(()),
-        }
-    }
+#[derive(Debug, Clone, PartialEq)]
+pub enum ArrayLiteralEntry {
+    Expression(AST<Expression>),
+    Spread(AST<SpreadExpression>),
 }
 
-ast_union_type!(ArrayLiteralEntry = Expression | SpreadExpression);
-
-impl TryFrom<ASTDetails> for ArrayLiteralEntry {
-    type Error = ();
-
-    fn try_from(value: ASTDetails) -> Result<Self, Self::Error> {
-        Expression::try_from(value.clone())
-            .map(ArrayLiteralEntry::Expression)
-            .or_else(|_| match value {
-                ASTDetails::SpreadExpression(inner) => {
-                    Ok(ArrayLiteralEntry::SpreadExpression(SpreadExpression(inner)))
-                }
-                _ => Err(()),
-            })
-    }
-}
-
-ast_union_type!(
+union_subtype!(
     Expression = NilLiteral
         | BooleanLiteral
         | NumberLiteral
@@ -992,149 +930,43 @@ ast_union_type!(
         | RegularExpression
 );
 
-impl TryFrom<ASTDetails> for Expression {
-    type Error = ();
+union_subtype!(
+    TypeExpression = UnionType
+        | MaybeType
+        | NamedType
+        | GenericParamType
+        | ProcType
+        | FuncType
+        | GenericType
+        | BoundGenericType
+        | ObjectType
+        | RecordType
+        | ArrayType
+        | TupleType
+        | StringLiteralType
+        | NumberLiteralType
+        | BooleanLiteralType
+        | StringType
+        | NumberType
+        | BooleanType
+        | NilType
+        | ParenthesizedType
+        | SpecialType
+        | ModifierType
+        | TypeofType
+        | UnknownType
+        | RegularExpressionType
+        | PropertyType
+);
 
-    fn try_from(value: ASTDetails) -> Result<Self, Self::Error> {
-        match value {
-            ASTDetails::NilLiteral => Ok(Expression::NilLiteral(NilLiteral)),
-            ASTDetails::BooleanLiteral(value) => {
-                Ok(Expression::BooleanLiteral(BooleanLiteral(value)))
-            }
-            ASTDetails::NumberLiteral(value) => Ok(Expression::NumberLiteral(NumberLiteral(value))),
-            ASTDetails::StringLiteral { tag, segments } => {
-                Ok(Expression::StringLiteral(StringLiteral { tag, segments }))
-            }
-            ASTDetails::ExactStringLiteral { tag, value } => {
-                Ok(Expression::ExactStringLiteral(ExactStringLiteral {
-                    tag,
-                    value,
-                }))
-            }
-            ASTDetails::ArrayLiteral(entries) => {
-                Ok(Expression::ArrayLiteral(ArrayLiteral(entries)))
-            }
-            ASTDetails::ObjectLiteral(entries) => {
-                Ok(Expression::ObjectLiteral(ObjectLiteral(entries)))
-            }
-            ASTDetails::BinaryOperation { left, op, right } => {
-                Ok(Expression::BinaryOperation(BinaryOperation {
-                    left,
-                    op,
-                    right,
-                }))
-            }
-            ASTDetails::NegationOperation(inner) => {
-                Ok(Expression::NegationOperation(NegationOperation(inner)))
-            }
-            ASTDetails::Parenthesis(inner) => Ok(Expression::Parenthesis(Parenthesis(inner))),
-            ASTDetails::LocalIdentifier(inner) => {
-                Ok(Expression::LocalIdentifier(LocalIdentifier(inner)))
-            }
-            ASTDetails::InlineConstGroup {
-                declarations,
-                inner,
-            } => Ok(Expression::InlineConstGroup(InlineConstGroup {
-                declarations,
-                inner,
-            })),
-            ASTDetails::Func {
-                type_annotation,
-                is_async,
-                is_pure,
-                body,
-            } => Ok(Expression::Func(Func {
-                type_annotation,
-                is_async,
-                is_pure,
-                body,
-            })),
-            ASTDetails::Proc {
-                type_annotation,
-                is_async,
-                is_pure,
-                body,
-            } => Ok(Expression::Proc(Proc {
-                type_annotation,
-                is_async,
-                is_pure,
-                body,
-            })),
-            ASTDetails::JavascriptEscape(contents) => {
-                Ok(Expression::JavascriptEscape(JavascriptEscape(contents)))
-            }
-            ASTDetails::RangeExpression { start, end } => {
-                Ok(Expression::RangeExpression(RangeExpression { start, end }))
-            }
-            ASTDetails::Invocation {
-                subject,
-                args,
-                spread_args,
-                type_args,
-                bubbles,
-                awaited_or_detached,
-            } => Ok(Expression::Invocation(Invocation {
-                subject,
-                args,
-                spread_args,
-                type_args,
-                bubbles,
-                awaited_or_detached,
-            })),
-            ASTDetails::PropertyAccessor {
-                subject,
-                property,
-                optional,
-            } => Ok(Expression::PropertyAccessor(PropertyAccessor {
-                subject,
-                property,
-                optional,
-            })),
-            ASTDetails::IfElseExpression {
-                cases,
-                default_case,
-            } => Ok(Expression::IfElseExpression(IfElseExpression {
-                cases,
-                default_case,
-            })),
-            ASTDetails::SwitchExpression {
-                value,
-                cases,
-                default_case,
-            } => Ok(Expression::SwitchExpression(SwitchExpression {
-                value,
-                cases,
-                default_case,
-            })),
-            ASTDetails::ElementTag {
-                tag_name,
-                attributes,
-                children,
-            } => Ok(Expression::ElementTag(ElementTag {
-                tag_name,
-                attributes,
-                children,
-            })),
-            ASTDetails::AsCast { inner, as_type } => {
-                Ok(Expression::AsCast(AsCast { inner, as_type }))
-            }
-            ASTDetails::InstanceOf {
-                inner,
-                possible_type,
-            } => Ok(Expression::InstanceOf(InstanceOf {
-                inner,
-                possible_type,
-            })),
-            ASTDetails::ErrorExpression(inner) => {
-                Ok(Expression::ErrorExpression(ErrorExpression(inner)))
-            }
-            ASTDetails::RegularExpression { expr, flags } => {
-                Ok(Expression::RegularExpression(RegularExpression {
-                    expr,
-                    flags,
-                }))
-            }
-            _ => Err(()),
-        }
-    }
-}
+union_subtype!(
+    Statement = DeclarationStatement
+        | IfElseStatement
+        | ForLoop
+        | WhileLoop
+        | Assignment
+        | TryCatch
+        | ThrowStatement
+        | Autorun
+        | Invocation
+);

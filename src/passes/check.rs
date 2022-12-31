@@ -1,14 +1,14 @@
 use crate::{
     model::{
-        ast::BinaryOperatorOp,
-        errors::BagelError,
-        module::{Module, ModulesStore},
-    },
-    model::{
         ast::*,
         bgl_type::{SubsumationContext, Type},
         errors::blue_string,
         slice::Slice,
+    },
+    model::{
+        ast::{self, BinaryOperatorOp},
+        errors::BagelError,
+        module::{Module, ModulesStore},
     },
     DEBUG_MODE,
 };
@@ -37,8 +37,8 @@ pub trait Checkable {
 
 impl<TKind> Checkable for AST<TKind>
 where
-    TKind: Clone + TryFrom<ASTDetails>,
-    ASTDetails: From<TKind>,
+    TKind: Clone + TryFrom<Any>,
+    Any: From<TKind>,
 {
     fn check<'a, F: FnMut(BagelError)>(&self, ctx: &mut CheckContext<'a, F>) {
         let module_id = &ctx.current_module.module_id.clone();
@@ -57,12 +57,12 @@ where
             };
 
         match self.details() {
-            ASTDetails::Module { declarations } => {
+            Any::Module(ast::Module { declarations }) => {
                 declarations.check(ctx);
 
                 // todo!("Check for name duplicates");
             }
-            ASTDetails::ImportAllDeclaration { name, path } => {
+            Any::ImportAllDeclaration(ImportAllDeclaration { name, path }) => {
                 name.check(ctx);
                 path.check(ctx);
 
@@ -81,7 +81,7 @@ where
                     });
                 }
             }
-            ASTDetails::ImportDeclaration { imports, path } => {
+            Any::ImportDeclaration(ImportDeclaration { imports, path }) => {
                 imports.check(ctx);
                 path.check(ctx);
 
@@ -123,49 +123,49 @@ where
                     }
                 }
             }
-            ASTDetails::ImportItem { name, alias } => {
+            Any::ImportItem(ImportItem { name, alias }) => {
                 name.check(ctx);
                 alias.check(ctx);
             }
-            ASTDetails::TypeDeclaration {
+            Any::TypeDeclaration(TypeDeclaration {
                 name,
                 declared_type,
                 exported,
-            } => {
+            }) => {
                 name.check(ctx);
                 declared_type.check(ctx);
             }
-            ASTDetails::FuncDeclaration {
+            Any::FuncDeclaration(FuncDeclaration {
                 name,
                 func,
                 exported,
                 platforms,
                 decorators,
-            } => {
+            }) => {
                 name.check(ctx);
                 func.check(ctx);
                 decorators.check(ctx);
             }
-            ASTDetails::ProcDeclaration {
+            Any::ProcDeclaration(ProcDeclaration {
                 name,
                 proc,
                 exported,
                 platforms,
                 decorators,
-            } => {
+            }) => {
                 name.check(ctx);
                 proc.check(ctx);
                 decorators.check(ctx);
             }
-            ASTDetails::Decorator { name } => todo!(),
-            ASTDetails::ValueDeclaration {
+            Any::Decorator(Decorator { name }) => todo!(),
+            Any::ValueDeclaration(ValueDeclaration {
                 name,
                 type_annotation,
                 value,
                 is_const,
                 exported,
                 platforms,
-            } => {
+            }) => {
                 name.check(ctx);
                 type_annotation.check(ctx);
                 value.check(ctx);
@@ -179,41 +179,44 @@ where
                     );
                 }
             }
-            ASTDetails::TestExprDeclaration { name, expr } => todo!(),
-            ASTDetails::TestBlockDeclaration { name, block } => todo!(),
-            ASTDetails::TestTypeDeclaration {
+            Any::TestExprDeclaration(TestExprDeclaration { name, expr }) => todo!(),
+            Any::TestBlockDeclaration(TestBlockDeclaration { name, block }) => todo!(),
+            Any::TestTypeDeclaration(TestTypeDeclaration {
                 name,
                 destination_type,
                 value_type,
-            } => todo!(),
-            ASTDetails::StringLiteral { tag, segments } => todo!(),
-            ASTDetails::ArrayLiteral(members) => {
-                members.check(ctx);
-
+            }) => todo!(),
+            Any::StringLiteral(StringLiteral { tag, segments }) => todo!(),
+            Any::ArrayLiteral(ArrayLiteral(members)) => {
                 for member in members {
-                    if let Some(SpreadExpression(spread_inner)) =
-                        member.try_downcast::<SpreadExpression>()
-                    {
-                        check_subsumation(
-                            &Type::any_array(),
-                            spread_inner.infer_type(ctx.into()),
-                            spread_inner.slice(),
-                            ctx.report_error,
-                        );
+                    match member {
+                        ArrayLiteralEntry::Expression(expr) => expr.check(ctx),
+                        ArrayLiteralEntry::Spread(spread_expr) => {
+                            spread_expr.check(ctx);
+
+                            let spread_inner = spread_expr.downcast().0;
+
+                            check_subsumation(
+                                &Type::any_array(),
+                                spread_inner.infer_type(ctx.into()),
+                                spread_inner.slice(),
+                                ctx.report_error,
+                            );
+                        }
                     }
                 }
             }
-            ASTDetails::ObjectLiteral(_) => todo!(),
-            ASTDetails::SpreadExpression(inner) => {
+            Any::ObjectLiteral(ObjectLiteral(_)) => todo!(),
+            Any::SpreadExpression(SpreadExpression(inner)) => {
                 inner.check(ctx);
             }
-            ASTDetails::BinaryOperation { left, op, right } => {
+            Any::BinaryOperation(BinaryOperation { left, op, right }) => {
                 let left_type = left.infer_type(ctx.into());
                 let right_type = right.infer_type(ctx.into());
 
                 let number_or_string = Type::ANY_NUMBER.union(Type::ANY_STRING);
 
-                if let ASTDetails::BinaryOperator(operator) = op.details() {
+                if let Any::BinaryOperator(BinaryOperator(operator)) = op.details() {
                     if operator == &BinaryOperatorOp::Plus {
                         check_subsumation(
                             &number_or_string,
@@ -275,7 +278,7 @@ where
                 //     BinaryOperator::InstanceOf => todo!(),
                 // }
             }
-            ASTDetails::NegationOperation(inner) => {
+            Any::NegationOperation(NegationOperation(inner)) => {
                 inner.check(ctx);
 
                 check_subsumation(
@@ -285,8 +288,8 @@ where
                     ctx.report_error,
                 );
             }
-            ASTDetails::Parenthesis(inner) => inner.check(ctx),
-            ASTDetails::LocalIdentifier(name) => {
+            Any::Parenthesis(Parenthesis(inner)) => inner.check(ctx),
+            Any::LocalIdentifier(LocalIdentifier(name)) => {
                 // TODO: Make sure it isn't a type
                 if self.resolve_symbol(name.as_str()).is_none() {
                     ctx.report_error(BagelError::MiscError {
@@ -299,7 +302,7 @@ where
                     });
                 }
             }
-            ASTDetails::NamedType(name) => {
+            Any::NamedType(NamedType(name)) => {
                 // TODO: Make sure it isn't an expression
                 let name = name.downcast();
                 let name_str = name.0.as_str();
@@ -314,18 +317,18 @@ where
                     });
                 }
             }
-            ASTDetails::InlineConstGroup {
+            Any::InlineConstGroup(InlineConstGroup {
                 declarations,
                 inner,
-            } => {
+            }) => {
                 declarations.check(ctx);
                 inner.check(ctx);
             }
-            ASTDetails::InlineDeclaration {
+            Any::InlineDeclaration(InlineDeclaration {
                 destination,
                 awaited,
                 value,
-            } => {
+            }) => {
                 match destination {
                     DeclarationDestination::NameAndType(NameAndType {
                         name,
@@ -354,12 +357,12 @@ where
                 }
                 value.check(ctx);
             }
-            ASTDetails::Func {
+            Any::Func(Func {
                 type_annotation,
                 is_async,
                 is_pure,
                 body,
-            } => {
+            }) => {
                 type_annotation.check(ctx);
                 body.check(ctx);
 
@@ -373,19 +376,19 @@ where
                     );
                 }
             }
-            ASTDetails::Proc {
+            Any::Proc(Proc {
                 type_annotation,
                 is_async,
                 is_pure,
                 body,
-            } => {
+            }) => {
                 type_annotation.check(ctx);
                 body.check(ctx);
             }
-            ASTDetails::Block(statements) => {
+            Any::Block(Block(statements)) => {
                 statements.check(ctx);
             }
-            ASTDetails::RangeExpression { start, end } => {
+            Any::RangeExpression(RangeExpression { start, end }) => {
                 start.check(ctx);
                 end.check(ctx);
 
@@ -403,14 +406,14 @@ where
                     ctx.report_error,
                 );
             }
-            ASTDetails::Invocation {
+            Any::Invocation(Invocation {
                 subject,
                 args,
                 spread_args,
                 type_args,
                 bubbles,
                 awaited_or_detached,
-            } => {
+            }) => {
                 subject.check(ctx);
                 type_args.check(ctx);
                 args.check(ctx);
@@ -462,11 +465,11 @@ where
                 // TODO: Check that type_args fit
                 // TODO: Check appropriateness of bubbles and awaited_or_detached
             }
-            ASTDetails::PropertyAccessor {
+            Any::PropertyAccessor(PropertyAccessor {
                 subject,
                 property,
                 optional,
-            } => {
+            }) => {
                 subject.check(ctx);
                 property.check(ctx);
 
@@ -492,14 +495,14 @@ where
                     })
                 }
             }
-            ASTDetails::IfElseExpression {
+            Any::IfElseExpression(IfElseExpression {
                 cases,
                 default_case,
-            } => {
+            }) => {
                 cases.check(ctx);
                 default_case.check(ctx);
             }
-            ASTDetails::IfElseExpressionCase { condition, outcome } => {
+            Any::IfElseExpressionCase(IfElseExpressionCase { condition, outcome }) => {
                 condition.check(ctx);
                 outcome.check(ctx);
 
@@ -511,21 +514,21 @@ where
                     ctx.report_error,
                 );
             }
-            ASTDetails::SwitchExpression {
+            Any::SwitchExpression(SwitchExpression {
                 value,
                 cases,
                 default_case,
-            } => todo!(),
-            ASTDetails::SwitchExpressionCase {
+            }) => todo!(),
+            Any::SwitchExpressionCase(SwitchExpressionCase {
                 type_filter,
                 outcome,
-            } => todo!(),
-            ASTDetails::ElementTag {
+            }) => todo!(),
+            Any::ElementTag(ElementTag {
                 tag_name,
                 attributes,
                 children,
-            } => todo!(),
-            ASTDetails::AsCast { inner, as_type } => {
+            }) => todo!(),
+            Any::AsCast(AsCast { inner, as_type }) => {
                 inner.check(ctx);
                 as_type.check(ctx);
 
@@ -536,10 +539,10 @@ where
                     ctx.report_error,
                 );
             }
-            ASTDetails::InstanceOf {
+            Any::InstanceOf(InstanceOf {
                 inner,
                 possible_type,
-            } => {
+            }) => {
                 inner.check(ctx);
                 possible_type.check(ctx);
 
@@ -550,54 +553,54 @@ where
                     ctx.report_error,
                 );
             }
-            ASTDetails::ErrorExpression(_) => todo!(),
-            ASTDetails::UnionType(members) => {
+            Any::ErrorExpression(ErrorExpression(_)) => todo!(),
+            Any::UnionType(UnionType(members)) => {
                 members.check(ctx);
             }
-            ASTDetails::MaybeType(inner) => inner.check(ctx),
-            ASTDetails::GenericParamType { name, extends } => todo!(),
-            ASTDetails::ProcType {
+            Any::MaybeType(MaybeType(inner)) => inner.check(ctx),
+            Any::GenericParamType(GenericParamType { name, extends }) => todo!(),
+            Any::ProcType(ProcType {
                 args,
                 args_spread,
                 is_pure,
                 is_async,
                 throws,
-            } => {
+            }) => {
                 args.check(ctx);
                 args_spread.check(ctx);
                 throws.check(ctx);
             }
-            ASTDetails::FuncType {
+            Any::FuncType(FuncType {
                 args,
                 args_spread,
                 is_pure,
                 is_async,
                 returns,
-            } => {
+            }) => {
                 args.check(ctx);
                 args_spread.check(ctx);
                 returns.check(ctx);
             }
-            ASTDetails::Arg {
+            Any::Arg(Arg {
                 name,
                 type_annotation,
                 optional,
-            } => {
+            }) => {
                 name.check(ctx);
                 // TODO: Check that no optionsl args come before non-optional args
                 type_annotation.check(ctx);
             }
-            ASTDetails::GenericType { type_params, inner } => todo!(),
-            ASTDetails::TypeParam { name, extends } => todo!(),
-            ASTDetails::BoundGenericType { type_args, generic } => todo!(),
-            ASTDetails::ObjectType {
+            Any::GenericType(GenericType { type_params, inner }) => todo!(),
+            Any::TypeParam(TypeParam { name, extends }) => todo!(),
+            Any::BoundGenericType(BoundGenericType { type_args, generic }) => todo!(),
+            Any::ObjectType(ObjectType {
                 entries,
                 is_interface,
-            } => todo!(),
-            ASTDetails::RecordType {
+            }) => todo!(),
+            Any::RecordType(RecordType {
                 key_type,
                 value_type,
-            } => {
+            }) => {
                 key_type.check(ctx);
                 value_type.check(ctx);
 
@@ -608,12 +611,12 @@ where
                     ctx.report_error,
                 );
             }
-            ASTDetails::ArrayType(element) => element.check(ctx),
-            ASTDetails::TupleType(members) => members.check(ctx),
-            ASTDetails::SpecialType { kind: _, inner } => {
+            Any::ArrayType(ArrayType(element)) => element.check(ctx),
+            Any::TupleType(TupleType(members)) => members.check(ctx),
+            Any::SpecialType(SpecialType { kind: _, inner }) => {
                 inner.check(ctx);
             }
-            ASTDetails::ModifierType { kind, inner } => match kind {
+            Any::ModifierType(ModifierType { kind, inner }) => match kind {
                 ModifierTypeKind::Readonly => {}
                 ModifierTypeKind::Keyof => {
                     let inner_type = inner.resolve_type(ctx.into());
@@ -679,20 +682,20 @@ where
                     }
                 }
             },
-            ASTDetails::TypeofType(_) => todo!(),
-            ASTDetails::PropertyType {
+            Any::TypeofType(TypeofType(_)) => todo!(),
+            Any::PropertyType(PropertyType {
                 subject,
                 property,
                 optional,
-            } => todo!(),
-            ASTDetails::MaybeType(inner) => inner.check(ctx),
-            ASTDetails::UnionType(members) => members.check(ctx),
-            ASTDetails::DeclarationStatement {
+            }) => todo!(),
+            Any::MaybeType(MaybeType(inner)) => inner.check(ctx),
+            Any::UnionType(UnionType(members)) => members.check(ctx),
+            Any::DeclarationStatement(DeclarationStatement {
                 destination,
                 value,
                 awaited,
                 is_const,
-            } => {
+            }) => {
                 match destination {
                     DeclarationDestination::NameAndType(NameAndType {
                         name,
@@ -721,14 +724,14 @@ where
                 }
                 value.check(ctx);
             }
-            ASTDetails::IfElseStatement {
+            Any::IfElseStatement(IfElseStatement {
                 cases,
                 default_case,
-            } => {
+            }) => {
                 cases.check(ctx);
                 default_case.check(ctx);
             }
-            ASTDetails::IfElseStatementCase { condition, outcome } => {
+            Any::IfElseStatementCase(IfElseStatementCase { condition, outcome }) => {
                 condition.check(ctx);
                 outcome.check(ctx);
 
@@ -740,12 +743,12 @@ where
                     ctx.report_error,
                 );
             }
-            ASTDetails::ForLoop {
+            Any::ForLoop(ForLoop {
                 item_identifier,
                 iterator,
                 body,
-            } => todo!(),
-            ASTDetails::WhileLoop { condition, body } => {
+            }) => todo!(),
+            Any::WhileLoop(WhileLoop { condition, body }) => {
                 condition.check(ctx);
                 body.check(ctx);
 
@@ -756,11 +759,11 @@ where
                     ctx.report_error,
                 );
             }
-            ASTDetails::Assignment {
+            Any::Assignment(Assignment {
                 target,
                 value,
                 operator,
-            } => {
+            }) => {
                 target.check(ctx);
                 value.check(ctx);
                 operator.check(ctx);
@@ -774,16 +777,16 @@ where
                     ctx.report_error,
                 );
             }
-            ASTDetails::TryCatch {
+            Any::TryCatch(TryCatch {
                 try_block,
                 error_identifier,
                 catch_block,
-            } => todo!(),
-            ASTDetails::ThrowStatement { error_expression } => todo!(),
-            ASTDetails::Autorun {
+            }) => todo!(),
+            Any::ThrowStatement(ThrowStatement { error_expression }) => todo!(),
+            Any::Autorun(Autorun {
                 effect_block,
                 until,
-            } => {
+            }) => {
                 effect_block.check(ctx);
                 until.check(ctx);
 
@@ -798,25 +801,25 @@ where
             }
 
             // intentionally have nothing to check
-            ASTDetails::JavascriptEscape(_) => {}
-            ASTDetails::NilLiteral => {}
-            ASTDetails::NumberLiteral(_) => {}
-            ASTDetails::BooleanLiteral(_) => {}
-            ASTDetails::ExactStringLiteral { tag: _, value: _ } => {}
-            ASTDetails::BinaryOperator(_) => {}
-            ASTDetails::PlainIdentifier(_) => {}
-            ASTDetails::RegularExpression { expr: _, flags: _ } => {}
+            Any::JavascriptEscape(_) => {}
+            Any::NilLiteral(_) => {}
+            Any::NumberLiteral(_) => {}
+            Any::BooleanLiteral(_) => {}
+            Any::ExactStringLiteral(_) => {}
+            Any::BinaryOperator(_) => {}
+            Any::PlainIdentifier(_) => {}
+            Any::RegularExpression(_) => {}
 
-            ASTDetails::ParenthesizedType(_) => {}
-            ASTDetails::RegularExpressionType => {}
-            ASTDetails::StringLiteralType(_) => {}
-            ASTDetails::NumberLiteralType(_) => {}
-            ASTDetails::BooleanLiteralType(_) => {}
-            ASTDetails::StringType => {}
-            ASTDetails::NumberType => {}
-            ASTDetails::BooleanType => {}
-            ASTDetails::NilType => {}
-            ASTDetails::UnknownType => {}
+            Any::ParenthesizedType(_) => {}
+            Any::RegularExpressionType(_) => {}
+            Any::StringLiteralType(_) => {}
+            Any::NumberLiteralType(_) => {}
+            Any::BooleanLiteralType(_) => {}
+            Any::StringType(_) => {}
+            Any::NumberType(_) => {}
+            Any::BooleanType(_) => {}
+            Any::NilType(_) => {}
+            Any::UnknownType(_) => {}
         }
     }
 }

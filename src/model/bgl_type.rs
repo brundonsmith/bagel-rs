@@ -8,7 +8,7 @@ use crate::{
 };
 
 use super::{
-    ast::{ASTDetails, PlainIdentifier, AST},
+    ast::{Any, LocalIdentifier, TypeDeclaration, AST},
     errors::BagelError,
     module::Module,
     slice::Slice,
@@ -72,7 +72,7 @@ pub enum Type {
 
     NilType,
 
-    NamedType(AST<PlainIdentifier>),
+    NamedType(AST<LocalIdentifier>),
 
     IteratorType(Box<Type>),
 
@@ -152,11 +152,11 @@ impl Type {
                 let destination = name
                     .resolve_symbol(name.downcast().0.as_str())
                     .map(|resolved| match resolved.details() {
-                        ASTDetails::TypeDeclaration {
+                        Any::TypeDeclaration(TypeDeclaration {
                             name,
                             declared_type,
                             exported,
-                        } => declared_type.resolve_type(ctx.into()),
+                        }) => declared_type.resolve_type(ctx.into()),
                         _ => Type::PoisonedType,
                     })
                     .unwrap_or(Type::PoisonedType);
@@ -167,11 +167,11 @@ impl Type {
                 let value = name
                     .resolve_symbol(name.downcast().0.as_str())
                     .map(|resolved| match resolved.details() {
-                        ASTDetails::TypeDeclaration {
+                        Any::TypeDeclaration(TypeDeclaration {
                             name,
                             declared_type,
                             exported,
-                        } => declared_type.resolve_type(ctx.into()),
+                        }) => declared_type.resolve_type(ctx.into()),
                         _ => Type::PoisonedType,
                     })
                     .unwrap_or(Type::PoisonedType);
