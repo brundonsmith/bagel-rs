@@ -1082,7 +1082,7 @@ fn expression_inner(l: usize, i: Slice) -> ParseResult<AST<Expression>> {
         i,
         alt((
             map(func, AST::recast::<Expression>),
-            map(proc, AST::recast::<Expression>)
+            // map(proc, AST::recast::<Expression>)
         ))
     );
     parse_level_expression!(l, tl, i, binary_operation_1(tl, "??"));
@@ -1785,11 +1785,10 @@ fn number_literal(i: Slice) -> ParseResult<AST<NumberLiteral>> {
 
 #[memoize]
 fn boolean_literal(input: Slice) -> ParseResult<AST<BooleanLiteral>> {
-    let parse_true = map(tag("true"), |src: Slice| BooleanLiteral(true).as_ast(src));
-
-    let parse_false = map(tag("false"), |src: Slice| BooleanLiteral(false).as_ast(src));
-
-    alt((parse_true, parse_false))(input)
+    alt((
+        map(tag("true"), |src: Slice| BooleanLiteral(true).as_ast(src)),
+        map(tag("false"), |src: Slice| BooleanLiteral(false).as_ast(src)),
+    ))(input)
 }
 
 #[memoize]

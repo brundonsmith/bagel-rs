@@ -116,9 +116,25 @@ where
                 value_type,
             }) => todo!(),
             Any::NilLiteral(_) => f.write_str("undefined"),
-            Any::BooleanLiteral(_) => todo!(),
+            Any::BooleanLiteral(BooleanLiteral(value)) => f.write_str(match value {
+                true => "true",
+                false => "false",
+            }),
             Any::NumberLiteral(NumberLiteral(value)) => f.write_str(value.as_str()),
-            Any::StringLiteral(StringLiteral { tag, segments }) => todo!(),
+            Any::StringLiteral(StringLiteral { tag: _, segments }) => {
+                f.write_char('`')?;
+                for segment in segments {
+                    match segment {
+                        StringLiteralSegment::Slice(s) => f.write_str(s.as_str())?,
+                        StringLiteralSegment::AST(insert) => {
+                            f.write_str("${")?;
+                            insert.compile(f)?;
+                            f.write_str("}")?;
+                        }
+                    };
+                }
+                f.write_char('`')
+            }
             Any::ExactStringLiteral(ExactStringLiteral { tag, value }) => {
                 f.write_char('`')?;
                 f.write_str(value.as_str())?;
@@ -179,7 +195,10 @@ where
                 f.write_char(')')
             }
             Any::BinaryOperator(BinaryOperator(op)) => f.write_str(op.into()),
-            Any::NegationOperation(_) => todo!(),
+            Any::NegationOperation(NegationOperation(inner)) => {
+                f.write_char('!')?;
+                inner.compile(f)
+            }
             Any::Parenthesis(Parenthesis(inner)) => {
                 f.write_char('(')?;
                 inner.compile(f)?;
@@ -232,7 +251,18 @@ where
                 is_async,
                 is_pure,
                 body,
-            }) => todo!(),
+            }) => {
+                let type_annotation = type_annotation.downcast();
+
+                compile_function(
+                    f,
+                    None,
+                    &type_annotation.args,
+                    true,
+                    None,
+                    &body.clone().upcast(),
+                )
+            }
             Any::Block(Block(statements)) => {
                 f.write_str("{\n")?;
                 for stmt in statements {
@@ -290,9 +320,23 @@ where
             Any::IfElseExpression(IfElseExpression {
                 cases,
                 default_case,
-            }) => todo!(),
+            }) => {
+                f.write_char('(')?;
+                for case in cases {
+                    case.compile(f)?;
+                }
+                if let Some(default_case) = default_case {
+                    default_case.compile(f)?;
+                } else {
+                    f.write_str("undefined")?;
+                }
+                f.write_char(')')
+            }
             Any::IfElseExpressionCase(IfElseExpressionCase { condition, outcome }) => {
-                todo!()
+                condition.compile(f)?;
+                f.write_str(" ? ")?;
+                outcome.compile(f)?;
+                f.write_str(" : ")
             }
             Any::SwitchExpression(SwitchExpression {
                 value,
@@ -381,8 +425,28 @@ where
             Any::IfElseStatement(IfElseStatement {
                 cases,
                 default_case,
-            }) => todo!(),
-            Any::IfElseStatementCase(IfElseStatementCase { condition, outcome }) => todo!(),
+            }) => {
+                for (index, case) in cases.iter().enumerate() {
+                    if index > 0 {
+                        f.write_str(" else ")?;
+                    }
+
+                    case.compile(f)?;
+                }
+
+                if let Some(default_case) = default_case {
+                    f.write_str(" else ")?;
+                    default_case.compile(f)?;
+                }
+
+                Ok(())
+            }
+            Any::IfElseStatementCase(IfElseStatementCase { condition, outcome }) => {
+                f.write_str("if (")?;
+                condition.compile(f)?;
+                f.write_str(") ")?;
+                outcome.compile(f)
+            }
             Any::ForLoop(ForLoop {
                 item_identifier,
                 iterator,

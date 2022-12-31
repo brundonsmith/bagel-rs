@@ -115,12 +115,14 @@ fn Method_chain_with_space() {
 #[test]
 #[allow(non_snake_case)]
 fn If_expression() {
-    test_compile("func merge() =>
+    test_compile(
+        "func merge() =>
               if arr1.length <= 0 {
                   2
               } else {
                   3
-              }", "const merge = function ___fn_merge() { return ((___observe(arr1, 'length') <= 0) ? 2 : 3) };");
+              }", 
+        "const merge = function ___fn_merge() { return ((___observe(arr1, 'length') <= 0) ? 2 : 3) };");
 }
 
 #[test]

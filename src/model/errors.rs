@@ -209,7 +209,7 @@ fn code_block_highlighted<W: Write>(f: &mut W, highlighted_slice: &Slice) -> std
             // red, entire line is within the highlighted part
             f.write_str(line.red().to_string().as_str())?;
         } else {
-            let red_start = highlighted_slice.start - line_slice.start;
+            let red_start = highlighted_slice.start - line_slice.start; // TODO: Subtract with overflow sometimes happens here
             let red_end = usize::min(
                 highlighted_slice.end - usize::min(line_slice.start, highlighted_slice.end),
                 line.len(),
