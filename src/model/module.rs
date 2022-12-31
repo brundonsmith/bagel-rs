@@ -47,11 +47,12 @@ impl ModulesStore {
             {
                 let imported: Vec<String> = declarations
                     .iter()
-                    .filter_map(|decl| match decl.details() {
-                        Any::ImportAllDeclaration(ImportAllDeclaration { name: _, path }) => {
-                            Some(path.downcast().value.as_str().to_owned())
-                        }
-                        Any::ImportDeclaration(ImportDeclaration { imports: _, path }) => {
+                    .filter_map(|decl| match decl.downcast() {
+                        Declaration::ImportAllDeclaration(ImportAllDeclaration {
+                            name: _,
+                            path,
+                        }) => Some(path.downcast().value.as_str().to_owned()),
+                        Declaration::ImportDeclaration(ImportDeclaration { imports: _, path }) => {
                             Some(path.downcast().value.as_str().to_owned())
                         }
                         _ => None,

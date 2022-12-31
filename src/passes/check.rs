@@ -216,52 +216,42 @@ where
 
                 let number_or_string = Type::ANY_NUMBER.union(Type::ANY_STRING);
 
-                if let Any::BinaryOperator(BinaryOperator(operator)) = op.details() {
-                    if operator == &BinaryOperatorOp::Plus {
-                        check_subsumation(
-                            &number_or_string,
-                            left_type,
-                            left.slice(),
-                            ctx.report_error,
-                        );
-                        check_subsumation(
-                            &number_or_string,
-                            right_type,
-                            right.slice(),
-                            ctx.report_error,
-                        );
-                    } else if operator == &BinaryOperatorOp::Minus
-                        || operator == &BinaryOperatorOp::Times
-                        || operator == &BinaryOperatorOp::Divide
+                let operator = op.downcast().0;
+
+                if operator == BinaryOperatorOp::Plus {
+                    check_subsumation(&number_or_string, left_type, left.slice(), ctx.report_error);
+                    check_subsumation(
+                        &number_or_string,
+                        right_type,
+                        right.slice(),
+                        ctx.report_error,
+                    );
+                } else if operator == BinaryOperatorOp::Minus
+                    || operator == BinaryOperatorOp::Times
+                    || operator == BinaryOperatorOp::Divide
+                {
+                    check_subsumation(&Type::ANY_NUMBER, left_type, left.slice(), ctx.report_error);
+                    check_subsumation(
+                        &Type::ANY_NUMBER,
+                        right_type,
+                        right.slice(),
+                        ctx.report_error,
+                    );
+                } else if operator == BinaryOperatorOp::Equals
+                    || operator == BinaryOperatorOp::NotEquals
+                {
+                    if !left_type.subsumes((&*ctx).into(), &right_type)
+                        && !right_type.subsumes((&*ctx).into(), &left_type)
                     {
-                        check_subsumation(
-                            &Type::ANY_NUMBER,
-                            left_type,
-                            left.slice(),
-                            ctx.report_error,
-                        );
-                        check_subsumation(
-                            &Type::ANY_NUMBER,
-                            right_type,
-                            right.slice(),
-                            ctx.report_error,
-                        );
-                    } else if operator == &BinaryOperatorOp::Equals
-                        || operator == &BinaryOperatorOp::NotEquals
-                    {
-                        if !left_type.subsumes((&*ctx).into(), &right_type)
-                            && !right_type.subsumes((&*ctx).into(), &left_type)
-                        {
-                            ctx.report_error(BagelError::MiscError {
-                                module_id: ctx.current_module.module_id.clone(),
-                                src: op.slice().clone(),
-                                message: format!(
-                                    "Can't compare types {} and {} because they have no overlap",
-                                    blue_string(&left_type),
-                                    blue_string(&right_type),
-                                ),
-                            });
-                        }
+                        ctx.report_error(BagelError::MiscError {
+                            module_id: ctx.current_module.module_id.clone(),
+                            src: op.slice().clone(),
+                            message: format!(
+                                "Can't compare types {} and {} because they have no overlap",
+                                blue_string(&left_type),
+                                blue_string(&right_type),
+                            ),
+                        });
                     }
                 }
 

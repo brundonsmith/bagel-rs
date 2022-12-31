@@ -11,46 +11,43 @@ impl AST<Expression> {
     pub fn infer_type<'a>(&self, ctx: InferTypeContext<'a>) -> Type {
         match self.downcast() {
             Expression::BinaryOperation(BinaryOperation { left, op, right }) => {
-                match op.details() {
-                    Any::BinaryOperator(BinaryOperator(op)) => match op {
-                        BinaryOperatorOp::NullishCoalescing => todo!(),
-                        BinaryOperatorOp::Or => todo!(),
-                        BinaryOperatorOp::And => todo!(),
-                        BinaryOperatorOp::Equals => Type::ANY_BOOLEAN,
-                        BinaryOperatorOp::NotEquals => Type::ANY_BOOLEAN,
-                        BinaryOperatorOp::LessEqual => Type::ANY_BOOLEAN,
-                        BinaryOperatorOp::GreaterEqual => Type::ANY_BOOLEAN,
-                        BinaryOperatorOp::Less => Type::ANY_BOOLEAN,
-                        BinaryOperatorOp::Greater => Type::ANY_BOOLEAN,
-                        BinaryOperatorOp::Plus => {
-                            let left_type = left.infer_type(ctx);
-                            let right_type = right.infer_type(ctx);
+                match op.downcast().0 {
+                    BinaryOperatorOp::NullishCoalescing => todo!(),
+                    BinaryOperatorOp::Or => todo!(),
+                    BinaryOperatorOp::And => todo!(),
+                    BinaryOperatorOp::Equals => Type::ANY_BOOLEAN,
+                    BinaryOperatorOp::NotEquals => Type::ANY_BOOLEAN,
+                    BinaryOperatorOp::LessEqual => Type::ANY_BOOLEAN,
+                    BinaryOperatorOp::GreaterEqual => Type::ANY_BOOLEAN,
+                    BinaryOperatorOp::Less => Type::ANY_BOOLEAN,
+                    BinaryOperatorOp::Greater => Type::ANY_BOOLEAN,
+                    BinaryOperatorOp::Plus => {
+                        let left_type = left.infer_type(ctx);
+                        let right_type = right.infer_type(ctx);
 
-                            if Type::ANY_NUMBER.subsumes(ctx.into(), &left_type) {
-                                if Type::ANY_NUMBER.subsumes(ctx.into(), &right_type) {
-                                    Type::ANY_NUMBER
-                                } else if Type::ANY_STRING.subsumes(ctx.into(), &right_type) {
-                                    Type::ANY_STRING
-                                } else {
-                                    Type::UnknownType
-                                }
-                            } else if Type::ANY_STRING.subsumes(ctx.into(), &left_type) {
-                                if Type::ANY_NUMBER.subsumes(ctx.into(), &right_type)
-                                    || Type::ANY_STRING.subsumes(ctx.into(), &right_type)
-                                {
-                                    Type::ANY_STRING
-                                } else {
-                                    Type::UnknownType
-                                }
+                        if Type::ANY_NUMBER.subsumes(ctx.into(), &left_type) {
+                            if Type::ANY_NUMBER.subsumes(ctx.into(), &right_type) {
+                                Type::ANY_NUMBER
+                            } else if Type::ANY_STRING.subsumes(ctx.into(), &right_type) {
+                                Type::ANY_STRING
                             } else {
                                 Type::UnknownType
                             }
+                        } else if Type::ANY_STRING.subsumes(ctx.into(), &left_type) {
+                            if Type::ANY_NUMBER.subsumes(ctx.into(), &right_type)
+                                || Type::ANY_STRING.subsumes(ctx.into(), &right_type)
+                            {
+                                Type::ANY_STRING
+                            } else {
+                                Type::UnknownType
+                            }
+                        } else {
+                            Type::UnknownType
                         }
-                        BinaryOperatorOp::Minus => Type::ANY_NUMBER,
-                        BinaryOperatorOp::Times => Type::ANY_NUMBER,
-                        BinaryOperatorOp::Divide => Type::ANY_NUMBER,
-                    },
-                    _ => unreachable!(),
+                    }
+                    BinaryOperatorOp::Minus => Type::ANY_NUMBER,
+                    BinaryOperatorOp::Times => Type::ANY_NUMBER,
+                    BinaryOperatorOp::Divide => Type::ANY_NUMBER,
                 }
             }
             Expression::Parenthesis(Parenthesis(inner)) => inner.infer_type(ctx),
