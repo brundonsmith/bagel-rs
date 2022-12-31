@@ -1,6 +1,6 @@
 use super::ast::{
-    self, Any, Declaration, FuncDeclaration, ImportAllDeclaration, ImportDeclaration,
-    ProcDeclaration, ValueDeclaration, AST,
+    self, Declaration, FuncDeclaration, ImportAllDeclaration, ImportDeclaration, ProcDeclaration,
+    ValueDeclaration, AST,
 };
 use super::errors::ParseError;
 use super::slice::Slice;
