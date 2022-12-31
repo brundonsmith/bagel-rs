@@ -1081,8 +1081,8 @@ fn expression_inner(l: usize, i: Slice) -> ParseResult<AST<Expression>> {
         tl,
         i,
         alt((
-            func,
-            // map(proc, |x| x.map(Any::from)),
+            map(func, AST::recast::<Expression>),
+            map(proc, AST::recast::<Expression>)
         ))
     );
     parse_level_expression!(l, tl, i, binary_operation_1(tl, "??"));
@@ -1474,7 +1474,49 @@ fn javascript_escape_expression(i: Slice) -> ParseResult<AST<JavascriptEscape>> 
 
 #[memoize]
 fn proc(i: Slice) -> ParseResult<AST<Proc>> {
-    todo!()
+    map(
+        seq!(
+            opt(tag("pure")),
+            opt(tag("async")),
+            alt((args_parenthesized, arg_singleton)),
+            block,
+        ),
+        |(pure, asyn, mut args, mut body)| {
+            let is_async = asyn.is_some();
+            let is_pure = pure.is_some();
+            let src = pure
+                .unwrap_or(asyn.unwrap_or_else(|| {
+                    args.get(0)
+                        .map(|arg| arg.downcast().name.slice().clone())
+                        .unwrap_or(body.slice().clone())
+                }))
+                .spanning(body.slice());
+
+            let mut type_annotation = ProcType {
+                args: args.clone(),
+                args_spread: None, // TODO
+                is_pure,
+                is_async,
+                throws: None, // TODO
+            }
+            .as_ast(src.clone());
+
+            args.set_parent(&type_annotation);
+
+            let this = Proc {
+                type_annotation: type_annotation.clone(),
+                is_async,
+                is_pure,
+                body: body.clone(),
+            }
+            .as_ast(src.clone());
+
+            type_annotation.set_parent(&this);
+            body.set_parent(&this);
+
+            this
+        },
+    )(i)
 }
 
 #[memoize]

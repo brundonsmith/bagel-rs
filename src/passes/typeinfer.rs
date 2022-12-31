@@ -231,7 +231,7 @@ impl AST<Expression> {
                 }
             }
             Expression::ObjectLiteral(ObjectLiteral(entries)) => todo!(),
-            Expression::NegationOperation(NegationOperation(inner)) => todo!(),
+            Expression::NegationOperation(NegationOperation(_)) => Type::BooleanType(None),
             Expression::Func(Func {
                 type_annotation,
                 is_async: _,
@@ -294,7 +294,12 @@ impl AST<Expression> {
                 }
             }
             Expression::JavascriptEscape(_) => Type::AnyType,
-            Expression::RangeExpression(RangeExpression { start, end }) => todo!(),
+            Expression::RangeExpression(RangeExpression { start, end }) => {
+                let min = start.infer_type(ctx).to_exact_number();
+                let max = end.infer_type(ctx).to_exact_number();
+
+                Type::IteratorType(Box::new(Type::NumberType { min, max }))
+            }
             Expression::Invocation(Invocation {
                 subject,
                 args,
@@ -355,7 +360,18 @@ impl AST<Expression> {
                 value,
                 cases,
                 default_case,
-            }) => todo!(),
+            }) => Type::UnionType(
+                cases
+                    .iter()
+                    .map(|case| case.downcast().outcome.infer_type(ctx))
+                    .chain(
+                        default_case
+                            .as_ref()
+                            .map(|case| case.infer_type(ctx))
+                            .into_iter(),
+                    )
+                    .collect(),
+            ),
             Expression::ElementTag(ElementTag {
                 tag_name,
                 attributes,
@@ -366,8 +382,12 @@ impl AST<Expression> {
                 inner: _,
                 possible_type: _,
             }) => Type::ANY_BOOLEAN,
-            Expression::ErrorExpression(ErrorExpression(inner)) => todo!(),
-            Expression::RegularExpression(RegularExpression { expr, flags }) => todo!(),
+            Expression::ErrorExpression(ErrorExpression(inner)) => {
+                Type::ErrorType(Box::new(inner.infer_type(ctx)))
+            }
+            Expression::RegularExpression(RegularExpression { expr, flags }) => {
+                Type::RegularExpressionType
+            }
         }
     }
 }

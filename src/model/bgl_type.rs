@@ -349,6 +349,23 @@ impl Type {
             _ => self,
         }
     }
+
+    pub fn to_exact_number(&self) -> Option<i32> {
+        match self {
+            Type::NumberType { min, max } => {
+                if let (Some(min), Some(max)) = (min, max) {
+                    if min == max {
+                        Some(*min)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
