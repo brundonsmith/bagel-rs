@@ -186,7 +186,23 @@ where
                 destination_type,
                 value_type,
             }) => todo!(),
-            Any::StringLiteral(StringLiteral { tag, segments }) => todo!(),
+            Any::StringLiteral(StringLiteral { tag: _, segments }) => {
+                for segment in segments {
+                    match segment {
+                        StringLiteralSegment::Slice(_) => {}
+                        StringLiteralSegment::AST(insert) => {
+                            insert.check(ctx);
+
+                            check_subsumation(
+                                &Type::string_template_safe_types(),
+                                insert.infer_type(ctx.into()),
+                                insert.slice(),
+                                ctx.report_error,
+                            );
+                        }
+                    }
+                }
+            }
             Any::ArrayLiteral(ArrayLiteral(members)) => {
                 for member in members {
                     match member {
@@ -254,19 +270,6 @@ where
                         });
                     }
                 }
-
-                // match op {
-                //     BinaryOperator::NullishCoalescing => todo!(),
-                //     BinaryOperator::Or => todo!(),
-                //     BinaryOperator::And => todo!(),
-                //     BinaryOperator::Equals => todo!(),
-                //     BinaryOperator::NotEquals => todo!(),
-                //     BinaryOperator::LessEqual => todo!(),
-                //     BinaryOperator::GreaterEqual => todo!(),
-                //     BinaryOperator::Less => todo!(),
-                //     BinaryOperator::Greater => todo!(),
-                //     BinaryOperator::InstanceOf => todo!(),
-                // }
             }
             Any::NegationOperation(NegationOperation(inner)) => {
                 inner.check(ctx);
@@ -515,11 +518,30 @@ where
                 value,
                 cases,
                 default_case,
-            }) => todo!(),
+            }) => {
+                value.check(ctx);
+                cases.check(ctx);
+                default_case.check(ctx);
+
+                let value_type = value.infer_type(ctx.into());
+                for case in cases {
+                    let case = case.downcast();
+
+                    check_subsumation(
+                        &value_type,
+                        case.type_filter.resolve_type(ctx.into()),
+                        case.type_filter.slice(),
+                        ctx.report_error,
+                    );
+                }
+            }
             Any::SwitchExpressionCase(SwitchExpressionCase {
                 type_filter,
                 outcome,
-            }) => todo!(),
+            }) => {
+                type_filter.check(ctx);
+                outcome.check(ctx);
+            }
             Any::ElementTag(ElementTag {
                 tag_name,
                 attributes,
@@ -550,7 +572,6 @@ where
                     ctx.report_error,
                 );
             }
-            Any::ErrorExpression(ErrorExpression(_)) => todo!(),
             Any::UnionType(UnionType(members)) => {
                 members.check(ctx);
             }
@@ -679,7 +700,7 @@ where
                     }
                 }
             },
-            Any::TypeofType(TypeofType(_)) => todo!(),
+            Any::TypeofType(TypeofType(expr)) => expr.check(ctx),
             Any::PropertyType(PropertyType {
                 subject,
                 property,
@@ -744,7 +765,18 @@ where
                 item_identifier,
                 iterator,
                 body,
-            }) => todo!(),
+            }) => {
+                item_identifier.check(ctx);
+                iterator.check(ctx);
+                body.check(ctx);
+
+                check_subsumation(
+                    &Type::any_iterator(),
+                    iterator.infer_type(ctx.into()),
+                    iterator.slice(),
+                    ctx.report_error,
+                );
+            }
             Any::WhileLoop(WhileLoop { condition, body }) => {
                 condition.check(ctx);
                 body.check(ctx);
@@ -779,7 +811,16 @@ where
                 error_identifier,
                 catch_block,
             }) => todo!(),
-            Any::ThrowStatement(ThrowStatement { error_expression }) => todo!(),
+            Any::ThrowStatement(ThrowStatement { error_expression }) => {
+                error_expression.check(ctx);
+
+                check_subsumation(
+                    &Type::any_error(),
+                    error_expression.infer_type(ctx.into()),
+                    error_expression.slice(),
+                    ctx.report_error,
+                );
+            }
             Any::Autorun(Autorun {
                 effect_block,
                 until,
@@ -796,6 +837,7 @@ where
                     );
                 }
             }
+            Any::ErrorExpression(ErrorExpression(inner)) => inner.check(ctx),
 
             // intentionally have nothing to check
             Any::JavascriptEscape(_) => {}
