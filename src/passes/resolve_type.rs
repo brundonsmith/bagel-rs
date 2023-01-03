@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use crate::model::{
     ast::*,
-    bgl_type::{KeyValueOrSpread, SubsumationContext, Type},
+    bgl_type::{SubsumationContext, Type},
     errors::BagelError,
     module::{Module, ModulesStore},
 };
@@ -109,7 +109,6 @@ impl AST<TypeExpression> {
                 inner.resolve_type(ctx).union(Type::NilType)
             }
             TypeExpression::NamedType(NamedType(name)) => Type::NamedType(name.clone()),
-            TypeExpression::RegularExpressionType(_) => Type::RegularExpressionType {},
             TypeExpression::RecordType(RecordType {
                 key_type,
                 value_type,
@@ -123,9 +122,6 @@ impl AST<TypeExpression> {
             TypeExpression::TupleType(TupleType(members)) => {
                 Type::TupleType(members.iter().map(|x| x.resolve_type(ctx)).collect())
             }
-            TypeExpression::StringType(_) => Type::ANY_STRING,
-            TypeExpression::NumberType(_) => Type::ANY_NUMBER,
-            TypeExpression::BooleanType(_) => Type::ANY_BOOLEAN,
             TypeExpression::StringLiteralType(StringLiteralType(value)) => {
                 Type::StringType(Some(value.clone()))
             }
@@ -136,10 +132,8 @@ impl AST<TypeExpression> {
             TypeExpression::BooleanLiteralType(BooleanLiteralType(value)) => {
                 Type::BooleanType(Some(value))
             }
-            TypeExpression::NilType(_) => Type::NilType,
             TypeExpression::ParenthesizedType(ParenthesizedType(inner)) => inner.resolve_type(ctx),
             TypeExpression::TypeofType(TypeofType(expression)) => expression.infer_type(ctx.into()),
-            TypeExpression::UnknownType(_) => Type::UnknownType,
             TypeExpression::PropertyType(PropertyType {
                 subject,
                 property,
@@ -148,6 +142,12 @@ impl AST<TypeExpression> {
                 subject: Rc::new(subject.resolve_type(ctx)),
                 property: Rc::new(property.resolve_type(ctx)),
             },
+            TypeExpression::RegularExpressionType(_) => Type::RegularExpressionType {},
+            TypeExpression::StringType(_) => Type::ANY_STRING,
+            TypeExpression::NumberType(_) => Type::ANY_NUMBER,
+            TypeExpression::BooleanType(_) => Type::ANY_BOOLEAN,
+            TypeExpression::NilType(_) => Type::NilType,
+            TypeExpression::UnknownType(_) => Type::UnknownType,
         }
     }
 }

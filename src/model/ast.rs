@@ -77,10 +77,6 @@ where
     TKind: Clone + TryFrom<Any>,
     Any: From<TKind>,
 {
-    pub fn slice(&self) -> &Slice {
-        &self.0.slice
-    }
-
     pub fn details(&self) -> &Any {
         &self.0.details
     }
@@ -130,6 +126,33 @@ where
         TExpected::try_from(self.0.details.clone())
             .ok()
             .map(|_| AST::<TExpected>(self.0, PhantomData))
+    }
+}
+
+pub trait Slicable {
+    fn slice(&self) -> &Slice;
+
+    fn spanning<T: Slicable>(&self, other: &T) -> Slice {
+        let this_slice = self.slice().clone();
+        let other_slice = other.slice();
+
+        this_slice.join(other_slice)
+    }
+}
+
+impl Slicable for Slice {
+    fn slice(&self) -> &Slice {
+        self
+    }
+}
+
+impl<TKind> Slicable for AST<TKind>
+where
+    TKind: Clone + TryFrom<Any>,
+    Any: From<TKind>,
+{
+    fn slice(&self) -> &Slice {
+        &self.0.slice
     }
 }
 
@@ -183,22 +206,6 @@ where
     {
         for ast in self.iter_mut() {
             ast.set_parent(parent);
-        }
-    }
-}
-
-impl Parentable for ObjectTypeEntry {
-    fn set_parent<TParentKind>(&mut self, parent: &AST<TParentKind>)
-    where
-        TParentKind: Clone + TryFrom<Any>,
-        Any: From<TParentKind>,
-    {
-        match self {
-            ObjectTypeEntry::KeyValueType(KeyValueType { key, value }) => {
-                key.set_parent(parent);
-                value.set_parent(parent);
-            }
-            ObjectTypeEntry::SpreadType(SpreadType(expr)) => expr.set_parent(parent),
         }
     }
 }
@@ -766,7 +773,7 @@ where
     Any: From<TKind>,
 {
     vec.get(0)
-        .map(|first| first.slice().clone().spanning(vec[vec.len() - 1].slice()))
+        .map(|first| first.slice().clone().join(vec[vec.len() - 1].slice()))
 }
 
 pub trait WithSlice: Sized

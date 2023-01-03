@@ -29,7 +29,7 @@ impl Slice {
         self.start <= other.start && self.end >= other.end
     }
 
-    pub fn spanning(self, other: &Slice) -> Slice {
+    pub fn join(self, other: &Slice) -> Slice {
         Self {
             full_string: self.full_string,
             start: usize::min(self.start, other.start),
