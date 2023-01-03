@@ -98,15 +98,10 @@ impl AST<TypeExpression> {
                     ModifierTypeKind::Elementof => Type::ElementofType(inner),
                 }
             }
-            TypeExpression::SpecialType(SpecialType { kind, inner }) => {
-                let inner = Rc::new(inner.resolve_type(ctx));
-
-                match kind {
-                    SpecialTypeKind::Iterator => Type::IteratorType(inner),
-                    SpecialTypeKind::Plan => Type::PlanType(inner),
-                    SpecialTypeKind::Error => Type::ErrorType(inner),
-                }
-            }
+            TypeExpression::SpecialType(SpecialType { kind, inner }) => Type::SpecialType {
+                kind,
+                inner: Rc::new(inner.resolve_type(ctx)),
+            },
             TypeExpression::UnionType(UnionType(members)) => {
                 Type::UnionType(members.iter().map(|m| m.resolve_type(ctx)).collect())
             }

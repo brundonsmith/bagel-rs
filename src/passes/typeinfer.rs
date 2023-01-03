@@ -300,7 +300,10 @@ impl AST<Expression> {
                 let min = start.infer_type(ctx).to_exact_number();
                 let max = end.infer_type(ctx).to_exact_number();
 
-                Type::IteratorType(Rc::new(Type::NumberType { min, max }))
+                Type::SpecialType {
+                    kind: SpecialTypeKind::Iterator,
+                    inner: Rc::new(Type::NumberType { min, max }),
+                }
             }
             Expression::Invocation(Invocation {
                 subject,
@@ -384,9 +387,10 @@ impl AST<Expression> {
                 inner: _,
                 possible_type: _,
             }) => Type::ANY_BOOLEAN,
-            Expression::ErrorExpression(ErrorExpression(inner)) => {
-                Type::ErrorType(Rc::new(inner.infer_type(ctx)))
-            }
+            Expression::ErrorExpression(ErrorExpression(inner)) => Type::SpecialType {
+                kind: SpecialTypeKind::Error,
+                inner: Rc::new(inner.infer_type(ctx)),
+            },
             Expression::RegularExpression(RegularExpression { expr, flags }) => {
                 Type::RegularExpressionType
             }

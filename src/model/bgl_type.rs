@@ -12,7 +12,7 @@ use crate::{
 };
 
 use super::{
-    ast::{Any, LocalIdentifier, TypeDeclaration, AST},
+    ast::{Any, LocalIdentifier, SpecialTypeKind, TypeDeclaration, AST},
     errors::BagelError,
     module::Module,
     slice::Slice,
@@ -78,11 +78,10 @@ pub enum Type {
 
     NamedType(AST<LocalIdentifier>),
 
-    IteratorType(Rc<Type>),
-
-    PlanType(Rc<Type>),
-
-    ErrorType(Rc<Type>),
+    SpecialType {
+        kind: SpecialTypeKind,
+        inner: Rc<Type>,
+    },
 
     RegularExpressionType, // TODO: Number of match groups?
 
@@ -119,17 +118,26 @@ pub fn any_array() -> Type {
 
 #[memoize]
 pub fn any_iterator() -> Type {
-    Type::IteratorType(Rc::new(Type::AnyType))
+    Type::SpecialType {
+        kind: SpecialTypeKind::Iterator,
+        inner: Rc::new(Type::AnyType),
+    }
 }
 
 #[memoize]
 pub fn any_error() -> Type {
-    Type::ErrorType(Rc::new(Type::AnyType))
+    Type::SpecialType {
+        kind: SpecialTypeKind::Error,
+        inner: Rc::new(Type::AnyType),
+    }
 }
 
 #[memoize]
 pub fn any_plan() -> Type {
-    Type::PlanType(Rc::new(Type::AnyType))
+    Type::SpecialType {
+        kind: SpecialTypeKind::Plan,
+        inner: Rc::new(Type::AnyType),
+    }
 }
 
 impl Type {
@@ -290,14 +298,19 @@ impl Type {
                     returns: returns_2,
                 },
             ) => {}
-            (Type::PlanType(destination), Type::PlanType(value)) => {
-                return destination.subsumation_issues(ctx, value);
-            }
-            (Type::IteratorType(destination), Type::IteratorType(value)) => {
-                return destination.subsumation_issues(ctx, value);
-            }
-            (Type::ErrorType(destination), Type::ErrorType(value)) => {
-                return destination.subsumation_issues(ctx, value);
+            (
+                Type::SpecialType {
+                    kind: destination_kind,
+                    inner: destination_inner,
+                },
+                Type::SpecialType {
+                    kind: value_kind,
+                    inner: value_inner,
+                },
+            ) => {
+                if destination_kind == value_kind {
+                    return destination_inner.subsumation_issues(ctx, value_inner);
+                }
             }
             (Type::UnknownType, _) => {
                 return None;
@@ -598,9 +611,10 @@ impl Display for Type {
             },
             Type::NilType => f.write_str("nil"),
             Type::NamedType(name) => f.write_str(name.downcast().0.as_str()),
-            Type::IteratorType(inner) => f.write_fmt(format_args!("Iterator<{}>", inner)),
-            Type::PlanType(inner) => f.write_fmt(format_args!("Plan<{}>", inner)),
-            Type::ErrorType(inner) => f.write_fmt(format_args!("Error<{}>", inner)),
+            Type::SpecialType { kind, inner } => {
+                let kind: &'static str = kind.into();
+                f.write_fmt(format_args!("{}<{}>", kind, inner))
+            }
             Type::UnknownType => f.write_str("unknown"),
             Type::PoisonedType => f.write_str("unknown"),
             Type::AnyType => f.write_str("any"),
