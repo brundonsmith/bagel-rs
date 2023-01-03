@@ -192,7 +192,15 @@ where
             }) => todo!(),
             Any::Block(Block(_)) => todo!(),
             Any::JavascriptEscape(JavascriptEscape(_)) => todo!(),
-            Any::RangeExpression(RangeExpression { start, end }) => todo!(),
+            Any::RangeExpression(RangeExpression { start, end }) => {
+                start.format(f, opts)?;
+                f.write_str("..")?;
+                end.format(f, opts)
+            }
+            Any::AwaitExpression(AwaitExpression(inner)) => {
+                f.write_str("await ")?;
+                inner.format(f, opts)
+            }
             Any::Invocation(Invocation {
                 subject,
                 args,

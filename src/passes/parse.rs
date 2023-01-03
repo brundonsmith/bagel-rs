@@ -786,7 +786,7 @@ fn statement(i: Slice) -> ParseResult<AST<Statement>> {
         map(autorun, AST::recast::<Statement>),
         map(
             seq!(
-                invocation_accessor_chain(12), // HACK: Has to be kept in sync with expression() function!
+                invocation_accessor_chain(13), // HACK: Has to be kept in sync with expression() function!
                 tag(";")
             ),
             |(invocation, _)| {
@@ -898,7 +898,7 @@ fn assignment(i: Slice) -> ParseResult<AST<Assignment>> {
     map(
         seq!(
             alt((
-                map(invocation_accessor_chain(12), AST::recast::<Expression>),
+                map(invocation_accessor_chain(13), AST::recast::<Expression>),
                 map(local_identifier, AST::recast::<Expression>)
             )),
             pair(
@@ -1011,6 +1011,16 @@ fn expression_inner(l: usize, i: Slice) -> ParseResult<AST<Expression>> {
             map(instance_of(tl), AST::recast::<Expression>)
         ))
     );
+
+    parse_level_expression!(
+        l,
+        tl,
+        i,
+        map(seq!(tag("await"), expression(tl)), |(keyword, mut expr)| {
+            make_node_tuple!(AwaitExpression, keyword.spanning(&expr), expr).recast::<Expression>()
+        })
+    );
+
     parse_level_expression!(l, tl, i, negation_operation(tl));
 
     // indexer
@@ -1072,7 +1082,7 @@ fn invocation_accessor_chain_inner(level: usize, i: Slice) -> ParseResult<AST<Ex
                 dot_property_access,
             )))
         ),
-        |(mut awaited_or_detached, mut base, clauses)| {
+        |(mut awaited_or_detached, base, clauses)| {
             let mut next_subject = base;
 
             for clause in clauses {

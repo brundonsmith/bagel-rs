@@ -410,6 +410,9 @@ pub struct RangeExpression {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct AwaitExpression(pub AST<Expression>);
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct Invocation {
     pub subject: AST<Expression>,
     pub args: Vec<AST<Expression>>,
@@ -1006,6 +1009,7 @@ union_type! {
         | Block
         | JavascriptEscape
         | RangeExpression
+        | AwaitExpression
         | Invocation
         | PropertyAccessor
         | IfElseExpression
@@ -1087,6 +1091,7 @@ union_subtype!(
         | Proc
         | JavascriptEscape
         | RangeExpression
+        | AwaitExpression
         | Invocation
         | PropertyAccessor
         | IfElseExpression

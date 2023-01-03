@@ -272,6 +272,7 @@ where
             }
             Any::JavascriptEscape(_) => todo!(),
             Any::RangeExpression(RangeExpression { start, end }) => todo!(),
+            Any::AwaitExpression(AwaitExpression(inner)) => todo!(),
             Any::Invocation(Invocation {
                 subject,
                 args,

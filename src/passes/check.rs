@@ -2,8 +2,8 @@ use crate::{
     model::{
         ast::*,
         bgl_type::{
-            any_array, any_error, any_iterator, string_template_safe_types, truthiness_safe_types,
-            SubsumationContext, Type,
+            any_array, any_error, any_iterator, any_plan, string_template_safe_types,
+            truthiness_safe_types, SubsumationContext, Type,
         },
         errors::blue_string,
         slice::Slice,
@@ -411,6 +411,14 @@ where
                     &Type::ANY_NUMBER,
                     end.infer_type(ctx.into()),
                     end.slice(),
+                    ctx.report_error,
+                );
+            }
+            Any::AwaitExpression(AwaitExpression(inner)) => {
+                check_subsumation(
+                    &any_plan(),
+                    inner.infer_type(ctx.into()),
+                    inner.slice(),
                     ctx.report_error,
                 );
             }

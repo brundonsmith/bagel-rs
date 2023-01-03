@@ -4,7 +4,7 @@ use crate::{
     model::ast::*,
     model::{
         ast::Any,
-        bgl_type::{KeyValueOrSpread, Type},
+        bgl_type::{any_plan, KeyValueOrSpread, Type},
         errors::BagelError,
         module::Module,
     },
@@ -323,6 +323,7 @@ impl AST<Expression> {
                     inner: Rc::new(Type::NumberType { min, max }),
                 }
             }
+            Expression::AwaitExpression(AwaitExpression(inner)) => todo!(),
             Expression::Invocation(Invocation {
                 subject,
                 args,
