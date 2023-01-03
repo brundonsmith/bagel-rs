@@ -115,11 +115,7 @@ impl AST<Expression> {
                                 .map(|t| t.resolve_type(ctx.into()))
                                 .unwrap_or(Type::PoisonedType);
                         }
-                        Any::InlineDeclaration(InlineDeclaration {
-                            destination,
-                            awaited,
-                            value,
-                        }) => {
+                        Any::InlineDeclaration(InlineDeclaration { destination, value }) => {
                             return match destination {
                                 DeclarationDestination::NameAndType(NameAndType {
                                     name: _,
@@ -134,7 +130,6 @@ impl AST<Expression> {
                         Any::DeclarationStatement(DeclarationStatement {
                             destination,
                             value,
-                            awaited,
                             is_const,
                         }) => {
                             return match destination {

@@ -334,11 +334,7 @@ where
                 declarations.check(ctx);
                 inner.check(ctx);
             }
-            Any::InlineDeclaration(InlineDeclaration {
-                destination,
-                awaited,
-                value,
-            }) => {
+            Any::InlineDeclaration(InlineDeclaration { destination, value }) => {
                 match destination {
                     DeclarationDestination::NameAndType(NameAndType {
                         name,
@@ -739,7 +735,6 @@ where
             Any::DeclarationStatement(DeclarationStatement {
                 destination,
                 value,
-                awaited,
                 is_const,
             }) => {
                 match destination {

@@ -164,11 +164,7 @@ where
                 declarations,
                 inner,
             }) => todo!(),
-            Any::InlineDeclaration(InlineDeclaration {
-                destination,
-                awaited,
-                value,
-            }) => todo!(),
+            Any::InlineDeclaration(InlineDeclaration { destination, value }) => todo!(),
             Any::Func(Func {
                 type_annotation,
                 is_async,
@@ -348,7 +344,6 @@ where
             Any::DeclarationStatement(DeclarationStatement {
                 destination,
                 value,
-                awaited,
                 is_const,
             }) => todo!(),
             Any::IfElseStatement(IfElseStatement {

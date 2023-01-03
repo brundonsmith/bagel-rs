@@ -814,12 +814,10 @@ fn declaration_statement(i: Slice) -> ParseResult<AST<DeclarationStatement>> {
             alt((tag("let"), tag("const"))),
             declaration_destination,
             tag("="),
-            opt(tag("await")),
             expression(0),
             tag(";")
         ),
-        |(keyword, mut destination, _, awaited, mut value, end)| {
-            let mut awaited = awaited.is_some();
+        |(keyword, mut destination, _, mut value, end)| {
             let mut is_const = keyword.as_str() == "const";
 
             make_node!(
@@ -827,7 +825,6 @@ fn declaration_statement(i: Slice) -> ParseResult<AST<DeclarationStatement>> {
                 keyword.spanning(&end),
                 destination,
                 value,
-                awaited,
                 is_const
             )
         },
@@ -1480,20 +1477,11 @@ fn inline_declaration(i: Slice) -> ParseResult<AST<InlineDeclaration>> {
             tag("const"),
             declaration_destination,
             tag("="),
-            opt(tag("await")),
             expression(0),
             tag(",")
         ),
-        |(start, mut destination, _, awaited, mut value, end)| {
-            let mut awaited = awaited.is_some();
-
-            make_node!(
-                InlineDeclaration,
-                start.spanning(&end),
-                destination,
-                awaited,
-                value
-            )
+        |(start, mut destination, _, mut value, end)| {
+            make_node!(InlineDeclaration, start.spanning(&end), destination, value)
         },
     )(i)
 }

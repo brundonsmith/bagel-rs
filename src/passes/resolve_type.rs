@@ -98,24 +98,6 @@ impl AST<TypeExpression> {
                     .collect(),
                 is_interface,
             },
-            //  match inner.resolve_type(ctx) {
-            //     Type::RecordType {
-            //         key_type,
-            //         value_type,
-            //         mutability,
-            //     } => key_type.as_ref().clone(),
-            //     Type::ObjectType {
-            //         entries,
-            //         mutability,
-            //         is_interface,
-            //     } => Type::UnionType(
-            //         entries
-            //             .into_iter()
-            //             .map(|(key, _)| Type::StringType(Some(key)))
-            //             .collect(),
-            //     ),
-            //     _ => Type::PoisonedType,
-            // },
             TypeExpression::UnionType(UnionType(members)) => {
                 Type::UnionType(members.iter().map(|m| m.resolve_type(ctx)).collect())
             }

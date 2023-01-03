@@ -377,7 +377,6 @@ pub struct InlineConstGroup {
 #[derive(Debug, Clone, PartialEq)]
 pub struct InlineDeclaration {
     pub destination: DeclarationDestination,
-    pub awaited: bool,
     pub value: AST<Expression>,
 }
 
@@ -619,7 +618,6 @@ pub struct PropertyType {
 pub struct DeclarationStatement {
     pub destination: DeclarationDestination,
     pub value: AST<Expression>,
-    pub awaited: bool,
     pub is_const: bool,
 }
 

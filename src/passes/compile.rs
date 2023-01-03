@@ -219,11 +219,7 @@ where
                 inner.compile(f)?;
                 f.write_str(";\n})()")
             }
-            Any::InlineDeclaration(InlineDeclaration {
-                destination,
-                awaited,
-                value,
-            }) => {
+            Any::InlineDeclaration(InlineDeclaration { destination, value }) => {
                 f.write_str("const ")?;
                 destination.compile(f)?;
                 f.write_str(" = ")?;
@@ -421,7 +417,6 @@ where
             Any::DeclarationStatement(DeclarationStatement {
                 destination,
                 value,
-                awaited,
                 is_const,
             }) => todo!(),
             Any::IfElseStatement(IfElseStatement {

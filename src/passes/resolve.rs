@@ -148,7 +148,6 @@ where
                             Any::DeclarationStatement(DeclarationStatement {
                                 destination,
                                 value: _,
-                                awaited: _,
                                 is_const: _,
                             }) => match destination {
                                 DeclarationDestination::NameAndType(NameAndType {
