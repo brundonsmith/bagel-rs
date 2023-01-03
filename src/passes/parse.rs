@@ -739,15 +739,14 @@ fn object_or_interface_type(i: Slice) -> ParseResult<AST<ObjectType>> {
 }
 
 #[memoize]
-fn key_value_type(i: Slice) -> ParseResult<ObjectTypeEntry> {
+fn key_value_type(i: Slice) -> ParseResult<KeyValueOrSpread<AST<TypeExpression>>> {
     map(
         separated_pair(plain_identifier, tag(":"), type_expression(0)),
         |(key, value)| {
-            KeyValueType {
-                key: key.upcast(),
+            KeyValueOrSpread::KeyValue(
+                identifier_to_string_type(key).recast::<TypeExpression>(),
                 value,
-            }
-            .into()
+            )
         },
     )(i)
 }
@@ -757,7 +756,16 @@ fn tuple_type(i: Slice) -> ParseResult<AST<TupleType>> {
     map(
         seq!(
             tag("["),
-            separated_list0(w(tag(",")), w(type_expression(0))),
+            separated_list0(
+                w(tag(",")),
+                w(alt((
+                    map(
+                        preceded(tag("..."), type_expression(0)),
+                        ElementOrSpread::Spread
+                    ),
+                    map(type_expression(0), ElementOrSpread::Element),
+                )))
+            ),
             tag("]"),
         ),
         |(open, mut members, close)| make_node_tuple!(TupleType, open.spanning(&close), members),
@@ -1368,14 +1376,6 @@ fn range_expression(i: Slice) -> ParseResult<AST<RangeExpression>> {
 }
 
 #[memoize]
-fn spread_expression(i: Slice) -> ParseResult<AST<SpreadExpression>> {
-    map(
-        tuple((tag("..."), expression(0))),
-        |(mut start, mut inner)| make_node_tuple!(SpreadExpression, start.spanning(&inner), inner),
-    )(i)
-}
-
-#[memoize]
 fn javascript_escape_expression(i: Slice) -> ParseResult<AST<JavascriptEscape>> {
     todo!()
 }
@@ -1556,15 +1556,11 @@ fn object_literal(i: Slice) -> ParseResult<AST<ObjectLiteral>> {
     )(i)
 }
 
-fn key_value_expression(i: Slice) -> ParseResult<ObjectLiteralEntry> {
+fn key_value_expression(i: Slice) -> ParseResult<KeyValueOrSpread<AST<Expression>>> {
     map(
         seq!(plain_identifier, tag(":"), expression(0)),
         |(key, _, value)| {
-            KeyValue {
-                key: key.upcast(),
-                value,
-            }
-            .into()
+            KeyValueOrSpread::KeyValue(identifier_to_string(key).recast::<Expression>(), value)
         },
     )(i)
 }
@@ -1577,8 +1573,8 @@ fn array_literal(i: Slice) -> ParseResult<AST<ArrayLiteral>> {
             separated_list0(
                 w(char(',')),
                 w(alt((
-                    map(spread_expression, ArrayLiteralEntry::Spread),
-                    map(expression(0), ArrayLiteralEntry::Expression),
+                    map(preceded(tag("..."), expression(0)), ElementOrSpread::Spread),
+                    map(expression(0), ElementOrSpread::Element),
                 )))
             ),
             tag("]"),

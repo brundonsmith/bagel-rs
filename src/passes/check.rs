@@ -2,7 +2,7 @@ use crate::{
     model::{
         ast::*,
         bgl_type::{
-            any_array, any_error, any_iterator, any_plan, string_template_safe_types,
+            any_array, any_error, any_iterator, any_object, any_plan, string_template_safe_types,
             truthiness_safe_types, SubsumationContext, Type,
         },
         errors::blue_string,
@@ -207,18 +207,16 @@ where
                 }
             }
             Any::ArrayLiteral(ArrayLiteral(members)) => {
+                members.check(ctx);
+
                 for member in members {
                     match member {
-                        ArrayLiteralEntry::Expression(expr) => expr.check(ctx),
-                        ArrayLiteralEntry::Spread(spread_expr) => {
-                            spread_expr.check(ctx);
-
-                            let spread_inner = spread_expr.downcast().0;
-
+                        ElementOrSpread::Element(_) => {}
+                        ElementOrSpread::Spread(spread) => {
                             check_subsumation(
                                 &any_array(),
-                                spread_inner.infer_type(ctx.into()),
-                                spread_inner.slice(),
+                                spread.infer_type(ctx.into()),
+                                spread.slice(),
                                 ctx.report_error,
                             );
                         }
@@ -226,14 +224,18 @@ where
                 }
             }
             Any::ObjectLiteral(ObjectLiteral(entries)) => {
+                entries.check(ctx);
+
                 for entry in entries {
                     match entry {
-                        ObjectLiteralEntry::KeyValue(KeyValue { key, value }) => {
-                            key.check(ctx);
-                            value.check(ctx);
-                        }
-                        ObjectLiteralEntry::SpreadExpression(SpreadExpression(spread)) => {
-                            spread.check(ctx);
+                        KeyValueOrSpread::KeyValue(_, _) => {}
+                        KeyValueOrSpread::Spread(spread) => {
+                            check_subsumation(
+                                &any_object(),
+                                spread.infer_type(ctx.into()),
+                                spread.slice(),
+                                ctx.report_error,
+                            );
                         }
                     }
                 }
@@ -506,17 +508,17 @@ where
                 // TODO: detect unnecessary optional
                 // TODO: detect valid optional
 
-                if subject_type.indexed(&property_type).is_none() {
-                    ctx.report_error(BagelError::MiscError {
-                        module_id: ctx.current_module.module_id.clone(),
-                        src: property_slice,
-                        message: format!(
-                            "{} cannot be used to index type {}",
-                            blue_string(&property_type),
-                            blue_string(&subject_type)
-                        ),
-                    })
-                }
+                // if subject_type.indexed(&property_type).is_none() {
+                //     ctx.report_error(BagelError::MiscError {
+                //         module_id: ctx.current_module.module_id.clone(),
+                //         src: property_slice,
+                //         message: format!(
+                //             "{} cannot be used to index type {}",
+                //             blue_string(&property_type),
+                //             blue_string(&subject_type)
+                //         ),
+                //     })
+                // }
             }
             Any::IfElseExpression(IfElseExpression {
                 cases,
@@ -635,8 +637,12 @@ where
             Any::BoundGenericType(BoundGenericType { type_args, generic }) => todo!(),
             Any::ObjectType(ObjectType {
                 entries,
-                is_interface,
-            }) => todo!(),
+                is_interface: _,
+            }) => {
+                entries.check(ctx);
+
+                // TODO: Check that each spread can be spread into this type
+            }
             Any::RecordType(RecordType {
                 key_type,
                 value_type,
@@ -902,6 +908,39 @@ where
     fn check<'a, F: FnMut(BagelError)>(&self, ctx: &mut CheckContext<'a, F>) {
         for el in self.iter() {
             el.check(ctx);
+        }
+    }
+}
+
+impl<T> Checkable for KeyValueOrSpread<T>
+where
+    T: Checkable,
+{
+    fn check<'a, F: FnMut(BagelError)>(&self, ctx: &mut CheckContext<'a, F>) {
+        match self {
+            KeyValueOrSpread::KeyValue(key, value) => {
+                key.check(ctx);
+                value.check(ctx);
+            }
+            KeyValueOrSpread::Spread(spread) => {
+                spread.check(ctx);
+            }
+        }
+    }
+}
+
+impl<T> Checkable for ElementOrSpread<T>
+where
+    T: Checkable,
+{
+    fn check<'a, F: FnMut(BagelError)>(&self, ctx: &mut CheckContext<'a, F>) {
+        match self {
+            ElementOrSpread::Element(element) => {
+                element.check(ctx);
+            }
+            ElementOrSpread::Spread(spread) => {
+                spread.check(ctx);
+            }
         }
     }
 }

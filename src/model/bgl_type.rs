@@ -12,7 +12,10 @@ use crate::{
 };
 
 use super::{
-    ast::{Any, LocalIdentifier, SpecialTypeKind, TypeDeclaration, AST},
+    ast::{
+        Any, ElementOrSpread, KeyValueOrSpread, LocalIdentifier, SpecialTypeKind, TypeDeclaration,
+        AST,
+    },
     errors::BagelError,
     module::Module,
     slice::Slice,
@@ -20,22 +23,22 @@ use super::{
 
 #[derive(Clone, Debug, PartialEq, EnumVariantType)]
 pub enum Type {
+    // meta types
     ElementofType(Rc<Type>),
-
     ValueofType(Rc<Type>),
-
     KeyofType(Rc<Type>),
-
     ReadonlyType(Rc<Type>),
-
+    ResultOfType(Rc<Type>), // Plans
+    ReturnType(Rc<Type>),   // Funcs
     PropertyType {
         subject: Rc<Type>,
         property: Rc<Type>,
         // optional: bool,
     },
 
-    UnionType(Vec<Type>),
+    NamedType(AST<LocalIdentifier>),
 
+    // procs/funcs
     ProcType {
         args: Vec<Option<Type>>,
         args_spread: Option<Rc<Type>>,
@@ -43,7 +46,6 @@ pub enum Type {
         is_async: bool,
         throws: Option<Rc<Type>>,
     },
-
     FuncType {
         args: Vec<Option<Type>>,
         args_spread: Option<Rc<Type>>,
@@ -51,44 +53,37 @@ pub enum Type {
         returns: Rc<Type>,
     },
 
-    ObjectType {
-        entries: Vec<KeyValueOrSpread>,
-        is_interface: bool,
-    },
+    UnionType(Vec<Type>),
 
-    RecordType {
-        key_type: Rc<Type>,
-        value_type: Rc<Type>,
-    },
-
-    ArrayType(Rc<Type>),
-
-    TupleType(Vec<Type>),
-
-    StringType(Option<Slice>),
-
-    NumberType {
-        min: Option<i32>,
-        max: Option<i32>,
-    },
-
-    BooleanType(Option<bool>),
-
-    NilType,
-
-    NamedType(AST<LocalIdentifier>),
-
+    // data structures
     SpecialType {
         kind: SpecialTypeKind,
         inner: Rc<Type>,
     },
+    ObjectType {
+        entries: Vec<KeyValueOrSpread<Type>>,
+        is_interface: bool,
+    },
+    RecordType {
+        key_type: Rc<Type>,
+        value_type: Rc<Type>,
+    },
+    ArrayType(Rc<Type>),
+    TupleType(Vec<ElementOrSpread<Type>>),
 
+    // promitives
     RegularExpressionType, // TODO: Number of match groups?
+    StringType(Option<Slice>),
+    NumberType {
+        min: Option<i32>,
+        max: Option<i32>,
+    },
+    BooleanType(Option<bool>),
+    NilType,
 
+    // special signifiers
     UnknownType,
-
     PoisonedType,
-
     AnyType,
 }
 
@@ -114,6 +109,14 @@ pub fn string_template_safe_types() -> Type {
 #[memoize]
 pub fn any_array() -> Type {
     Type::ArrayType(Rc::new(Type::AnyType))
+}
+
+#[memoize]
+pub fn any_object() -> Type {
+    Type::RecordType {
+        key_type: Rc::new(Type::AnyType),
+        value_type: Rc::new(Type::AnyType),
+    }
 }
 
 #[memoize]
@@ -220,8 +223,12 @@ impl Type {
                 return dest
                     .subsumation_issues(ctx.with_val_mutability(Mutability::Readonly), inner);
             }
-            (Type::ArrayType(element), Type::TupleType(members)) => {
-                if members.iter().all(|member| element.subsumes(ctx, member)) {
+            (Type::ArrayType(destination_element), Type::TupleType(members)) => {
+                if members.iter().all(|member| match member {
+                    ElementOrSpread::Element(element) => destination_element.subsumes(ctx, element),
+                    ElementOrSpread::Spread(spread) => destination_element
+                        .subsumes(ctx, &Type::ElementofType(Rc::new(spread.clone()))),
+                }) {
                     return None;
                 }
             }
@@ -344,50 +351,50 @@ impl Type {
         Type::UnionType(vec![self, other])
     }
 
-    pub fn indexed(&self, other: &Self) -> Option<Type> {
-        match (self, other) {
-            (Type::ArrayType(element), Type::NumberType { min: _, max: _ }) => {
-                Some(element.as_ref().clone().union(Type::NilType))
-            }
-            (Type::TupleType(members), Type::NumberType { min, max }) => match min {
-                Some(min) => match max {
-                    Some(max) => {
-                        if *min as usize > members.len() || *max < 0 {
-                            Some(Type::PoisonedType)
-                        } else if min == max {
-                            members.get(*min as usize).cloned()
-                        } else {
-                            Some(Type::UnionType(
-                                (&members[*min as usize..*max as usize])
-                                    .iter()
-                                    .map(|m| m.clone())
-                                    .collect(),
-                            ))
-                        }
-                    }
-                    None => Some(Type::UnionType(
-                        (&members[*min as usize..])
-                            .iter()
-                            .map(|m| m.clone())
-                            .chain(std::iter::once(Type::NilType))
-                            .collect(),
-                    )),
-                },
-                None => match max {
-                    Some(max) => Some(Type::UnionType(
-                        (&members[..*max as usize])
-                            .iter()
-                            .map(|m| m.clone())
-                            .chain(std::iter::once(Type::NilType))
-                            .collect(),
-                    )),
-                    None => Some(Type::UnionType(members.clone())),
-                },
-            },
-            // (Type::RecordType { key_type, value_type }, index) =>
-            _ => None,
-        }
-    }
+    // pub fn indexed(&self, other: &Self) -> Option<Type> {
+    //     match (self, other) {
+    //         (Type::ArrayType(element), Type::NumberType { min: _, max: _ }) => {
+    //             Some(element.as_ref().clone().union(Type::NilType))
+    //         }
+    //         (Type::TupleType(members), Type::NumberType { min, max }) => match min {
+    //             Some(min) => match max {
+    //                 Some(max) => {
+    //                     if *min as usize > members.len() || *max < 0 {
+    //                         Some(Type::PoisonedType)
+    //                     } else if min == max {
+    //                         members.get(*min as usize).cloned()
+    //                     } else {
+    //                         Some(Type::UnionType(
+    //                             (&members[*min as usize..*max as usize])
+    //                                 .iter()
+    //                                 .map(|m| m.clone())
+    //                                 .collect(),
+    //                         ))
+    //                     }
+    //                 }
+    //                 None => Some(Type::UnionType(
+    //                     (&members[*min as usize..])
+    //                         .iter()
+    //                         .map(|m| m.clone())
+    //                         .chain(std::iter::once(Type::NilType))
+    //                         .collect(),
+    //                 )),
+    //             },
+    //             None => match max {
+    //                 Some(max) => Some(Type::UnionType(
+    //                     (&members[..*max as usize])
+    //                         .iter()
+    //                         .map(|m| m.clone())
+    //                         .chain(std::iter::once(Type::NilType))
+    //                         .collect(),
+    //                 )),
+    //                 None => Some(Type::UnionType(members.clone())),
+    //             },
+    //         },
+    //         // (Type::RecordType { key_type, value_type }, index) =>
+    //         _ => None,
+    //     }
+    // }
 
     pub fn broaden_for_mutation(self) -> Type {
         match self {
@@ -500,6 +507,8 @@ impl Display for Type {
             Type::ValueofType(inner) => f.write_fmt(format_args!("valueof {}", inner)),
             Type::KeyofType(inner) => f.write_fmt(format_args!("keyof {}", inner)),
             Type::ReadonlyType(inner) => f.write_fmt(format_args!("readonly {}", inner)),
+            Type::ResultOfType(inner) => todo!(),
+            Type::ReturnType(inner) => todo!(),
             Type::PropertyType { subject, property } => {
                 if let Type::StringType(Some(exact)) = property.as_ref() {
                     f.write_fmt(format_args!("{}.{}", subject, exact.as_str()))
@@ -507,17 +516,9 @@ impl Display for Type {
                     f.write_fmt(format_args!("{}[{}]", subject, property))
                 }
             }
-            Type::UnionType(members) => {
-                for (index, member) in members.iter().enumerate() {
-                    if index > 0 {
-                        f.write_str(" | ")?;
-                    }
 
-                    f.write_fmt(format_args!("{}", member))?;
-                }
+            Type::NamedType(name) => f.write_str(name.downcast().0.as_str()),
 
-                Ok(())
-            }
             Type::ProcType {
                 args,
                 args_spread,
@@ -568,10 +569,44 @@ impl Display for Type {
 
                 Ok(())
             }
+
+            Type::UnionType(members) => {
+                for (index, member) in members.iter().enumerate() {
+                    if index > 0 {
+                        f.write_str(" | ")?;
+                    }
+
+                    f.write_fmt(format_args!("{}", member))?;
+                }
+
+                Ok(())
+            }
+
+            Type::SpecialType { kind, inner } => {
+                let kind: &'static str = kind.into();
+                f.write_fmt(format_args!("{}<{}>", kind, inner))
+            }
             Type::ObjectType {
                 entries,
                 is_interface,
-            } => todo!(),
+            } => {
+                f.write_char('{')?;
+                for (index, entry) in entries.iter().enumerate() {
+                    if index > 0 {
+                        f.write_str(", ")?;
+                    }
+
+                    match entry {
+                        KeyValueOrSpread::KeyValue(key, value) => {
+                            f.write_fmt(format_args!("{}: {}", key, value))?;
+                        }
+                        KeyValueOrSpread::Spread(spread) => {
+                            f.write_fmt(format_args!("...{}", spread))?;
+                        }
+                    }
+                }
+                f.write_char('}')
+            }
             Type::RecordType {
                 key_type,
                 value_type,
@@ -584,10 +619,19 @@ impl Display for Type {
                         f.write_str(", ")?;
                     }
 
-                    f.write_fmt(format_args!("{}", member))?;
+                    match member {
+                        ElementOrSpread::Element(element) => {
+                            f.write_fmt(format_args!("{}", element))?;
+                        }
+                        ElementOrSpread::Spread(spread) => {
+                            f.write_fmt(format_args!("...{}", spread))?;
+                        }
+                    }
                 }
                 f.write_char(']')
             }
+
+            Type::RegularExpressionType {} => f.write_str("RegExp"),
             Type::StringType(s) => match s {
                 Some(s) => f.write_fmt(format_args!("'{}'", s.as_str())),
                 None => f.write_str("string"),
@@ -604,29 +648,17 @@ impl Display for Type {
                     }
                 }
             },
-            Type::BooleanType(b) => match b {
-                Some(true) => f.write_str("true"),
-                Some(false) => f.write_str("false"),
-                None => f.write_str("boolean"),
-            },
+            Type::BooleanType(b) => f.write_str(match b {
+                Some(true) => "true",
+                Some(false) => "false",
+                None => "boolean",
+            }),
             Type::NilType => f.write_str("nil"),
-            Type::NamedType(name) => f.write_str(name.downcast().0.as_str()),
-            Type::SpecialType { kind, inner } => {
-                let kind: &'static str = kind.into();
-                f.write_fmt(format_args!("{}<{}>", kind, inner))
-            }
             Type::UnknownType => f.write_str("unknown"),
             Type::PoisonedType => f.write_str("unknown"),
             Type::AnyType => f.write_str("any"),
-            Type::RegularExpressionType {} => f.write_str("RegExp"),
         }
     }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum KeyValueOrSpread {
-    KeyValue(Type, Type),
-    Spread(Type),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

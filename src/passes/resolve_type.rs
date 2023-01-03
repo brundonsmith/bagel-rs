@@ -12,7 +12,19 @@ use super::{check::CheckContext, typeinfer::InferTypeContext};
 impl AST<TypeExpression> {
     pub fn resolve_type<'a>(&self, ctx: ResolveContext<'a>) -> Type {
         match self.downcast() {
+            TypeExpression::ModifierType(ModifierType { kind, inner }) => {
+                let inner = Rc::new(inner.resolve_type(ctx));
+
+                match kind {
+                    ModifierTypeKind::Readonly => Type::ReadonlyType(inner),
+                    ModifierTypeKind::Keyof => Type::KeyofType(inner),
+                    ModifierTypeKind::Valueof => Type::ValueofType(inner),
+                    ModifierTypeKind::Elementof => Type::ElementofType(inner),
+                }
+            }
             TypeExpression::GenericParamType(GenericParamType { name, extends }) => todo!(),
+            TypeExpression::GenericType(GenericType { type_params, inner }) => todo!(),
+            TypeExpression::BoundGenericType(BoundGenericType { type_args, generic }) => todo!(),
             TypeExpression::ProcType(ProcType {
                 args,
                 args_spread,
@@ -64,12 +76,28 @@ impl AST<TypeExpression> {
                     .map(Rc::new)
                     .unwrap(),
             },
-            TypeExpression::GenericType(GenericType { type_params, inner }) => todo!(),
-            TypeExpression::BoundGenericType(BoundGenericType { type_args, generic }) => todo!(),
+            TypeExpression::SpecialType(SpecialType { kind, inner }) => Type::SpecialType {
+                kind,
+                inner: Rc::new(inner.resolve_type(ctx)),
+            },
             TypeExpression::ObjectType(ObjectType {
                 entries,
                 is_interface,
-            }) => todo!(),
+            }) => Type::ObjectType {
+                entries: entries
+                    .into_iter()
+                    .map(|entry| match entry {
+                        KeyValueOrSpread::KeyValue(key, value) => KeyValueOrSpread::KeyValue(
+                            key.resolve_type(ctx),
+                            value.resolve_type(ctx),
+                        ),
+                        KeyValueOrSpread::Spread(spread) => {
+                            KeyValueOrSpread::Spread(spread.resolve_type(ctx))
+                        }
+                    })
+                    .collect(),
+                is_interface,
+            },
             //  match inner.resolve_type(ctx) {
             //     Type::RecordType {
             //         key_type,
@@ -88,20 +116,6 @@ impl AST<TypeExpression> {
             //     ),
             //     _ => Type::PoisonedType,
             // },
-            TypeExpression::ModifierType(ModifierType { kind, inner }) => {
-                let inner = Rc::new(inner.resolve_type(ctx));
-
-                match kind {
-                    ModifierTypeKind::Readonly => Type::ReadonlyType(inner),
-                    ModifierTypeKind::Keyof => Type::KeyofType(inner),
-                    ModifierTypeKind::Valueof => Type::ValueofType(inner),
-                    ModifierTypeKind::Elementof => Type::ElementofType(inner),
-                }
-            }
-            TypeExpression::SpecialType(SpecialType { kind, inner }) => Type::SpecialType {
-                kind,
-                inner: Rc::new(inner.resolve_type(ctx)),
-            },
             TypeExpression::UnionType(UnionType(members)) => {
                 Type::UnionType(members.iter().map(|m| m.resolve_type(ctx)).collect())
             }
@@ -119,9 +133,19 @@ impl AST<TypeExpression> {
             TypeExpression::ArrayType(ArrayType(element)) => {
                 Type::ArrayType(Rc::new(element.resolve_type(ctx)))
             }
-            TypeExpression::TupleType(TupleType(members)) => {
-                Type::TupleType(members.iter().map(|x| x.resolve_type(ctx)).collect())
-            }
+            TypeExpression::TupleType(TupleType(members)) => Type::TupleType(
+                members
+                    .iter()
+                    .map(|x| match x {
+                        ElementOrSpread::Element(element) => {
+                            ElementOrSpread::Element(element.resolve_type(ctx))
+                        }
+                        ElementOrSpread::Spread(spread) => {
+                            ElementOrSpread::Spread(spread.resolve_type(ctx))
+                        }
+                    })
+                    .collect(),
+            ),
             TypeExpression::StringLiteralType(StringLiteralType(value)) => {
                 Type::StringType(Some(value.clone()))
             }

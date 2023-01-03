@@ -2,12 +2,7 @@ use std::rc::Rc;
 
 use crate::{
     model::ast::*,
-    model::{
-        ast::Any,
-        bgl_type::{any_plan, KeyValueOrSpread, Type},
-        errors::BagelError,
-        module::Module,
-    },
+    model::{ast::Any, bgl_type::Type, errors::BagelError, module::Module},
     passes::check::CheckContext,
     ModulesStore,
 };
@@ -185,66 +180,27 @@ impl AST<Expression> {
                 tag: _,
                 segments: _,
             }) => Type::ANY_STRING,
-            Expression::ArrayLiteral(ArrayLiteral(members)) => {
-                if members
-                    .iter()
-                    .any(|member| matches!(member, ArrayLiteralEntry::Spread(_)))
-                {
-                    let mut member_types: Vec<Type> = vec![];
-                    let mut bail_out_to_union = false;
-
-                    for member in members {
-                        match member {
-                            ArrayLiteralEntry::Spread(spread_expr) => {
-                                let spread_inner = spread_expr.downcast().0;
-                                let spread_type = spread_inner.infer_type(ctx);
-
-                                match spread_type {
-                                    Type::TupleType(members) => {
-                                        for member in members {
-                                            member_types.push(member);
-                                        }
-                                    }
-                                    Type::ArrayType(element) => {
-                                        bail_out_to_union = true;
-                                        member_types.push(element.as_ref().clone());
-                                    }
-                                    _ => todo!(),
-                                }
-                            }
-                            ArrayLiteralEntry::Expression(expr) => {
-                                member_types.push(expr.infer_type(ctx))
-                            }
+            Expression::ArrayLiteral(ArrayLiteral(members)) => Type::TupleType(
+                members
+                    .into_iter()
+                    .map(|member| match member {
+                        ElementOrSpread::Element(element) => {
+                            ElementOrSpread::Element(element.infer_type(ctx))
                         }
-                    }
-
-                    if bail_out_to_union {
-                        Type::ArrayType(Rc::new(Type::UnionType(member_types)))
-                    } else {
-                        Type::TupleType(member_types)
-                    }
-                } else {
-                    Type::TupleType(
-                        members
-                            .iter()
-                            .map(|member| match member {
-                                ArrayLiteralEntry::Expression(expr) => expr.infer_type(ctx),
-                                ArrayLiteralEntry::Spread(_) => {
-                                    unreachable!("Handled in if-clause above")
-                                }
-                            })
-                            .collect(),
-                    )
-                }
-            }
+                        ElementOrSpread::Spread(spread) => {
+                            ElementOrSpread::Spread(spread.infer_type(ctx))
+                        }
+                    })
+                    .collect(),
+            ),
             Expression::ObjectLiteral(ObjectLiteral(entries)) => Type::ObjectType {
                 entries: entries
                     .into_iter()
                     .map(|entry| match entry {
-                        ObjectLiteralEntry::KeyValue(KeyValue { key, value }) => {
-                            KeyValueOrSpread::KeyValue(todo!(), value.infer_type(ctx))
+                        KeyValueOrSpread::KeyValue(key, value) => {
+                            KeyValueOrSpread::KeyValue(key.infer_type(ctx), value.infer_type(ctx))
                         }
-                        ObjectLiteralEntry::SpreadExpression(SpreadExpression(expr)) => {
+                        KeyValueOrSpread::Spread(expr) => {
                             KeyValueOrSpread::Spread(expr.infer_type(ctx))
                         }
                     })
@@ -351,19 +307,17 @@ impl AST<Expression> {
                 property,
                 optional,
             }) => {
-                let subject_type = subject.infer_type(ctx);
-                let property_type = match property {
-                    Property::Expression(expr) => expr.infer_type(ctx.into()),
-                    Property::PlainIdentifier(ident) => {
-                        Type::StringType(Some(ident.downcast().0.clone()))
-                    }
-                };
-
                 // TODO: optional
 
-                subject_type
-                    .indexed(&property_type)
-                    .unwrap_or(Type::PoisonedType)
+                Type::PropertyType {
+                    subject: Rc::new(subject.infer_type(ctx)),
+                    property: Rc::new(match property {
+                        Property::Expression(expr) => expr.infer_type(ctx.into()),
+                        Property::PlainIdentifier(ident) => {
+                            Type::StringType(Some(ident.downcast().0.clone()))
+                        }
+                    }),
+                }
             }
             Expression::IfElseExpression(IfElseExpression {
                 cases,

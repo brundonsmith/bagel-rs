@@ -149,11 +149,12 @@ where
 
                     f.write_char(' ')?;
                     match entry {
-                        ArrayLiteralEntry::Expression(expr) => {
-                            expr.compile(f)?;
+                        ElementOrSpread::Element(element) => {
+                            element.compile(f)?;
                         }
-                        ArrayLiteralEntry::Spread(spread_expr) => {
-                            spread_expr.compile(f)?;
+                        ElementOrSpread::Spread(spread) => {
+                            f.write_str("...")?;
+                            spread.compile(f)?;
                         }
                     }
                 }
@@ -168,12 +169,12 @@ where
                     f.write_char(' ')?;
 
                     match entry {
-                        ObjectLiteralEntry::KeyValue(KeyValue { key, value }) => {
+                        KeyValueOrSpread::KeyValue(key, value) => {
                             key.compile(f)?;
                             f.write_str(": ")?;
                             value.compile(f)?;
                         }
-                        ObjectLiteralEntry::SpreadExpression(SpreadExpression(expr)) => {
+                        KeyValueOrSpread::Spread(expr) => {
                             f.write_str("...")?;
                             expr.compile(f)?;
                         }

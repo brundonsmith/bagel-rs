@@ -344,10 +344,10 @@ pub struct ExactStringLiteral {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct ArrayLiteral(pub Vec<ArrayLiteralEntry>);
+pub struct ArrayLiteral(pub Vec<ElementOrSpread<AST<Expression>>>);
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct ObjectLiteral(pub Vec<ObjectLiteralEntry>);
+pub struct ObjectLiteral(pub Vec<KeyValueOrSpread<AST<Expression>>>);
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct BinaryOperation {
@@ -546,7 +546,7 @@ pub struct BoundGenericType {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ObjectType {
-    pub entries: Vec<ObjectTypeEntry>,
+    pub entries: Vec<KeyValueOrSpread<AST<TypeExpression>>>,
     pub is_interface: bool,
 }
 
@@ -560,7 +560,7 @@ pub struct RecordType {
 pub struct ArrayType(pub AST<TypeExpression>);
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct TupleType(pub Vec<AST<TypeExpression>>);
+pub struct TupleType(pub Vec<ElementOrSpread<AST<TypeExpression>>>);
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct StringLiteralType(pub Slice);
@@ -725,50 +725,10 @@ impl Parentable for StringLiteralSegment {
     }
 }
 
-union_type!(ObjectLiteralEntry = KeyValue | SpreadExpression);
-
-impl Parentable for ObjectLiteralEntry {
-    fn set_parent<TParentKind>(&mut self, parent: &AST<TParentKind>)
-    where
-        TParentKind: Clone + TryFrom<Any>,
-        Any: From<TParentKind>,
-    {
-        match self {
-            ObjectLiteralEntry::KeyValue(KeyValue { key, value }) => {
-                key.set_parent(parent);
-                value.set_parent(parent);
-            }
-            ObjectLiteralEntry::SpreadExpression(SpreadExpression(spread)) => {
-                spread.set_parent(parent);
-            }
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct KeyValue {
     pub key: ASTAny,
     pub value: AST<Expression>,
-}
-
-union_type!(ObjectTypeEntry = KeyValueType | SpreadType);
-
-impl Parentable for ObjectTypeEntry {
-    fn set_parent<TParentKind>(&mut self, parent: &AST<TParentKind>)
-    where
-        TParentKind: Clone + TryFrom<Any>,
-        Any: From<TParentKind>,
-    {
-        match self {
-            ObjectTypeEntry::KeyValueType(KeyValueType { key, value }) => {
-                key.set_parent(parent);
-                value.set_parent(parent);
-            }
-            ObjectTypeEntry::SpreadType(SpreadType(spread)) => {
-                spread.set_parent(parent);
-            }
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -932,31 +892,6 @@ impl PlatformSet {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum ArrayLiteralEntry {
-    Expression(AST<Expression>),
-    Spread(AST<SpreadExpression>),
-}
-
-impl Parentable for ArrayLiteralEntry {
-    fn set_parent<TParentKind>(&mut self, parent: &AST<TParentKind>)
-    where
-        TParentKind: Clone + TryFrom<Any>,
-        Any: From<TParentKind>,
-    {
-        match self {
-            ArrayLiteralEntry::Expression(expr) => expr.set_parent(parent),
-            ArrayLiteralEntry::Spread(spread) => spread.set_parent(parent),
-        }
-    }
-}
-
-// #[derive(Debug, Clone, PartialEq)]
-// pub enum ObjectLiteralEntry {
-//     KeyValue(AST<Expression>),
-//     Spread(AST<SpreadExpression>),
-// }
-
-#[derive(Debug, Clone, PartialEq)]
 pub enum Property {
     Expression(AST<Expression>),
     PlainIdentifier(AST<PlainIdentifier>),
@@ -973,6 +908,71 @@ impl Parentable for Property {
             Property::PlainIdentifier(ident) => ident.set_parent(parent),
         }
     }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum KeyValueOrSpread<T> {
+    KeyValue(T, T),
+    Spread(T),
+}
+
+impl<T> Parentable for KeyValueOrSpread<T>
+where
+    T: Parentable,
+{
+    fn set_parent<TParentKind>(&mut self, parent: &AST<TParentKind>)
+    where
+        TParentKind: Clone + TryFrom<Any>,
+        Any: From<TParentKind>,
+    {
+        match self {
+            KeyValueOrSpread::KeyValue(key, value) => {
+                key.set_parent(parent);
+                value.set_parent(parent);
+            }
+            KeyValueOrSpread::Spread(spread) => {
+                spread.set_parent(parent);
+            }
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum ElementOrSpread<T> {
+    Element(T),
+    Spread(T),
+}
+
+impl<T> Parentable for ElementOrSpread<T>
+where
+    T: Parentable,
+{
+    fn set_parent<TParentKind>(&mut self, parent: &AST<TParentKind>)
+    where
+        TParentKind: Clone + TryFrom<Any>,
+        Any: From<TParentKind>,
+    {
+        match self {
+            ElementOrSpread::Element(element) => {
+                element.set_parent(parent);
+            }
+            ElementOrSpread::Spread(spread) => {
+                spread.set_parent(parent);
+            }
+        }
+    }
+}
+
+pub fn identifier_to_string(ast: AST<PlainIdentifier>) -> AST<ExactStringLiteral> {
+    ExactStringLiteral {
+        tag: None,
+        value: ast.downcast().0.clone(),
+    }
+    .as_ast(ast.slice().clone())
+}
+
+pub fn identifier_to_string_type(ast: AST<PlainIdentifier>) -> AST<StringLiteralType> {
+    StringLiteralType(ast.downcast().0.clone()).as_ast(ast.slice().clone())
 }
 
 // --- AST groups ---
