@@ -178,13 +178,13 @@ impl<'a> From<InferTypeContext<'a>> for ResolveContext<'a> {
     }
 }
 
-impl<'a, F: FnMut(BagelError)> From<&mut CheckContext<'a, F>> for ResolveContext<'a> {
+impl<'a> From<&CheckContext<'a>> for ResolveContext<'a> {
     fn from(
         CheckContext {
             modules,
             current_module,
-            report_error: _,
-        }: &mut CheckContext<'a, F>,
+            nearest_func_or_proc: _,
+        }: &CheckContext<'a>,
     ) -> Self {
         Self {
             modules,

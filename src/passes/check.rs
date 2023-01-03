@@ -19,10 +19,10 @@ use std::fmt::Debug;
 use std::time::SystemTime;
 
 impl Module {
-    pub fn check<'a, F: FnMut(BagelError)>(&self, ctx: &mut CheckContext<'a, F>) {
+    pub fn check<'a, F: FnMut(BagelError)>(&self, ctx: &CheckContext<'a>, report_error: &mut F) {
         let start = SystemTime::now();
 
-        self.ast.check(ctx);
+        self.ast.check(ctx, report_error);
 
         if DEBUG_MODE {
             println!(
@@ -35,17 +35,17 @@ impl Module {
 }
 
 pub trait Checkable {
-    fn check<'a, F: FnMut(BagelError)>(&self, ctx: &mut CheckContext<'a, F>);
+    fn check<'a, F: FnMut(BagelError)>(&self, ctx: &CheckContext<'a>, report_error: &mut F);
 }
 
 impl<TKind> Checkable for AST<TKind>
 where
-    TKind: Clone + TryFrom<Any>,
+    TKind: Clone + TryFrom<Any> + TryFrom<TKind>,
     Any: From<TKind>,
 {
-    fn check<'a, F: FnMut(BagelError)>(&self, ctx: &mut CheckContext<'a, F>) {
+    fn check<'a, F: FnMut(BagelError)>(&self, ctx: &CheckContext<'a>, report_error: &mut F) {
         let module_id = &ctx.current_module.module_id.clone();
-        let subsumation_context = SubsumationContext::from(&*ctx);
+        let subsumation_context = SubsumationContext::from(ctx);
         let check_subsumation =
             |destination: &Type, value: Type, slice: &Slice, report_error: &mut F| {
                 let issues = destination.subsumation_issues(subsumation_context, &value);
@@ -61,19 +61,19 @@ where
 
         match self.details() {
             Any::Module(ast::Module { declarations }) => {
-                declarations.check(ctx);
+                declarations.check(ctx, report_error);
 
                 // todo!("Check for name duplicates");
             }
             Any::ImportAllDeclaration(ImportAllDeclaration { name, path }) => {
-                name.check(ctx);
-                path.check(ctx);
+                name.check(ctx, report_error);
+                path.check(ctx, report_error);
 
                 let path_name = path.downcast();
                 let path_name = path_name.value.as_str();
 
                 if ctx.modules.import(module_id, path_name).is_none() {
-                    ctx.report_error(BagelError::MiscError {
+                    report_error(BagelError::MiscError {
                         module_id: module_id.clone(),
                         src: path.slice().clone(),
                         message: format!(
@@ -85,8 +85,8 @@ where
                 }
             }
             Any::ImportDeclaration(ImportDeclaration { imports, path }) => {
-                imports.check(ctx);
-                path.check(ctx);
+                imports.check(ctx, report_error);
+                path.check(ctx, report_error);
 
                 let path_name = path.downcast();
                 let path_name = path_name.value.as_str();
@@ -94,7 +94,7 @@ where
                 let imported_module = ctx.modules.import(module_id, path_name);
 
                 match imported_module {
-                    None => ctx.report_error(BagelError::MiscError {
+                    None => report_error(BagelError::MiscError {
                         module_id: ctx.current_module.module_id.clone(),
                         src: path.slice().clone(),
                         message: format!(
@@ -112,7 +112,7 @@ where
                             let decl = imported_module.get_declaration(item_name, true);
 
                             if decl.is_none() {
-                                ctx.report_error(BagelError::MiscError {
+                                report_error(BagelError::MiscError {
                                     module_id: ctx.current_module.module_id.clone(),
                                     src: item.slice().clone(),
                                     message: format!(
@@ -127,16 +127,16 @@ where
                 }
             }
             Any::ImportItem(ImportItem { name, alias }) => {
-                name.check(ctx);
-                alias.check(ctx);
+                name.check(ctx, report_error);
+                alias.check(ctx, report_error);
             }
             Any::TypeDeclaration(TypeDeclaration {
                 name,
                 declared_type,
                 exported,
             }) => {
-                name.check(ctx);
-                declared_type.check(ctx);
+                name.check(ctx, report_error);
+                declared_type.check(ctx, report_error);
             }
             Any::FuncDeclaration(FuncDeclaration {
                 name,
@@ -145,9 +145,9 @@ where
                 platforms,
                 decorators,
             }) => {
-                name.check(ctx);
-                func.check(ctx);
-                decorators.check(ctx);
+                name.check(ctx, report_error);
+                func.check(ctx, report_error);
+                decorators.check(ctx, report_error);
             }
             Any::ProcDeclaration(ProcDeclaration {
                 name,
@@ -156,9 +156,9 @@ where
                 platforms,
                 decorators,
             }) => {
-                name.check(ctx);
-                proc.check(ctx);
-                decorators.check(ctx);
+                name.check(ctx, report_error);
+                proc.check(ctx, report_error);
+                decorators.check(ctx, report_error);
             }
             Any::Decorator(Decorator { name }) => todo!(),
             Any::ValueDeclaration(ValueDeclaration {
@@ -169,16 +169,16 @@ where
                 exported,
                 platforms,
             }) => {
-                name.check(ctx);
-                type_annotation.check(ctx);
-                value.check(ctx);
+                name.check(ctx, report_error);
+                type_annotation.check(ctx, report_error);
+                value.check(ctx, report_error);
 
                 if let Some(type_annotation) = type_annotation {
                     check_subsumation(
                         &type_annotation.resolve_type(ctx.into()),
                         value.infer_type(ctx.into()),
                         value.slice(),
-                        ctx.report_error,
+                        report_error,
                     );
                 }
             }
@@ -194,20 +194,20 @@ where
                     match segment {
                         StringLiteralSegment::Slice(_) => {}
                         StringLiteralSegment::AST(insert) => {
-                            insert.check(ctx);
+                            insert.check(ctx, report_error);
 
                             check_subsumation(
                                 &string_template_safe_types(),
                                 insert.infer_type(ctx.into()),
                                 insert.slice(),
-                                ctx.report_error,
+                                report_error,
                             );
                         }
                     }
                 }
             }
             Any::ArrayLiteral(ArrayLiteral(members)) => {
-                members.check(ctx);
+                members.check(ctx, report_error);
 
                 for member in members {
                     match member {
@@ -217,14 +217,14 @@ where
                                 &any_array(),
                                 spread.infer_type(ctx.into()),
                                 spread.slice(),
-                                ctx.report_error,
+                                report_error,
                             );
                         }
                     }
                 }
             }
             Any::ObjectLiteral(ObjectLiteral(entries)) => {
-                entries.check(ctx);
+                entries.check(ctx, report_error);
 
                 for entry in entries {
                     match entry {
@@ -234,14 +234,14 @@ where
                                 &any_object(),
                                 spread.infer_type(ctx.into()),
                                 spread.slice(),
-                                ctx.report_error,
+                                report_error,
                             );
                         }
                     }
                 }
             }
             Any::SpreadExpression(SpreadExpression(inner)) => {
-                inner.check(ctx);
+                inner.check(ctx, report_error);
             }
             Any::BinaryOperation(BinaryOperation { left, op, right }) => {
                 let left_type = left.infer_type(ctx.into());
@@ -252,31 +252,21 @@ where
                 let operator = op.downcast().0;
 
                 if operator == BinaryOperatorOp::Plus {
-                    check_subsumation(&number_or_string, left_type, left.slice(), ctx.report_error);
-                    check_subsumation(
-                        &number_or_string,
-                        right_type,
-                        right.slice(),
-                        ctx.report_error,
-                    );
+                    check_subsumation(&number_or_string, left_type, left.slice(), report_error);
+                    check_subsumation(&number_or_string, right_type, right.slice(), report_error);
                 } else if operator == BinaryOperatorOp::Minus
                     || operator == BinaryOperatorOp::Times
                     || operator == BinaryOperatorOp::Divide
                 {
-                    check_subsumation(&Type::ANY_NUMBER, left_type, left.slice(), ctx.report_error);
-                    check_subsumation(
-                        &Type::ANY_NUMBER,
-                        right_type,
-                        right.slice(),
-                        ctx.report_error,
-                    );
+                    check_subsumation(&Type::ANY_NUMBER, left_type, left.slice(), report_error);
+                    check_subsumation(&Type::ANY_NUMBER, right_type, right.slice(), report_error);
                 } else if operator == BinaryOperatorOp::Equals
                     || operator == BinaryOperatorOp::NotEquals
                 {
-                    if !left_type.subsumes((&*ctx).into(), &right_type)
-                        && !right_type.subsumes((&*ctx).into(), &left_type)
+                    if !left_type.subsumes(ctx.into(), &right_type)
+                        && !right_type.subsumes(ctx.into(), &left_type)
                     {
-                        ctx.report_error(BagelError::MiscError {
+                        report_error(BagelError::MiscError {
                             module_id: ctx.current_module.module_id.clone(),
                             src: op.slice().clone(),
                             message: format!(
@@ -289,20 +279,20 @@ where
                 }
             }
             Any::NegationOperation(NegationOperation(inner)) => {
-                inner.check(ctx);
+                inner.check(ctx, report_error);
 
                 check_subsumation(
                     &Type::ANY_NUMBER,
                     inner.infer_type(ctx.into()),
                     inner.slice(),
-                    ctx.report_error,
+                    report_error,
                 );
             }
-            Any::Parenthesis(Parenthesis(inner)) => inner.check(ctx),
+            Any::Parenthesis(Parenthesis(inner)) => inner.check(ctx, report_error),
             Any::LocalIdentifier(LocalIdentifier(name)) => {
                 // TODO: Make sure it isn't a type
                 if self.resolve_symbol(name.as_str()).is_none() {
-                    ctx.report_error(BagelError::MiscError {
+                    report_error(BagelError::MiscError {
                         module_id: ctx.current_module.module_id.clone(),
                         src: self.slice().clone(),
                         message: format!(
@@ -317,7 +307,7 @@ where
                 let name = name.downcast();
                 let name_str = name.0.as_str();
                 if self.resolve_symbol(name_str).is_none() {
-                    ctx.report_error(BagelError::MiscError {
+                    report_error(BagelError::MiscError {
                         module_id: ctx.current_module.module_id.clone(),
                         src: self.slice().clone(),
                         message: format!(
@@ -331,8 +321,8 @@ where
                 declarations,
                 inner,
             }) => {
-                declarations.check(ctx);
-                inner.check(ctx);
+                declarations.check(ctx, report_error);
+                inner.check(ctx, report_error);
             }
             Any::InlineDeclaration(InlineDeclaration { destination, value }) => {
                 match destination {
@@ -340,15 +330,15 @@ where
                         name,
                         type_annotation,
                     }) => {
-                        name.check(ctx);
-                        type_annotation.check(ctx);
+                        name.check(ctx, report_error);
+                        type_annotation.check(ctx, report_error);
 
                         if let Some(type_annotation) = type_annotation {
                             check_subsumation(
                                 &type_annotation.resolve_type(ctx.into()),
                                 value.infer_type(ctx.into()),
                                 value.slice(),
-                                ctx.report_error,
+                                report_error,
                             );
                         }
                     }
@@ -357,11 +347,11 @@ where
                         spread,
                         destructure_kind,
                     }) => {
-                        properties.check(ctx);
-                        spread.check(ctx);
+                        properties.check(ctx, report_error);
+                        spread.check(ctx, report_error);
                     }
                 }
-                value.check(ctx);
+                value.check(ctx, report_error);
             }
             Any::Func(Func {
                 type_annotation,
@@ -369,8 +359,10 @@ where
                 is_pure,
                 body,
             }) => {
-                type_annotation.check(ctx);
-                body.check(ctx);
+                let ctx = &ctx.in_func(self.clone().upcast().try_recast::<Func>().unwrap());
+
+                type_annotation.check(ctx, report_error);
+                body.check(ctx, report_error);
 
                 let type_annotation = type_annotation.downcast();
                 if let Some(return_type) = type_annotation.returns {
@@ -378,7 +370,7 @@ where
                         &return_type.resolve_type(ctx.into()),
                         body.infer_type(ctx.into()),
                         body.slice(),
-                        ctx.report_error,
+                        report_error,
                     );
                 }
             }
@@ -388,28 +380,30 @@ where
                 is_pure,
                 body,
             }) => {
-                type_annotation.check(ctx);
-                body.check(ctx);
+                let ctx = &ctx.in_proc(self.clone().upcast().try_recast::<Proc>().unwrap());
+
+                type_annotation.check(ctx, report_error);
+                body.check(ctx, report_error);
             }
             Any::Block(Block(statements)) => {
-                statements.check(ctx);
+                statements.check(ctx, report_error);
             }
             Any::RangeExpression(RangeExpression { start, end }) => {
-                start.check(ctx);
-                end.check(ctx);
+                start.check(ctx, report_error);
+                end.check(ctx, report_error);
 
                 check_subsumation(
                     &Type::ANY_NUMBER,
                     start.infer_type(ctx.into()),
                     start.slice(),
-                    ctx.report_error,
+                    report_error,
                 );
 
                 check_subsumation(
                     &Type::ANY_NUMBER,
                     end.infer_type(ctx.into()),
                     end.slice(),
-                    ctx.report_error,
+                    report_error,
                 );
             }
             Any::AwaitExpression(AwaitExpression(inner)) => {
@@ -417,8 +411,21 @@ where
                     &any_plan(),
                     inner.infer_type(ctx.into()),
                     inner.slice(),
-                    ctx.report_error,
+                    report_error,
                 );
+
+                if !ctx
+                    .nearest_func_or_proc
+                    .as_ref()
+                    .map(FuncOrProc::is_async)
+                    .unwrap_or(false)
+                {
+                    report_error(BagelError::MiscError {
+                        module_id: ctx.current_module.module_id.clone(),
+                        src: inner.slice().clone(),
+                        message: format!("Can only await expressions inside an async func or proc"),
+                    });
+                }
             }
             Any::Invocation(Invocation {
                 subject,
@@ -428,10 +435,10 @@ where
                 bubbles,
                 awaited_or_detached,
             }) => {
-                subject.check(ctx);
-                type_args.check(ctx);
-                args.check(ctx);
-                spread_args.check(ctx);
+                subject.check(ctx, report_error);
+                type_args.check(ctx, report_error);
+                args.check(ctx, report_error);
+                spread_args.check(ctx, report_error);
 
                 let subject_type = subject.infer_type(ctx.into());
                 let types = match &subject_type {
@@ -459,13 +466,13 @@ where
                                     type_annotation,
                                     arg.infer_type(ctx.into()),
                                     arg.slice(),
-                                    ctx.report_error,
+                                    report_error,
                                 );
                             }
                         }
                     }
                 } else {
-                    ctx.report_error(BagelError::MiscError {
+                    report_error(BagelError::MiscError {
                         module_id: ctx.current_module.module_id.clone(),
                         src: subject.slice().clone(),
                         message: format!(
@@ -484,10 +491,10 @@ where
                 property,
                 optional,
             }) => {
-                subject.check(ctx);
+                subject.check(ctx, report_error);
                 match property {
-                    Property::Expression(expr) => expr.check(ctx),
-                    Property::PlainIdentifier(ident) => ident.check(ctx),
+                    Property::Expression(expr) => expr.check(ctx, report_error),
+                    Property::PlainIdentifier(ident) => ident.check(ctx, report_error),
                 };
 
                 let subject_type = subject.infer_type(ctx.into());
@@ -505,7 +512,7 @@ where
                 // TODO: detect valid optional
 
                 // if subject_type.indexed(&property_type).is_none() {
-                //     ctx.report_error(BagelError::MiscError {
+                //     report_error(BagelError::MiscError {
                 //         module_id: ctx.current_module.module_id.clone(),
                 //         src: property_slice,
                 //         message: format!(
@@ -520,18 +527,18 @@ where
                 cases,
                 default_case,
             }) => {
-                cases.check(ctx);
-                default_case.check(ctx);
+                cases.check(ctx, report_error);
+                default_case.check(ctx, report_error);
             }
             Any::IfElseExpressionCase(IfElseExpressionCase { condition, outcome }) => {
-                condition.check(ctx);
-                outcome.check(ctx);
+                condition.check(ctx, report_error);
+                outcome.check(ctx, report_error);
 
                 check_subsumation(
                     &truthiness_safe_types(),
                     condition.infer_type(ctx.into()),
                     condition.slice(),
-                    ctx.report_error,
+                    report_error,
                 );
             }
             Any::SwitchExpression(SwitchExpression {
@@ -539,9 +546,9 @@ where
                 cases,
                 default_case,
             }) => {
-                value.check(ctx);
-                cases.check(ctx);
-                default_case.check(ctx);
+                value.check(ctx, report_error);
+                cases.check(ctx, report_error);
+                default_case.check(ctx, report_error);
 
                 let value_type = value.infer_type(ctx.into());
                 for case in cases {
@@ -551,7 +558,7 @@ where
                         &value_type,
                         case.type_filter.resolve_type(ctx.into()),
                         case.type_filter.slice(),
-                        ctx.report_error,
+                        report_error,
                     );
                 }
             }
@@ -559,8 +566,8 @@ where
                 type_filter,
                 outcome,
             }) => {
-                type_filter.check(ctx);
-                outcome.check(ctx);
+                type_filter.check(ctx, report_error);
+                outcome.check(ctx, report_error);
             }
             Any::ElementTag(ElementTag {
                 tag_name,
@@ -568,34 +575,34 @@ where
                 children,
             }) => todo!(),
             Any::AsCast(AsCast { inner, as_type }) => {
-                inner.check(ctx);
-                as_type.check(ctx);
+                inner.check(ctx, report_error);
+                as_type.check(ctx, report_error);
 
                 check_subsumation(
                     &as_type.resolve_type(ctx.into()),
                     inner.infer_type(ctx.into()),
                     inner.slice(),
-                    ctx.report_error,
+                    report_error,
                 );
             }
             Any::InstanceOf(InstanceOf {
                 inner,
                 possible_type,
             }) => {
-                inner.check(ctx);
-                possible_type.check(ctx);
+                inner.check(ctx, report_error);
+                possible_type.check(ctx, report_error);
 
                 check_subsumation(
                     &inner.infer_type(ctx.into()),
                     possible_type.resolve_type(ctx.into()),
                     inner.slice(),
-                    ctx.report_error,
+                    report_error,
                 );
             }
             Any::UnionType(UnionType(members)) => {
-                members.check(ctx);
+                members.check(ctx, report_error);
             }
-            Any::MaybeType(MaybeType(inner)) => inner.check(ctx),
+            Any::MaybeType(MaybeType(inner)) => inner.check(ctx, report_error),
             Any::GenericParamType(GenericParamType { name, extends }) => todo!(),
             Any::ProcType(ProcType {
                 args,
@@ -604,9 +611,9 @@ where
                 is_async,
                 throws,
             }) => {
-                args.check(ctx);
-                args_spread.check(ctx);
-                throws.check(ctx);
+                args.check(ctx, report_error);
+                args_spread.check(ctx, report_error);
+                throws.check(ctx, report_error);
             }
             Any::FuncType(FuncType {
                 args,
@@ -615,18 +622,18 @@ where
                 is_async,
                 returns,
             }) => {
-                args.check(ctx);
-                args_spread.check(ctx);
-                returns.check(ctx);
+                args.check(ctx, report_error);
+                args_spread.check(ctx, report_error);
+                returns.check(ctx, report_error);
             }
             Any::Arg(Arg {
                 name,
                 type_annotation,
                 optional,
             }) => {
-                name.check(ctx);
+                name.check(ctx, report_error);
                 // TODO: Check that no optionsl args come before non-optional args
-                type_annotation.check(ctx);
+                type_annotation.check(ctx, report_error);
             }
             Any::GenericType(GenericType { type_params, inner }) => todo!(),
             Any::TypeParam(TypeParam { name, extends }) => todo!(),
@@ -635,7 +642,7 @@ where
                 entries,
                 is_interface: _,
             }) => {
-                entries.check(ctx);
+                entries.check(ctx, report_error);
 
                 // TODO: Check that each spread can be spread into this type
             }
@@ -643,20 +650,20 @@ where
                 key_type,
                 value_type,
             }) => {
-                key_type.check(ctx);
-                value_type.check(ctx);
+                key_type.check(ctx, report_error);
+                value_type.check(ctx, report_error);
 
                 check_subsumation(
                     &Type::ANY_NUMBER.union(Type::ANY_STRING),
                     key_type.resolve_type(ctx.into()),
                     key_type.slice(),
-                    ctx.report_error,
+                    report_error,
                 );
             }
-            Any::ArrayType(ArrayType(element)) => element.check(ctx),
-            Any::TupleType(TupleType(members)) => members.check(ctx),
+            Any::ArrayType(ArrayType(element)) => element.check(ctx, report_error),
+            Any::TupleType(TupleType(members)) => members.check(ctx, report_error),
             Any::SpecialType(SpecialType { kind: _, inner }) => {
-                inner.check(ctx);
+                inner.check(ctx, report_error);
             }
             Any::ModifierType(ModifierType { kind, inner }) => match kind {
                 ModifierTypeKind::Readonly => {}
@@ -672,7 +679,7 @@ where
                             entries: _,
                             is_interface: _,
                         } => {}
-                        _ => ctx.report_error(BagelError::MiscError {
+                        _ => report_error(BagelError::MiscError {
                             module_id: ctx.current_module.module_id.clone(),
                             src: self.slice().clone(),
                             message: format!(
@@ -695,7 +702,7 @@ where
                             entries: _,
                             is_interface: _,
                         } => {}
-                        _ => ctx.report_error(BagelError::MiscError {
+                        _ => report_error(BagelError::MiscError {
                             module_id: ctx.current_module.module_id.clone(),
                             src: self.slice().clone(),
                             message: format!(
@@ -712,7 +719,7 @@ where
                     match inner_type {
                         Type::ArrayType(_) => {}
                         Type::TupleType(_) => {}
-                        _ => ctx.report_error(BagelError::MiscError {
+                        _ => report_error(BagelError::MiscError {
                             module_id: ctx.current_module.module_id.clone(),
                             src: self.slice().clone(),
                             message: format!(
@@ -724,14 +731,14 @@ where
                     }
                 }
             },
-            Any::TypeofType(TypeofType(expr)) => expr.check(ctx),
+            Any::TypeofType(TypeofType(expr)) => expr.check(ctx, report_error),
             Any::PropertyType(PropertyType {
                 subject,
                 property,
                 optional,
             }) => todo!(),
-            Any::MaybeType(MaybeType(inner)) => inner.check(ctx),
-            Any::UnionType(UnionType(members)) => members.check(ctx),
+            Any::MaybeType(MaybeType(inner)) => inner.check(ctx, report_error),
+            Any::UnionType(UnionType(members)) => members.check(ctx, report_error),
             Any::DeclarationStatement(DeclarationStatement {
                 destination,
                 value,
@@ -742,15 +749,15 @@ where
                         name,
                         type_annotation,
                     }) => {
-                        name.check(ctx);
-                        type_annotation.check(ctx);
+                        name.check(ctx, report_error);
+                        type_annotation.check(ctx, report_error);
 
                         if let Some(type_annotation) = type_annotation {
                             check_subsumation(
                                 &type_annotation.resolve_type(ctx.into()),
                                 value.infer_type(ctx.into()),
                                 value.slice(),
-                                ctx.report_error,
+                                report_error,
                             );
                         }
                     }
@@ -759,28 +766,28 @@ where
                         spread,
                         destructure_kind,
                     }) => {
-                        properties.check(ctx);
-                        spread.check(ctx);
+                        properties.check(ctx, report_error);
+                        spread.check(ctx, report_error);
                     }
                 }
-                value.check(ctx);
+                value.check(ctx, report_error);
             }
             Any::IfElseStatement(IfElseStatement {
                 cases,
                 default_case,
             }) => {
-                cases.check(ctx);
-                default_case.check(ctx);
+                cases.check(ctx, report_error);
+                default_case.check(ctx, report_error);
             }
             Any::IfElseStatementCase(IfElseStatementCase { condition, outcome }) => {
-                condition.check(ctx);
-                outcome.check(ctx);
+                condition.check(ctx, report_error);
+                outcome.check(ctx, report_error);
 
                 check_subsumation(
                     &truthiness_safe_types(),
                     condition.infer_type(ctx.into()),
                     condition.slice(),
-                    ctx.report_error,
+                    report_error,
                 );
             }
             Any::ForLoop(ForLoop {
@@ -788,26 +795,26 @@ where
                 iterator,
                 body,
             }) => {
-                item_identifier.check(ctx);
-                iterator.check(ctx);
-                body.check(ctx);
+                item_identifier.check(ctx, report_error);
+                iterator.check(ctx, report_error);
+                body.check(ctx, report_error);
 
                 check_subsumation(
                     &any_iterator(),
                     iterator.infer_type(ctx.into()),
                     iterator.slice(),
-                    ctx.report_error,
+                    report_error,
                 );
             }
             Any::WhileLoop(WhileLoop { condition, body }) => {
-                condition.check(ctx);
-                body.check(ctx);
+                condition.check(ctx, report_error);
+                body.check(ctx, report_error);
 
                 check_subsumation(
                     &truthiness_safe_types(),
                     condition.infer_type(ctx.into()),
                     condition.slice(),
-                    ctx.report_error,
+                    report_error,
                 );
             }
             Any::Assignment(Assignment {
@@ -815,9 +822,9 @@ where
                 value,
                 operator,
             }) => {
-                target.check(ctx);
-                value.check(ctx);
-                operator.check(ctx);
+                target.check(ctx, report_error);
+                value.check(ctx, report_error);
+                operator.check(ctx, report_error);
 
                 // TODO: Check operator compatibility for value and target
 
@@ -825,7 +832,7 @@ where
                     &target.infer_type(ctx.into()),
                     value.infer_type(ctx.into()),
                     value.slice(),
-                    ctx.report_error,
+                    report_error,
                 );
             }
             Any::TryCatch(TryCatch {
@@ -834,32 +841,32 @@ where
                 catch_block,
             }) => todo!(),
             Any::ThrowStatement(ThrowStatement { error_expression }) => {
-                error_expression.check(ctx);
+                error_expression.check(ctx, report_error);
 
                 check_subsumation(
                     &any_error(),
                     error_expression.infer_type(ctx.into()),
                     error_expression.slice(),
-                    ctx.report_error,
+                    report_error,
                 );
             }
             Any::Autorun(Autorun {
                 effect_block,
                 until,
             }) => {
-                effect_block.check(ctx);
-                until.check(ctx);
+                effect_block.check(ctx, report_error);
+                until.check(ctx, report_error);
 
                 if let Some(until) = until {
                     check_subsumation(
                         &Type::ANY_BOOLEAN,
                         until.infer_type(ctx.into()),
                         until.slice(),
-                        ctx.report_error,
+                        report_error,
                     );
                 }
             }
-            Any::ErrorExpression(ErrorExpression(inner)) => inner.check(ctx),
+            Any::ErrorExpression(ErrorExpression(inner)) => inner.check(ctx, report_error),
 
             // intentionally have nothing to check
             Any::JavascriptEscape(_) => {}
@@ -889,9 +896,9 @@ impl<T> Checkable for Option<T>
 where
     T: Checkable,
 {
-    fn check<'a, F: FnMut(BagelError)>(&self, ctx: &mut CheckContext<'a, F>) {
+    fn check<'a, F: FnMut(BagelError)>(&self, ctx: &CheckContext<'a>, report_error: &mut F) {
         if let Some(sel) = self {
-            sel.check(ctx);
+            sel.check(ctx, report_error);
         }
     }
 }
@@ -900,9 +907,9 @@ impl<T> Checkable for Vec<T>
 where
     T: Checkable,
 {
-    fn check<'a, F: FnMut(BagelError)>(&self, ctx: &mut CheckContext<'a, F>) {
+    fn check<'a, F: FnMut(BagelError)>(&self, ctx: &CheckContext<'a>, report_error: &mut F) {
         for el in self.iter() {
-            el.check(ctx);
+            el.check(ctx, report_error);
         }
     }
 }
@@ -911,14 +918,14 @@ impl<T> Checkable for KeyValueOrSpread<T>
 where
     T: Checkable,
 {
-    fn check<'a, F: FnMut(BagelError)>(&self, ctx: &mut CheckContext<'a, F>) {
+    fn check<'a, F: FnMut(BagelError)>(&self, ctx: &CheckContext<'a>, report_error: &mut F) {
         match self {
             KeyValueOrSpread::KeyValue(key, value) => {
-                key.check(ctx);
-                value.check(ctx);
+                key.check(ctx, report_error);
+                value.check(ctx, report_error);
             }
             KeyValueOrSpread::Spread(spread) => {
-                spread.check(ctx);
+                spread.check(ctx, report_error);
             }
         }
     }
@@ -928,27 +935,61 @@ impl<T> Checkable for ElementOrSpread<T>
 where
     T: Checkable,
 {
-    fn check<'a, F: FnMut(BagelError)>(&self, ctx: &mut CheckContext<'a, F>) {
+    fn check<'a, F: FnMut(BagelError)>(&self, ctx: &CheckContext<'a>, report_error: &mut F) {
         match self {
             ElementOrSpread::Element(element) => {
-                element.check(ctx);
+                element.check(ctx, report_error);
             }
             ElementOrSpread::Spread(spread) => {
-                spread.check(ctx);
+                spread.check(ctx, report_error);
             }
         }
     }
 }
 
-#[derive(Debug)]
-pub struct CheckContext<'a, F: FnMut(BagelError)> {
+#[derive(Debug, Clone)]
+pub struct CheckContext<'a> {
     pub modules: &'a ModulesStore,
     pub current_module: &'a Module,
-    pub report_error: &'a mut F,
+    pub nearest_func_or_proc: Option<FuncOrProc>,
 }
 
-impl<'a, F: FnMut(BagelError)> CheckContext<'a, F> {
-    pub fn report_error(&mut self, error: BagelError) {
-        (self.report_error)(error)
+impl<'a> CheckContext<'a> {
+    pub fn in_func(&self, func: AST<Func>) -> CheckContext<'a> {
+        CheckContext {
+            modules: self.modules,
+            current_module: self.current_module,
+            nearest_func_or_proc: Some(FuncOrProc::Func(func)),
+        }
+    }
+
+    pub fn in_proc(&self, proc: AST<Proc>) -> CheckContext<'a> {
+        CheckContext {
+            modules: self.modules,
+            current_module: self.current_module,
+            nearest_func_or_proc: Some(FuncOrProc::Proc(proc)),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum FuncOrProc {
+    Func(AST<Func>),
+    Proc(AST<Proc>),
+}
+
+impl FuncOrProc {
+    pub fn is_async(&self) -> bool {
+        match self {
+            FuncOrProc::Func(func) => func.downcast().is_async,
+            FuncOrProc::Proc(proc) => proc.downcast().is_async,
+        }
+    }
+
+    pub fn is_pure(&self) -> bool {
+        match self {
+            FuncOrProc::Func(func) => func.downcast().is_pure,
+            FuncOrProc::Proc(proc) => proc.downcast().is_pure,
+        }
     }
 }

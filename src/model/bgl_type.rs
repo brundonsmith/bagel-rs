@@ -447,13 +447,13 @@ pub struct SubsumationContext<'a> {
     pub val_mutability: Mutability,
 }
 
-impl<'a, F: FnMut(BagelError)> From<&CheckContext<'a, F>> for SubsumationContext<'a> {
+impl<'a> From<&CheckContext<'a>> for SubsumationContext<'a> {
     fn from(
         CheckContext {
             modules,
             current_module,
-            report_error: _,
-        }: &CheckContext<'a, F>,
+            nearest_func_or_proc: _,
+        }: &CheckContext<'a>,
     ) -> Self {
         Self {
             modules,

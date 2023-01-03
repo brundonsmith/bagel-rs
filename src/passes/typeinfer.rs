@@ -415,13 +415,13 @@ pub struct InferTypeContext<'a> {
     pub current_module: &'a Module,
 }
 
-impl<'a, F: FnMut(BagelError)> From<&mut CheckContext<'a, F>> for InferTypeContext<'a> {
+impl<'a> From<&CheckContext<'a>> for InferTypeContext<'a> {
     fn from(
         CheckContext {
             modules,
             current_module,
-            report_error: _,
-        }: &mut CheckContext<'a, F>,
+            nearest_func_or_proc: _,
+        }: &CheckContext<'a>,
     ) -> Self {
         Self {
             modules,
