@@ -871,12 +871,12 @@ fn statement(i: Slice) -> ParseResult<AST<Statement>> {
         map(for_loop, AST::recast::<Statement>),
         map(while_loop, AST::recast::<Statement>),
         map(assignment, AST::recast::<Statement>),
-        // map(try_catch, AST::recast::<Statement>),
+        map(try_catch, AST::recast::<Statement>),
         map(throw_statement, AST::recast::<Statement>),
         map(autorun, AST::recast::<Statement>),
         map(
             seq!(
-                invocation_accessor_chain(11), // HACK: Has to be kept in sync with expression() function!
+                invocation_accessor_chain(12), // HACK: Has to be kept in sync with expression() function!
                 tag(";")
             ),
             |(invocation, _)| {
@@ -989,7 +989,7 @@ fn assignment(i: Slice) -> ParseResult<AST<Assignment>> {
     map(
         seq!(
             alt((
-                map(invocation_accessor_chain(11), AST::recast::<Expression>),
+                map(invocation_accessor_chain(12), AST::recast::<Expression>),
                 map(local_identifier, AST::recast::<Expression>)
             )),
             pair(
@@ -1031,7 +1031,18 @@ fn assignment(i: Slice) -> ParseResult<AST<Assignment>> {
 
 #[memoize]
 fn try_catch(i: Slice) -> ParseResult<AST<TryCatch>> {
-    todo!()
+    map(
+        seq!(tag("try"), block, tag("catch"), plain_identifier, block,),
+        |(start, mut try_block, _, mut error_identifier, mut catch_block)| {
+            make_node_typed!(
+                TryCatch,
+                start.spanning(catch_block.slice()),
+                try_block,
+                error_identifier,
+                catch_block
+            )
+        },
+    )(i)
 }
 
 #[memoize]
@@ -1105,7 +1116,7 @@ fn expression_inner(l: usize, i: Slice) -> ParseResult<AST<Expression>> {
 
     // indexer
 
-    // parse_level_expression!(l, tl, i, error_expression);
+    parse_level_expression!(l, tl, i, error_expression);
 
     parse_level_expression!(l, tl, i, invocation_accessor_chain(tl));
 
@@ -1124,6 +1135,7 @@ fn expression_inner(l: usize, i: Slice) -> ParseResult<AST<Expression>> {
             map(object_literal, AST::recast::<Expression>),
             map(array_literal, AST::recast::<Expression>),
             map(exact_string_literal, AST::recast::<Expression>),
+            map(string_literal, AST::recast::<Expression>),
             map(number_literal, AST::recast::<Expression>),
             map(boolean_literal, AST::recast::<Expression>),
             map(nil_literal, AST::recast::<Expression>),
@@ -1325,7 +1337,12 @@ fn regular_expression(i: Slice) -> ParseResult<AST<RegularExpression>> {
 }
 
 fn error_expression(i: Slice) -> ParseResult<AST<ErrorExpression>> {
-    todo!()
+    map(
+        seq!(tag("Error"), tag("("), expression(0), tag(")")),
+        |(start, _, mut inner, end)| {
+            make_node_tuple_typed!(ErrorExpression, start.spanning(&end), inner,)
+        },
+    )(i)
 }
 
 fn instance_of(level: usize) -> impl Fn(Slice) -> ParseResult<AST<InstanceOf>> {
@@ -1479,9 +1496,13 @@ fn proc(i: Slice) -> ParseResult<AST<Proc>> {
             opt(tag("pure")),
             opt(tag("async")),
             alt((args_parenthesized, arg_singleton)),
+            opt(map(
+                seq!(tag("throws"), type_expression(0)),
+                |(_, throws)| throws
+            )),
             block,
         ),
-        |(pure, asyn, mut args, mut body)| {
+        |(pure, asyn, mut args, mut throws, mut body)| {
             let is_async = asyn.is_some();
             let is_pure = pure.is_some();
             let src = pure
@@ -1497,11 +1518,12 @@ fn proc(i: Slice) -> ParseResult<AST<Proc>> {
                 args_spread: None, // TODO
                 is_pure,
                 is_async,
-                throws: None, // TODO
+                throws: throws.clone(),
             }
             .as_ast(src.clone());
 
             args.set_parent(&type_annotation);
+            throws.set_parent(&type_annotation);
 
             let this = Proc {
                 type_annotation: type_annotation.clone(),
@@ -1726,14 +1748,23 @@ fn array_literal(i: Slice) -> ParseResult<AST<ArrayLiteral>> {
 #[memoize]
 fn string_literal(i: Slice) -> ParseResult<AST<StringLiteral>> {
     map(
-        seq!(tag("\'"), many0(string_literal_segment), tag("\'")),
-        |(open_quote, mut segments, close_quote)| {
+        pair(
+            opt(plain_identifier),
+            seq!(tag("\'"), many0(string_literal_segment), tag("\'")),
+        ),
+        |(mut tag, (open_quote, mut segments, close_quote))| {
             let this = StringLiteral {
-                tag: None, // TODO
+                tag: tag.clone(),
                 segments: segments.clone(),
             }
-            .as_ast(open_quote.spanning(&close_quote));
+            .as_ast(
+                tag.as_ref()
+                    .map(|tag| tag.slice().clone())
+                    .unwrap_or(open_quote)
+                    .spanning(&close_quote),
+            );
 
+            tag.set_parent(&this);
             for segment in segments.iter_mut() {
                 if let StringLiteralSegment::AST(ast) = segment {
                     ast.set_parent(&this);
@@ -1748,13 +1779,25 @@ fn string_literal(i: Slice) -> ParseResult<AST<StringLiteral>> {
 #[memoize]
 fn exact_string_literal(i: Slice) -> ParseResult<AST<ExactStringLiteral>> {
     map(
-        seq!(tag("\'"), string_contents, tag("\'")),
-        |(open_quote, value, close_quote)| {
-            ExactStringLiteral {
-                tag: None, // TODO
+        pair(
+            opt(plain_identifier),
+            seq!(tag("\'"), string_contents, tag("\'")),
+        ),
+        |(mut tag, (open_quote, value, close_quote))| {
+            let this = ExactStringLiteral {
+                tag: tag.clone(),
                 value,
             }
-            .as_ast(open_quote.spanning(&close_quote))
+            .as_ast(
+                tag.as_ref()
+                    .map(|tag| tag.slice().clone())
+                    .unwrap_or(open_quote)
+                    .spanning(&close_quote),
+            );
+
+            tag.set_parent(&this);
+
+            this
         },
     )(i)
 }
