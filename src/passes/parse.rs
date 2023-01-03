@@ -521,10 +521,10 @@ fn type_expression_inner(l: usize, i: Slice) -> ParseResult<AST<TypeExpression>>
         map(
             seq!(
                 alt((
-                    tag("keyof"),
-                    tag("valueof"),
-                    tag("elementof"),
-                    tag("readonly")
+                    tag(ModifierTypeKind::Keyof.into()),
+                    tag(ModifierTypeKind::Valueof.into()),
+                    tag(ModifierTypeKind::Elementof.into()),
+                    tag(ModifierTypeKind::Readonly.into())
                 )),
                 type_expression(0)
             ),

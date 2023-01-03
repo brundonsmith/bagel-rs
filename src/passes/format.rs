@@ -302,8 +302,17 @@ where
             }) => todo!(),
             Any::ArrayType(ArrayType(_)) => todo!(),
             Any::TupleType(TupleType(_)) => todo!(),
-            Any::SpecialType(SpecialType { kind, inner }) => todo!(),
-            Any::ModifierType(ModifierType { kind, inner }) => todo!(),
+            Any::SpecialType(SpecialType { kind, inner }) => {
+                f.write_str(kind.into())?;
+                f.write_char('<')?;
+                inner.format(f, opts)?;
+                f.write_char('>')
+            }
+            Any::ModifierType(ModifierType { kind, inner }) => {
+                f.write_str(kind.into())?;
+                f.write_char(' ')?;
+                inner.format(f, opts)
+            }
             Any::StringLiteralType(StringLiteralType(value)) => {
                 f.write_char('\'')?;
                 f.write_str(value.as_str())?;

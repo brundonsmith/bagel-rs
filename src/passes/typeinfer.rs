@@ -2,7 +2,12 @@ use std::rc::Rc;
 
 use crate::{
     model::ast::*,
-    model::{ast::Any, bgl_type::Type, errors::BagelError, module::Module},
+    model::{
+        ast::Any,
+        bgl_type::{KeyValueOrSpread, Type},
+        errors::BagelError,
+        module::Module,
+    },
     passes::check::CheckContext,
     ModulesStore,
 };
@@ -232,7 +237,20 @@ impl AST<Expression> {
                     )
                 }
             }
-            Expression::ObjectLiteral(ObjectLiteral(entries)) => todo!(),
+            Expression::ObjectLiteral(ObjectLiteral(entries)) => Type::ObjectType {
+                entries: entries
+                    .into_iter()
+                    .map(|entry| match entry {
+                        ObjectLiteralEntry::KeyValue(KeyValue { key, value }) => {
+                            KeyValueOrSpread::KeyValue(todo!(), value.infer_type(ctx))
+                        }
+                        ObjectLiteralEntry::SpreadExpression(SpreadExpression(expr)) => {
+                            KeyValueOrSpread::Spread(expr.infer_type(ctx))
+                        }
+                    })
+                    .collect(),
+                is_interface: false,
+            },
             Expression::NegationOperation(NegationOperation(_)) => Type::BooleanType(None),
             Expression::Func(Func {
                 type_annotation,
