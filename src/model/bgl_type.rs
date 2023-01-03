@@ -3,7 +3,7 @@ use std::fmt::{Display, Write};
 use enum_variant_type::EnumVariantType;
 
 use crate::{
-    passes::{check::CheckContext, typeinfer::InferTypeContext},
+    passes::{check::CheckContext, resolve_type::ResolveContext, typeinfer::InferTypeContext},
     ModulesStore,
 };
 
@@ -26,7 +26,7 @@ pub enum Type {
 
     PropertyType {
         subject: Box<Type>,
-        property: Slice,
+        property: Box<Type>,
         // optional: bool,
     },
 
@@ -48,7 +48,7 @@ pub enum Type {
     },
 
     ObjectType {
-        entries: Vec<(Slice, Box<Type>)>,
+        entries: Vec<KeyValueOrSpread>,
         is_interface: bool,
     },
 
@@ -102,16 +102,32 @@ impl Type {
             Type::ANY_BOOLEAN,
             Type::NilType,
             // RECORD_OF_ANY,
-            // ARRAY_OF_ANY,
-            // ITERATOR_OF_ANY,
-            // PLAN_OF_ANY,
+            Type::any_array(),
+            Type::any_iterator(),
+            Type::any_plan(),
             // PROC,
             // FUNC
         ])
     }
 
+    pub fn string_template_safe_types() -> Type {
+        Type::UnionType(vec![Type::ANY_STRING, Type::ANY_NUMBER, Type::ANY_BOOLEAN])
+    }
+
     pub fn any_array() -> Type {
         Type::ArrayType(Box::new(Type::AnyType))
+    }
+
+    pub fn any_iterator() -> Type {
+        Type::IteratorType(Box::new(Type::AnyType))
+    }
+
+    pub fn any_error() -> Type {
+        Type::ErrorType(Box::new(Type::AnyType))
+    }
+
+    pub fn any_plan() -> Type {
+        Type::PlanType(Box::new(Type::AnyType))
     }
 
     // export const FALSY: UnionType = {
@@ -409,6 +425,22 @@ impl<'a> From<InferTypeContext<'a>> for SubsumationContext<'a> {
     }
 }
 
+impl<'a> From<ResolveContext<'a>> for SubsumationContext<'a> {
+    fn from(
+        ResolveContext {
+            modules,
+            current_module,
+        }: ResolveContext<'a>,
+    ) -> Self {
+        Self {
+            modules,
+            current_module,
+            dest_mutability: Mutability::Mutable,
+            val_mutability: Mutability::Mutable,
+        }
+    }
+}
+
 impl<'a> SubsumationContext<'a> {
     pub fn with_dest_mutability(self, dest_mutability: Mutability) -> Self {
         Self {
@@ -437,7 +469,11 @@ impl Display for Type {
             Type::KeyofType(inner) => f.write_fmt(format_args!("keyof {}", inner)),
             Type::ReadonlyType(inner) => f.write_fmt(format_args!("readonly {}", inner)),
             Type::PropertyType { subject, property } => {
-                f.write_fmt(format_args!("{}.{}", subject, property.as_str()))
+                if let Type::StringType(Some(exact)) = property.as_ref() {
+                    f.write_fmt(format_args!("{}.{}", subject, exact.as_str()))
+                } else {
+                    f.write_fmt(format_args!("{}[{}]", subject, property))
+                }
             }
             Type::UnionType(members) => {
                 for (index, member) in members.iter().enumerate() {
@@ -552,6 +588,12 @@ impl Display for Type {
             Type::RegularExpressionType {} => f.write_str("RegExp"),
         }
     }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum KeyValueOrSpread {
+    KeyValue(Type, Type),
+    Spread(Type),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

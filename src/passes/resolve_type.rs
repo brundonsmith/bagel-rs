@@ -1,6 +1,6 @@
 use crate::model::{
     ast::*,
-    bgl_type::{SubsumationContext, Type},
+    bgl_type::{KeyValueOrSpread, SubsumationContext, Type},
     errors::BagelError,
     module::{Module, ModulesStore},
 };
@@ -105,11 +105,6 @@ impl AST<TypeExpression> {
                     SpecialTypeKind::Error => Type::ErrorType(inner),
                 }
             }
-            // match inner.resolve_type(ctx) {
-            //     Type::ArrayType(element) => element.as_ref().clone(),
-            //     Type::TupleType(members) => Type::UnionType(members),
-            //     _ => Type::PoisonedType,
-            // },
             TypeExpression::UnionType(UnionType(members)) => {
                 Type::UnionType(members.iter().map(|m| m.resolve_type(ctx)).collect())
             }
@@ -152,21 +147,10 @@ impl AST<TypeExpression> {
                 subject,
                 property,
                 optional: _,
-            }) => {
-                let subject_type = subject.resolve_type(ctx);
-
-                match subject_type {
-                    Type::ObjectType {
-                        entries,
-                        is_interface: _,
-                    } => entries
-                        .into_iter()
-                        .find(|(key, value)| key.as_str() == property.slice().as_str())
-                        .map(|(key, value)| value.as_ref().clone())
-                        .unwrap_or(Type::PoisonedType),
-                    _ => Type::PoisonedType,
-                }
-            }
+            }) => Type::PropertyType {
+                subject: Box::new(subject.resolve_type(ctx)),
+                property: Box::new(property.resolve_type(ctx)),
+            },
         }
     }
 }
