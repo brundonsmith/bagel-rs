@@ -28,8 +28,11 @@ pub enum Type {
     ValueofType(Rc<Type>),
     KeyofType(Rc<Type>),
     ReadonlyType(Rc<Type>),
-    ResultOfType(Rc<Type>), // Plans
-    ReturnType(Rc<Type>),   // Funcs
+    InnerType {
+        kind: SpecialTypeKind,
+        inner: Rc<Type>,
+    },
+    ReturnType(Rc<Type>), // Funcs
     PropertyType {
         subject: Rc<Type>,
         property: Rc<Type>,
@@ -319,6 +322,19 @@ impl Type {
                     return destination_inner.subsumation_issues(ctx, value_inner);
                 }
             }
+            (
+                destination,
+                Type::InnerType {
+                    kind,
+                    inner: value_inner,
+                },
+            ) => {
+                return Type::SpecialType {
+                    kind: *kind,
+                    inner: Rc::new(destination.clone()),
+                }
+                .subsumation_issues(ctx, value_inner)
+            }
             (Type::UnknownType, _) => {
                 return None;
             }
@@ -507,7 +523,7 @@ impl Display for Type {
             Type::ValueofType(inner) => f.write_fmt(format_args!("valueof {}", inner)),
             Type::KeyofType(inner) => f.write_fmt(format_args!("keyof {}", inner)),
             Type::ReadonlyType(inner) => f.write_fmt(format_args!("readonly {}", inner)),
-            Type::ResultOfType(inner) => todo!(),
+            Type::InnerType { kind, inner } => todo!(),
             Type::ReturnType(inner) => todo!(),
             Type::PropertyType { subject, property } => {
                 if let Type::StringType(Some(exact)) = property.as_ref() {

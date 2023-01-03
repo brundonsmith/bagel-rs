@@ -274,7 +274,10 @@ impl AST<Expression> {
                     inner: Rc::new(Type::NumberType { min, max }),
                 }
             }
-            Expression::AwaitExpression(AwaitExpression(inner)) => todo!(),
+            Expression::AwaitExpression(AwaitExpression(inner)) => Type::InnerType {
+                kind: SpecialTypeKind::Plan,
+                inner: Rc::new(inner.infer_type(ctx)),
+            },
             Expression::Invocation(Invocation {
                 subject,
                 args,
