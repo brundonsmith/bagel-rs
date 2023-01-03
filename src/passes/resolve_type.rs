@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use crate::model::{
     ast::*,
     bgl_type::{KeyValueOrSpread, SubsumationContext, Type},
@@ -30,10 +32,10 @@ impl AST<TypeExpression> {
                 args_spread: args_spread
                     .as_ref()
                     .map(|s| s.resolve_type(ctx))
-                    .map(Box::new),
+                    .map(Rc::new),
                 is_pure,
                 is_async,
-                throws: throws.as_ref().map(|s| s.resolve_type(ctx)).map(Box::new),
+                throws: throws.as_ref().map(|s| s.resolve_type(ctx)).map(Rc::new),
             },
             TypeExpression::FuncType(FuncType {
                 args,
@@ -54,12 +56,12 @@ impl AST<TypeExpression> {
                 args_spread: args_spread
                     .as_ref()
                     .map(|s| s.resolve_type(ctx))
-                    .map(Box::new),
+                    .map(Rc::new),
                 is_pure,
                 returns: returns
                     .as_ref()
                     .map(|s| s.resolve_type(ctx))
-                    .map(Box::new)
+                    .map(Rc::new)
                     .unwrap(),
             },
             TypeExpression::GenericType(GenericType { type_params, inner }) => todo!(),
@@ -87,7 +89,7 @@ impl AST<TypeExpression> {
             //     _ => Type::PoisonedType,
             // },
             TypeExpression::ModifierType(ModifierType { kind, inner }) => {
-                let inner = Box::new(inner.resolve_type(ctx));
+                let inner = Rc::new(inner.resolve_type(ctx));
 
                 match kind {
                     ModifierTypeKind::Readonly => Type::ReadonlyType(inner),
@@ -97,7 +99,7 @@ impl AST<TypeExpression> {
                 }
             }
             TypeExpression::SpecialType(SpecialType { kind, inner }) => {
-                let inner = Box::new(inner.resolve_type(ctx));
+                let inner = Rc::new(inner.resolve_type(ctx));
 
                 match kind {
                     SpecialTypeKind::Iterator => Type::IteratorType(inner),
@@ -117,11 +119,11 @@ impl AST<TypeExpression> {
                 key_type,
                 value_type,
             }) => Type::RecordType {
-                key_type: Box::new(key_type.resolve_type(ctx)),
-                value_type: Box::new(value_type.resolve_type(ctx)),
+                key_type: Rc::new(key_type.resolve_type(ctx)),
+                value_type: Rc::new(value_type.resolve_type(ctx)),
             },
             TypeExpression::ArrayType(ArrayType(element)) => {
-                Type::ArrayType(Box::new(element.resolve_type(ctx)))
+                Type::ArrayType(Rc::new(element.resolve_type(ctx)))
             }
             TypeExpression::TupleType(TupleType(members)) => {
                 Type::TupleType(members.iter().map(|x| x.resolve_type(ctx)).collect())
@@ -148,8 +150,8 @@ impl AST<TypeExpression> {
                 property,
                 optional: _,
             }) => Type::PropertyType {
-                subject: Box::new(subject.resolve_type(ctx)),
-                property: Box::new(property.resolve_type(ctx)),
+                subject: Rc::new(subject.resolve_type(ctx)),
+                property: Rc::new(property.resolve_type(ctx)),
             },
         }
     }

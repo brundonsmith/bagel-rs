@@ -1,6 +1,10 @@
-use std::fmt::{Display, Write};
+use std::{
+    fmt::{Display, Write},
+    rc::Rc,
+};
 
 use enum_variant_type::EnumVariantType;
+use memoize::memoize;
 
 use crate::{
     passes::{check::CheckContext, resolve_type::ResolveContext, typeinfer::InferTypeContext},
@@ -16,17 +20,17 @@ use super::{
 
 #[derive(Clone, Debug, PartialEq, EnumVariantType)]
 pub enum Type {
-    ElementofType(Box<Type>),
+    ElementofType(Rc<Type>),
 
-    ValueofType(Box<Type>),
+    ValueofType(Rc<Type>),
 
-    KeyofType(Box<Type>),
+    KeyofType(Rc<Type>),
 
-    ReadonlyType(Box<Type>),
+    ReadonlyType(Rc<Type>),
 
     PropertyType {
-        subject: Box<Type>,
-        property: Box<Type>,
+        subject: Rc<Type>,
+        property: Rc<Type>,
         // optional: bool,
     },
 
@@ -34,17 +38,17 @@ pub enum Type {
 
     ProcType {
         args: Vec<Option<Type>>,
-        args_spread: Option<Box<Type>>,
+        args_spread: Option<Rc<Type>>,
         is_pure: bool,
         is_async: bool,
-        throws: Option<Box<Type>>,
+        throws: Option<Rc<Type>>,
     },
 
     FuncType {
         args: Vec<Option<Type>>,
-        args_spread: Option<Box<Type>>,
+        args_spread: Option<Rc<Type>>,
         is_pure: bool,
-        returns: Box<Type>,
+        returns: Rc<Type>,
     },
 
     ObjectType {
@@ -53,11 +57,11 @@ pub enum Type {
     },
 
     RecordType {
-        key_type: Box<Type>,
-        value_type: Box<Type>,
+        key_type: Rc<Type>,
+        value_type: Rc<Type>,
     },
 
-    ArrayType(Box<Type>),
+    ArrayType(Rc<Type>),
 
     TupleType(Vec<Type>),
 
@@ -74,11 +78,11 @@ pub enum Type {
 
     NamedType(AST<LocalIdentifier>),
 
-    IteratorType(Box<Type>),
+    IteratorType(Rc<Type>),
 
-    PlanType(Box<Type>),
+    PlanType(Rc<Type>),
 
-    ErrorType(Box<Type>),
+    ErrorType(Rc<Type>),
 
     RegularExpressionType, // TODO: Number of match groups?
 
@@ -89,6 +93,45 @@ pub enum Type {
     AnyType,
 }
 
+#[memoize]
+pub fn truthiness_safe_types() -> Type {
+    Type::UnionType(vec![
+        Type::ANY_BOOLEAN,
+        Type::NilType,
+        // RECORD_OF_ANY,
+        any_array(),
+        any_iterator(),
+        any_plan(),
+        // PROC,
+        // FUNC
+    ])
+}
+
+#[memoize]
+pub fn string_template_safe_types() -> Type {
+    Type::UnionType(vec![Type::ANY_STRING, Type::ANY_NUMBER, Type::ANY_BOOLEAN])
+}
+
+#[memoize]
+pub fn any_array() -> Type {
+    Type::ArrayType(Rc::new(Type::AnyType))
+}
+
+#[memoize]
+pub fn any_iterator() -> Type {
+    Type::IteratorType(Rc::new(Type::AnyType))
+}
+
+#[memoize]
+pub fn any_error() -> Type {
+    Type::ErrorType(Rc::new(Type::AnyType))
+}
+
+#[memoize]
+pub fn any_plan() -> Type {
+    Type::PlanType(Rc::new(Type::AnyType))
+}
+
 impl Type {
     pub const ANY_STRING: Type = Type::StringType(None);
     pub const ANY_NUMBER: Type = Type::NumberType {
@@ -96,39 +139,6 @@ impl Type {
         max: None,
     };
     pub const ANY_BOOLEAN: Type = Type::BooleanType(None);
-
-    pub fn truthiness_safe_types() -> Type {
-        Type::UnionType(vec![
-            Type::ANY_BOOLEAN,
-            Type::NilType,
-            // RECORD_OF_ANY,
-            Type::any_array(),
-            Type::any_iterator(),
-            Type::any_plan(),
-            // PROC,
-            // FUNC
-        ])
-    }
-
-    pub fn string_template_safe_types() -> Type {
-        Type::UnionType(vec![Type::ANY_STRING, Type::ANY_NUMBER, Type::ANY_BOOLEAN])
-    }
-
-    pub fn any_array() -> Type {
-        Type::ArrayType(Box::new(Type::AnyType))
-    }
-
-    pub fn any_iterator() -> Type {
-        Type::IteratorType(Box::new(Type::AnyType))
-    }
-
-    pub fn any_error() -> Type {
-        Type::ErrorType(Box::new(Type::AnyType))
-    }
-
-    pub fn any_plan() -> Type {
-        Type::PlanType(Box::new(Type::AnyType))
-    }
 
     // export const FALSY: UnionType = {
     //     kind: "union-type",
@@ -280,6 +290,15 @@ impl Type {
                     returns: returns_2,
                 },
             ) => {}
+            (Type::PlanType(destination), Type::PlanType(value)) => {
+                return destination.subsumation_issues(ctx, value);
+            }
+            (Type::IteratorType(destination), Type::IteratorType(value)) => {
+                return destination.subsumation_issues(ctx, value);
+            }
+            (Type::ErrorType(destination), Type::ErrorType(value)) => {
+                return destination.subsumation_issues(ctx, value);
+            }
             (Type::UnknownType, _) => {
                 return None;
             }

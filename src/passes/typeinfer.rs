@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use crate::{
     model::ast::*,
     model::{ast::Any, bgl_type::Type, errors::BagelError, module::Module},
@@ -212,7 +214,7 @@ impl AST<Expression> {
                     }
 
                     if bail_out_to_union {
-                        Type::ArrayType(Box::new(Type::UnionType(member_types)))
+                        Type::ArrayType(Rc::new(Type::UnionType(member_types)))
                     } else {
                         Type::TupleType(member_types)
                     }
@@ -253,9 +255,9 @@ impl AST<Expression> {
                     args_spread: type_annotation
                         .args_spread
                         .map(|a| a.resolve_type(ctx.into()))
-                        .map(Box::new),
+                        .map(Rc::new),
                     is_pure,
-                    returns: Box::new(
+                    returns: Rc::new(
                         type_annotation
                             .returns
                             .map(|r| r.resolve_type(ctx.into()))
@@ -284,13 +286,13 @@ impl AST<Expression> {
                     args_spread: type_annotation
                         .args_spread
                         .map(|a| a.resolve_type(ctx.into()))
-                        .map(Box::new),
+                        .map(Rc::new),
                     is_async,
                     is_pure,
                     throws: type_annotation
                         .throws
                         .map(|throws| throws.resolve_type(ctx.into()))
-                        .map(Box::new),
+                        .map(Rc::new),
                 }
             }
             Expression::JavascriptEscape(_) => Type::AnyType,
@@ -298,7 +300,7 @@ impl AST<Expression> {
                 let min = start.infer_type(ctx).to_exact_number();
                 let max = end.infer_type(ctx).to_exact_number();
 
-                Type::IteratorType(Box::new(Type::NumberType { min, max }))
+                Type::IteratorType(Rc::new(Type::NumberType { min, max }))
             }
             Expression::Invocation(Invocation {
                 subject,
@@ -383,7 +385,7 @@ impl AST<Expression> {
                 possible_type: _,
             }) => Type::ANY_BOOLEAN,
             Expression::ErrorExpression(ErrorExpression(inner)) => {
-                Type::ErrorType(Box::new(inner.infer_type(ctx)))
+                Type::ErrorType(Rc::new(inner.infer_type(ctx)))
             }
             Expression::RegularExpression(RegularExpression { expr, flags }) => {
                 Type::RegularExpressionType

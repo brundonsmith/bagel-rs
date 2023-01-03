@@ -1830,7 +1830,7 @@ fn Immutability_test_2() {
     test_check(
         "
     proc foo(param: { foo: string }) {
-      param = { foo: 'stuff' }
+      param = { foo: 'stuff' };
     }",
         true,
     );

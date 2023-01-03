@@ -1,7 +1,10 @@
 use crate::{
     model::{
         ast::*,
-        bgl_type::{SubsumationContext, Type},
+        bgl_type::{
+            any_array, any_error, any_iterator, string_template_safe_types, truthiness_safe_types,
+            SubsumationContext, Type,
+        },
         errors::blue_string,
         slice::Slice,
     },
@@ -194,7 +197,7 @@ where
                             insert.check(ctx);
 
                             check_subsumation(
-                                &Type::string_template_safe_types(),
+                                &string_template_safe_types(),
                                 insert.infer_type(ctx.into()),
                                 insert.slice(),
                                 ctx.report_error,
@@ -213,7 +216,7 @@ where
                             let spread_inner = spread_expr.downcast().0;
 
                             check_subsumation(
-                                &Type::any_array(),
+                                &any_array(),
                                 spread_inner.infer_type(ctx.into()),
                                 spread_inner.slice(),
                                 ctx.report_error,
@@ -222,7 +225,19 @@ where
                     }
                 }
             }
-            Any::ObjectLiteral(ObjectLiteral(_)) => todo!(),
+            Any::ObjectLiteral(ObjectLiteral(entries)) => {
+                for entry in entries {
+                    match entry {
+                        ObjectLiteralEntry::KeyValue(KeyValue { key, value }) => {
+                            key.check(ctx);
+                            value.check(ctx);
+                        }
+                        ObjectLiteralEntry::SpreadExpression(SpreadExpression(spread)) => {
+                            spread.check(ctx);
+                        }
+                    }
+                }
+            }
             Any::SpreadExpression(SpreadExpression(inner)) => {
                 inner.check(ctx);
             }
@@ -506,9 +521,8 @@ where
                 condition.check(ctx);
                 outcome.check(ctx);
 
-                let truthiness_safe = Type::truthiness_safe_types();
                 check_subsumation(
-                    &truthiness_safe,
+                    &truthiness_safe_types(),
                     condition.infer_type(ctx.into()),
                     condition.slice(),
                     ctx.report_error,
@@ -753,9 +767,8 @@ where
                 condition.check(ctx);
                 outcome.check(ctx);
 
-                let truthiness_safe = Type::truthiness_safe_types();
                 check_subsumation(
-                    &truthiness_safe,
+                    &truthiness_safe_types(),
                     condition.infer_type(ctx.into()),
                     condition.slice(),
                     ctx.report_error,
@@ -771,7 +784,7 @@ where
                 body.check(ctx);
 
                 check_subsumation(
-                    &Type::any_iterator(),
+                    &any_iterator(),
                     iterator.infer_type(ctx.into()),
                     iterator.slice(),
                     ctx.report_error,
@@ -782,7 +795,7 @@ where
                 body.check(ctx);
 
                 check_subsumation(
-                    &Type::truthiness_safe_types(),
+                    &truthiness_safe_types(),
                     condition.infer_type(ctx.into()),
                     condition.slice(),
                     ctx.report_error,
@@ -815,7 +828,7 @@ where
                 error_expression.check(ctx);
 
                 check_subsumation(
-                    &Type::any_error(),
+                    &any_error(),
                     error_expression.infer_type(ctx.into()),
                     error_expression.slice(),
                     ctx.report_error,
