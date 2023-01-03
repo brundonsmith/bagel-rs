@@ -160,7 +160,10 @@ pub trait Parentable {
     fn set_parent<TParentKind>(&mut self, parent: &AST<TParentKind>)
     where
         TParentKind: Clone + TryFrom<Any>,
-        Any: From<TParentKind>;
+        Any: From<TParentKind>,
+    {
+        // do nothing by default
+    }
 }
 
 impl<TKind> Parentable for AST<TKind>
@@ -209,6 +212,14 @@ where
         }
     }
 }
+
+// just for the sake of make_node!() macros
+impl Parentable for bool {}
+impl Parentable for Slice {}
+impl Parentable for PlatformSet {}
+impl Parentable for ModifierTypeKind {}
+impl Parentable for SpecialTypeKind {}
+impl Parentable for AwaitOrDetach {}
 
 #[derive(Debug, Clone)]
 pub struct ASTInner {
@@ -698,8 +709,38 @@ impl From<AST<Expression>> for StringLiteralSegment {
         Self::AST(s)
     }
 }
+impl Parentable for StringLiteralSegment {
+    fn set_parent<TParentKind>(&mut self, parent: &AST<TParentKind>)
+    where
+        TParentKind: Clone + TryFrom<Any>,
+        Any: From<TParentKind>,
+    {
+        match self {
+            StringLiteralSegment::Slice(_) => {}
+            StringLiteralSegment::AST(expr) => expr.set_parent(parent),
+        }
+    }
+}
 
 union_type!(ObjectLiteralEntry = KeyValue | SpreadExpression);
+
+impl Parentable for ObjectLiteralEntry {
+    fn set_parent<TParentKind>(&mut self, parent: &AST<TParentKind>)
+    where
+        TParentKind: Clone + TryFrom<Any>,
+        Any: From<TParentKind>,
+    {
+        match self {
+            ObjectLiteralEntry::KeyValue(KeyValue { key, value }) => {
+                key.set_parent(parent);
+                value.set_parent(parent);
+            }
+            ObjectLiteralEntry::SpreadExpression(SpreadExpression(spread)) => {
+                spread.set_parent(parent);
+            }
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct KeyValue {
@@ -708,6 +749,24 @@ pub struct KeyValue {
 }
 
 union_type!(ObjectTypeEntry = KeyValueType | SpreadType);
+
+impl Parentable for ObjectTypeEntry {
+    fn set_parent<TParentKind>(&mut self, parent: &AST<TParentKind>)
+    where
+        TParentKind: Clone + TryFrom<Any>,
+        Any: From<TParentKind>,
+    {
+        match self {
+            ObjectTypeEntry::KeyValueType(KeyValueType { key, value }) => {
+                key.set_parent(parent);
+                value.set_parent(parent);
+            }
+            ObjectTypeEntry::SpreadType(SpreadType(spread)) => {
+                spread.set_parent(parent);
+            }
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct KeyValueType {
@@ -875,6 +934,19 @@ pub enum ArrayLiteralEntry {
     Spread(AST<SpreadExpression>),
 }
 
+impl Parentable for ArrayLiteralEntry {
+    fn set_parent<TParentKind>(&mut self, parent: &AST<TParentKind>)
+    where
+        TParentKind: Clone + TryFrom<Any>,
+        Any: From<TParentKind>,
+    {
+        match self {
+            ArrayLiteralEntry::Expression(expr) => expr.set_parent(parent),
+            ArrayLiteralEntry::Spread(spread) => spread.set_parent(parent),
+        }
+    }
+}
+
 // #[derive(Debug, Clone, PartialEq)]
 // pub enum ObjectLiteralEntry {
 //     KeyValue(AST<Expression>),
@@ -885,6 +957,19 @@ pub enum ArrayLiteralEntry {
 pub enum Property {
     Expression(AST<Expression>),
     PlainIdentifier(AST<PlainIdentifier>),
+}
+
+impl Parentable for Property {
+    fn set_parent<TParentKind>(&mut self, parent: &AST<TParentKind>)
+    where
+        TParentKind: Clone + TryFrom<Any>,
+        Any: From<TParentKind>,
+    {
+        match self {
+            Property::Expression(expr) => expr.set_parent(parent),
+            Property::PlainIdentifier(ident) => ident.set_parent(parent),
+        }
+    }
 }
 
 // --- AST groups ---
