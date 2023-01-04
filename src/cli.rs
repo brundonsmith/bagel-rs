@@ -37,6 +37,10 @@ pub enum Command {
         #[arg(long)]
         deno: bool,
 
+        /// Run using Bun
+        #[arg(long)]
+        bun: bool,
+
         #[arg(long)]
         clean: bool,
     },
@@ -101,41 +105,4 @@ pub enum Command {
     //     #[arg()]
     //     target: String,
     // },
-}
-
-impl Command {
-    pub fn perform(self) -> Result<String, String> {
-        match self {
-            Command::New { dir } => todo!(),
-            Command::Init => todo!(),
-            Command::Build {
-                target,
-                watch,
-                clean,
-            } => todo!(),
-            Command::Run {
-                target,
-                node,
-                deno,
-                clean,
-            } => todo!(),
-            Command::Transpile {
-                target,
-                watch,
-                clean,
-            } => todo!(),
-            Command::Check {
-                target,
-                watch,
-                clean,
-            } => todo!(),
-            Command::Test {
-                target,
-                test_filter,
-                watch,
-                clean,
-            } => todo!(),
-            Command::Clean { target } => todo!(),
-        }
-    }
 }

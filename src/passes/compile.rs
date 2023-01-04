@@ -5,13 +5,13 @@ use crate::model::{
 use std::fmt::{Result, Write};
 
 impl Module {
-    pub fn compile<W: Write>(&self, f: &mut W) -> Result {
-        self.ast.compile(f)
+    pub fn compile<W: Write>(&self, ctx: CompileContext, f: &mut W) -> Result {
+        self.ast.compile(ctx, f)
     }
 }
 
 pub trait Compilable {
-    fn compile<W: Write>(&self, f: &mut W) -> Result;
+    fn compile<W: Write>(&self, ctx: CompileContext, f: &mut W) -> Result;
 }
 
 impl<TKind> Compilable for AST<TKind>
@@ -19,11 +19,11 @@ where
     TKind: Clone + TryFrom<Any>,
     Any: From<TKind>,
 {
-    fn compile<W: Write>(&self, f: &mut W) -> Result {
+    fn compile<W: Write>(&self, ctx: CompileContext, f: &mut W) -> Result {
         match self.details() {
             Any::Module(ast::Module { declarations }) => {
                 for decl in declarations {
-                    decl.compile(f)?;
+                    decl.compile(ctx, f)?;
                     f.write_str("\n\n")?;
                 }
 
@@ -36,7 +36,13 @@ where
                 name,
                 declared_type,
                 exported,
-            }) => todo!(),
+            }) => {
+                if ctx.include_types {
+                    todo!()
+                }
+
+                Ok(())
+            }
             Any::FuncDeclaration(FuncDeclaration {
                 name,
                 func,
@@ -54,6 +60,7 @@ where
                 f.write_str(name.slice().as_str())?;
                 f.write_str(" = ")?;
                 compile_function(
+                    ctx,
                     f,
                     Some(name.slice().as_str()),
                     &type_annotation.args,
@@ -80,6 +87,7 @@ where
                 f.write_str(name.slice().as_str())?;
                 f.write_str(" = ")?;
                 compile_function(
+                    ctx,
                     f,
                     Some(name.slice().as_str()),
                     &type_annotation.args,
@@ -103,9 +111,9 @@ where
                 }
                 f.write_str("const ")?;
                 f.write_str(name.slice().as_str())?;
-                compile_type_annotation(f, type_annotation.as_ref())?;
+                compile_type_annotation(ctx, f, type_annotation.as_ref())?;
                 f.write_str(" = ")?;
-                value.compile(f)?;
+                value.compile(ctx, f)?;
                 f.write_str(";")
             }
             Any::TestExprDeclaration(TestExprDeclaration { name, expr }) => todo!(),
@@ -128,7 +136,7 @@ where
                         StringLiteralSegment::Slice(s) => f.write_str(s.as_str())?,
                         StringLiteralSegment::AST(insert) => {
                             f.write_str("${")?;
-                            insert.compile(f)?;
+                            insert.compile(ctx, f)?;
                             f.write_str("}")?;
                         }
                     };
@@ -150,11 +158,11 @@ where
                     f.write_char(' ')?;
                     match entry {
                         ElementOrSpread::Element(element) => {
-                            element.compile(f)?;
+                            element.compile(ctx, f)?;
                         }
                         ElementOrSpread::Spread(spread) => {
                             f.write_str("...")?;
-                            spread.compile(f)?;
+                            spread.compile(ctx, f)?;
                         }
                     }
                 }
@@ -170,13 +178,13 @@ where
 
                     match entry {
                         KeyValueOrSpread::KeyValue(key, value) => {
-                            key.compile(f)?;
+                            key.compile(ctx, f)?;
                             f.write_str(": ")?;
-                            value.compile(f)?;
+                            value.compile(ctx, f)?;
                         }
                         KeyValueOrSpread::Spread(expr) => {
                             f.write_str("...")?;
-                            expr.compile(f)?;
+                            expr.compile(ctx, f)?;
                         }
                     }
                 }
@@ -184,25 +192,25 @@ where
             }
             Any::SpreadExpression(SpreadExpression(inner)) => {
                 f.write_str("...")?;
-                inner.compile(f)
+                inner.compile(ctx, f)
             }
             Any::BinaryOperation(BinaryOperation { left, op, right }) => {
                 f.write_char('(')?;
-                left.compile(f)?;
+                left.compile(ctx, f)?;
                 f.write_char(' ')?;
-                op.compile(f)?;
+                op.compile(ctx, f)?;
                 f.write_char(' ')?;
-                right.compile(f)?;
+                right.compile(ctx, f)?;
                 f.write_char(')')
             }
             Any::BinaryOperator(BinaryOperator(op)) => f.write_str(op.into()),
             Any::NegationOperation(NegationOperation(inner)) => {
                 f.write_char('!')?;
-                inner.compile(f)
+                inner.compile(ctx, f)
             }
             Any::Parenthesis(Parenthesis(inner)) => {
                 f.write_char('(')?;
-                inner.compile(f)?;
+                inner.compile(ctx, f)?;
                 f.write_char(')')
             }
             Any::LocalIdentifier(LocalIdentifier(name)) => f.write_str(name.as_str()),
@@ -212,18 +220,18 @@ where
             }) => {
                 f.write_str("(() => {\n")?;
                 for decl in declarations {
-                    decl.compile(f)?;
+                    decl.compile(ctx, f)?;
                     f.write_char('\n')?;
                 }
                 f.write_str("return ")?;
-                inner.compile(f)?;
+                inner.compile(ctx, f)?;
                 f.write_str(";\n})()")
             }
             Any::InlineDeclaration(InlineDeclaration { destination, value }) => {
                 f.write_str("const ")?;
-                destination.compile(f)?;
+                destination.compile(ctx, f)?;
                 f.write_str(" = ")?;
-                value.compile(f)?;
+                value.compile(ctx, f)?;
                 f.write_char(';')
             }
             Any::Func(Func {
@@ -235,6 +243,7 @@ where
                 let type_annotation = type_annotation.downcast();
 
                 compile_function(
+                    ctx,
                     f,
                     None,
                     &type_annotation.args,
@@ -252,6 +261,7 @@ where
                 let type_annotation = type_annotation.downcast();
 
                 compile_function(
+                    ctx,
                     f,
                     None,
                     &type_annotation.args,
@@ -263,7 +273,7 @@ where
             Any::Block(Block(statements)) => {
                 f.write_str("{\n")?;
                 for stmt in statements {
-                    stmt.compile(f)?;
+                    stmt.compile(ctx, f)?;
                 }
                 f.write_str("\n}")
             }
@@ -278,7 +288,7 @@ where
                 bubbles,
                 awaited_or_detached,
             }) => {
-                subject.compile(f)?;
+                subject.compile(ctx, f)?;
 
                 f.write_char('(')?;
                 for (index, arg) in args.iter().enumerate() {
@@ -286,7 +296,7 @@ where
                         f.write_str(", ")?;
                     }
 
-                    arg.compile(f)?;
+                    arg.compile(ctx, f)?;
                 }
                 f.write_char(')')?;
 
@@ -299,14 +309,14 @@ where
             }) => {
                 f.write_str(INT)?;
                 f.write_str("observe(")?;
-                subject.compile(f)?;
+                subject.compile(ctx, f)?;
                 f.write_str(", ")?;
 
                 match property {
-                    Property::Expression(expr) => expr.compile(f)?,
+                    Property::Expression(expr) => expr.compile(ctx, f)?,
                     Property::PlainIdentifier(ident) => {
                         f.write_char('\'')?;
-                        ident.compile(f)?;
+                        ident.compile(ctx, f)?;
                         f.write_char('\'')?;
                     }
                 }
@@ -321,19 +331,19 @@ where
             }) => {
                 f.write_char('(')?;
                 for case in cases {
-                    case.compile(f)?;
+                    case.compile(ctx, f)?;
                 }
                 if let Some(default_case) = default_case {
-                    default_case.compile(f)?;
+                    default_case.compile(ctx, f)?;
                 } else {
                     f.write_str("undefined")?;
                 }
                 f.write_char(')')
             }
             Any::IfElseExpressionCase(IfElseExpressionCase { condition, outcome }) => {
-                condition.compile(f)?;
+                condition.compile(ctx, f)?;
                 f.write_str(" ? ")?;
-                outcome.compile(f)?;
+                outcome.compile(ctx, f)?;
                 f.write_str(" : ")
             }
             Any::SwitchExpression(SwitchExpression {
@@ -380,8 +390,8 @@ where
                 type_annotation,
                 optional,
             }) => {
-                name.compile(f)?;
-                compile_type_annotation(f, type_annotation.as_ref())
+                name.compile(ctx, f)?;
+                compile_type_annotation(ctx, f, type_annotation.as_ref())
             }
             Any::GenericType(GenericType { type_params, inner }) => todo!(),
             Any::TypeParam(TypeParam { name, extends }) => todo!(),
@@ -428,21 +438,21 @@ where
                         f.write_str(" else ")?;
                     }
 
-                    case.compile(f)?;
+                    case.compile(ctx, f)?;
                 }
 
                 if let Some(default_case) = default_case {
                     f.write_str(" else ")?;
-                    default_case.compile(f)?;
+                    default_case.compile(ctx, f)?;
                 }
 
                 Ok(())
             }
             Any::IfElseStatementCase(IfElseStatementCase { condition, outcome }) => {
                 f.write_str("if (")?;
-                condition.compile(f)?;
+                condition.compile(ctx, f)?;
                 f.write_str(") ")?;
-                outcome.compile(f)
+                outcome.compile(ctx, f)
             }
             Any::ForLoop(ForLoop {
                 item_identifier,
@@ -476,24 +486,24 @@ where
 //     &'a TKind: From<&'a Any>,
 //     Any: TryInto<TKind>,
 // {
-//     fn compile<W: Write>(&self, f: &mut W) -> Result {
-//         self.into().compile(f)
+//     fn compile<W: Write>(&self, ctx: CompileContext, f: &mut W) -> Result {
+//         self.into().compile(ctx, f)
 //     }
 // }
 
 impl Compilable for Arg {
-    fn compile<W: Write>(&self, f: &mut W) -> Result {
+    fn compile<W: Write>(&self, ctx: CompileContext, f: &mut W) -> Result {
         let Arg {
             name,
             type_annotation,
             optional,
         } = self;
 
-        name.compile(f)?;
+        name.compile(ctx, f)?;
         if *optional {
             f.write_char('?')?;
         }
-        compile_type_annotation(f, type_annotation.as_ref())?;
+        compile_type_annotation(ctx, f, type_annotation.as_ref())?;
 
         Ok(())
     }
@@ -503,9 +513,9 @@ impl<T> Compilable for Option<T>
 where
     T: Compilable,
 {
-    fn compile<W: Write>(&self, f: &mut W) -> Result {
+    fn compile<W: Write>(&self, ctx: CompileContext, f: &mut W) -> Result {
         if let Some(sel) = self {
-            sel.compile(f);
+            sel.compile(ctx, f);
         }
 
         Ok(())
@@ -516,9 +526,9 @@ impl<T> Compilable for Vec<T>
 where
     T: Compilable,
 {
-    fn compile<W: Write>(&self, f: &mut W) -> Result {
+    fn compile<W: Write>(&self, ctx: CompileContext, f: &mut W) -> Result {
         for el in self.iter() {
-            el.compile(f);
+            el.compile(ctx, f);
         }
 
         Ok(())
@@ -526,16 +536,16 @@ where
 }
 
 impl Compilable for DeclarationDestination {
-    fn compile<W: Write>(&self, f: &mut W) -> Result {
+    fn compile<W: Write>(&self, ctx: CompileContext, f: &mut W) -> Result {
         match self {
             DeclarationDestination::NameAndType(NameAndType {
                 name,
                 type_annotation,
             }) => {
-                name.compile(f)?;
+                name.compile(ctx, f)?;
                 if let Some(type_annotation) = type_annotation {
                     f.write_str(": ")?;
-                    type_annotation.compile(f)?;
+                    type_annotation.compile(ctx, f)?;
                 }
 
                 Ok(())
@@ -551,6 +561,7 @@ pub const INT_FN: &str = "___fn_";
 // --- Util functions ---
 
 fn compile_function<W: Write>(
+    ctx: CompileContext,
     f: &mut W,
     name: Option<&str>,
     args: &Vec<AST<Arg>>,
@@ -567,23 +578,25 @@ fn compile_function<W: Write>(
 
     f.write_char('(')?;
     for arg in args {
-        arg.compile(f)?;
+        arg.compile(ctx, f)?;
     }
     f.write_char(')')?;
 
-    if return_type_void {
-        f.write_str(": void")?;
-    } else {
-        compile_type_annotation(f, return_type)?;
+    if ctx.include_types {
+        if return_type_void {
+            f.write_str(": void")?;
+        } else {
+            compile_type_annotation(ctx, f, return_type)?;
+        }
     }
 
     f.write_char(' ')?;
 
     if let Any::Block(_) = body.details() {
-        body.compile(f)?;
+        body.compile(ctx, f)?;
     } else {
         f.write_str("{ return ")?;
-        body.compile(f)?;
+        body.compile(ctx, f)?;
         f.write_str(" }")?;
     }
 
@@ -591,13 +604,21 @@ fn compile_function<W: Write>(
 }
 
 fn compile_type_annotation<W: Write>(
+    ctx: CompileContext,
     f: &mut W,
     type_annotation: Option<&AST<TypeExpression>>,
 ) -> Result {
-    if let Some(type_annotation) = type_annotation {
-        f.write_str(": ")?;
-        type_annotation.compile(f)?;
+    if ctx.include_types {
+        if let Some(type_annotation) = type_annotation {
+            f.write_str(": ")?;
+            type_annotation.compile(ctx, f)?;
+        }
     }
 
     Ok(())
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct CompileContext {
+    pub include_types: bool,
 }

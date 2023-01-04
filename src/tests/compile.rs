@@ -4,7 +4,7 @@ use regex::Regex;
 
 use crate::{
     model::{errors::BagelError, module::ModuleID},
-    passes::compile::Compilable,
+    passes::compile::{Compilable, CompileContext},
     passes::parse::parse,
 };
 
@@ -814,7 +814,14 @@ fn test_compile(bgl: &str, js: &str) {
     match parsed {
         Ok(parsed) => {
             let mut compiled = String::new();
-            parsed.compile(&mut compiled).unwrap();
+            parsed
+                .compile(
+                    CompileContext {
+                        include_types: true,
+                    },
+                    &mut compiled,
+                )
+                .unwrap();
             assert_eq!(normalize(&compiled), normalize(js));
         }
         Err(err) => {

@@ -13,7 +13,10 @@ use clap::{command, Parser};
 use cli::Command;
 use colored::Color;
 use glob::glob;
-use model::module::{ModuleID, ModulesStore};
+use model::{
+    errors::blue_string,
+    module::{ModuleID, ModulesStore},
+};
 use passes::check::CheckContext;
 
 use crate::{model::errors::BagelError, utils::cli_label};
@@ -74,43 +77,75 @@ fn main() -> ExitCode {
             watch,
             clean,
         } => {
-            let modules_store = load_and_parse(get_all_entrypoints(target), clean);
-            let errors = gather_errors(&modules_store);
-            print_error_results(&errors);
+            let bundle_path = bundle(target.as_str(), watch, clean);
 
-            if errors.values().any(|errors| errors.len() > 0) {
+            if bundle_path.is_err() {
                 return ExitCode::FAILURE;
             }
-
-            // if no errors,
-            //  transpile
-            //  then bundle
         }
         Command::Run {
             target,
             node,
             deno,
+            bun,
             clean,
         } => {
-            let modules_store = load_and_parse(get_all_entrypoints(target), clean);
-            let errors = gather_errors(&modules_store);
-            print_error_results(&errors);
+            let bundle_path = bundle(target.as_str(), false, clean);
 
-            if errors.values().any(|errors| errors.len() > 0) {
-                return ExitCode::FAILURE;
+            match bundle_path {
+                Ok(bundle_path) => {
+                    // let platforms = config.platforms;
+
+                    if node {
+                        let command = std::env::var("BAGEL_NODE_BIN").unwrap_or("node".to_owned());
+
+                        println!(
+                            "{} {}",
+                            cli_label(&format!("Running ({})", command), Color::Green),
+                            bundle_path.to_string_lossy()
+                        );
+
+                        std::process::Command::new(&command)
+                            .arg(bundle_path.canonicalize().unwrap())
+                            .spawn()
+                            .unwrap()
+                            .wait()
+                            .unwrap()
+                            .code();
+                    } else if deno {
+                        let command = std::env::var("BAGEL_DENO_BIN").unwrap_or("deno".to_owned());
+
+                        println!(
+                            "{} {}",
+                            cli_label(&format!("Running ({})", command), Color::Green),
+                            bundle_path.to_string_lossy()
+                        );
+
+                        std::process::Command::new(&command)
+                            .arg("run")
+                            .arg("--unstable")
+                            .arg("--allow-all")
+                            .arg(bundle_path.canonicalize().unwrap())
+                            .spawn()
+                            .unwrap()
+                            .wait()
+                            .unwrap()
+                            .code();
+                    } else if bun {
+                        todo!()
+                    } else {
+                        todo!()
+                    }
+                }
+                Err(_) => return ExitCode::FAILURE,
             }
-
-            // if no errors,
-            //  transpile
-            //  then bundle
-            //  then run
         }
         Command::Transpile {
             target,
             watch,
             clean,
         } => {
-            let modules_store = load_and_parse(get_all_entrypoints(target), clean);
+            let modules_store = load_and_parse(get_all_entrypoints(target.as_str()), clean);
             let errors = gather_errors(&modules_store);
             print_error_results(&errors);
 
@@ -126,7 +161,7 @@ fn main() -> ExitCode {
             watch,
             clean,
         } => {
-            let modules_store = load_and_parse(get_all_entrypoints(target), clean);
+            let modules_store = load_and_parse(get_all_entrypoints(target.as_str()), clean);
             let errors = gather_errors(&modules_store);
             print_error_results(&errors);
 
@@ -169,8 +204,66 @@ fn s_or_none(n: usize) -> &'static str {
     }
 }
 
-fn get_all_entrypoints(target: String) -> impl Iterator<Item = PathBuf> {
-    let paths = glob(target.as_str()).unwrap();
+fn pretty_size(bytes: u64) -> String {
+    if bytes < 1_000 {
+        format!("{} bytes", bytes)
+    } else if bytes < 1_000_000 {
+        format!("{:.1}KB", bytes as f64 / 1_000.0)
+    } else if bytes < 1_000_000_000 {
+        format!("{:.1}MB", bytes as f64 / 1_000_000.0)
+    } else {
+        format!("{:.1}GB", bytes as f64 / 1_000_000_000.0)
+    }
+}
+
+fn bundle(target: &str, watch: bool, clean: bool) -> Result<PathBuf, ()> {
+    let entrypoint = get_single_entrypoint(target);
+
+    match entrypoint {
+        Ok(entrypoint) => {
+            let modules_store = load_and_parse(std::iter::once(entrypoint.clone()), clean);
+            let errors = gather_errors(&modules_store);
+            print_error_results(&errors);
+
+            if errors.values().any(|errors| errors.len() > 0) {
+                return Err(());
+            }
+
+            let bundle_path = entrypoint.with_extension("bundle.js");
+
+            std::fs::write(&bundle_path, modules_store.bundle());
+
+            let bundle_size = std::fs::metadata(&bundle_path).unwrap().len();
+
+            println!(
+                "{} {} ({})",
+                cli_label("Bundled", Color::Green),
+                (&bundle_path).to_string_lossy(),
+                pretty_size(bundle_size)
+            );
+
+            Ok(bundle_path)
+        }
+        Err(err) => {
+            match err {
+                SingleEntrypointError::NotFound => println!(
+                    "{} Couldn't find module {}",
+                    cli_label("Failed", Color::Red),
+                    blue_string(target)
+                ),
+                SingleEntrypointError::Multi => println!(
+                    "{} This command expects a single bagel module",
+                    cli_label("Failed", Color::Red),
+                ),
+            };
+
+            Err(())
+        }
+    }
+}
+
+fn get_all_entrypoints(target: &str) -> impl Iterator<Item = PathBuf> {
+    let paths = glob(target).unwrap();
 
     paths.filter_map(|path| {
         let path = path.unwrap();
@@ -183,6 +276,28 @@ fn get_all_entrypoints(target: String) -> impl Iterator<Item = PathBuf> {
             None
         }
     })
+}
+
+fn get_single_entrypoint(target: &str) -> Result<PathBuf, SingleEntrypointError> {
+    let mut paths = glob(target).map_err(|_| SingleEntrypointError::NotFound)?;
+
+    let result = paths
+        .next()
+        .map(Result::ok)
+        .flatten()
+        .ok_or(SingleEntrypointError::NotFound);
+
+    if paths.next().is_some() {
+        Err(SingleEntrypointError::Multi)
+    } else {
+        result
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum SingleEntrypointError {
+    NotFound,
+    Multi,
 }
 
 fn load_and_parse<I: Iterator<Item = PathBuf>>(entrypoints: I, clean: bool) -> ModulesStore {
@@ -201,18 +316,19 @@ pub fn gather_errors(modules_store: &ModulesStore) -> HashMap<ModuleID, Vec<Bage
 
     for (module_id, module) in modules_store.iter() {
         let mut module_errors = Vec::new();
+        let report_error = &mut |error: BagelError| {
+            module_errors.push(error);
+        };
 
         match module {
             Ok(module) => {
                 let mut context = CheckContext {
                     modules: &modules_store,
                     current_module: &module,
-                    report_error: &mut |error: BagelError| {
-                        module_errors.push(error);
-                    },
+                    nearest_func_or_proc: None,
                 };
 
-                module.check(&mut context);
+                module.check(&mut context, report_error);
             }
             Err(error) => {
                 module_errors.push(BagelError::from(error.clone()));

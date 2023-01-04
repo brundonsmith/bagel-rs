@@ -4,12 +4,13 @@ use super::ast::{
 };
 use super::errors::ParseError;
 use super::slice::Slice;
+use crate::passes::compile::CompileContext;
 use crate::passes::parse::parse;
 use crate::utils::cli_label;
 use colored::Color;
 use memoize::memoize;
 use reqwest::Url;
-use std::fmt::Display;
+use std::fmt::{Display, Write};
 use std::path::Path;
 use std::{collections::HashMap, path::PathBuf, rc::Rc};
 
@@ -89,6 +90,28 @@ impl ModulesStore {
             })
             .flatten()
             .flatten()
+    }
+
+    pub fn bundle(&self) -> String {
+        let mut buf = String::new();
+
+        // VERY NAIVE FOR NOW
+        for module in self
+            .modules
+            .iter()
+            .filter_map(|(_, module)| module.as_ref().ok())
+        {
+            module.compile(
+                CompileContext {
+                    include_types: false,
+                },
+                &mut buf,
+            );
+        }
+
+        buf.write_str("\n\nmain();");
+
+        buf
     }
 }
 

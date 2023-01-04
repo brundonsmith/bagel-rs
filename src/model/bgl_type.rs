@@ -193,9 +193,9 @@ impl Type {
                     .resolve_symbol(name.downcast().0.as_str())
                     .map(|resolved| match resolved.details() {
                         Any::TypeDeclaration(TypeDeclaration {
-                            name,
+                            name: _,
                             declared_type,
-                            exported,
+                            exported: _,
                         }) => declared_type.resolve_type(ctx.into()),
                         _ => Type::PoisonedType,
                     })
@@ -208,9 +208,9 @@ impl Type {
                     .resolve_symbol(name.downcast().0.as_str())
                     .map(|resolved| match resolved.details() {
                         Any::TypeDeclaration(TypeDeclaration {
-                            name,
+                            name: _,
                             declared_type,
-                            exported,
+                            exported: _,
                         }) => declared_type.resolve_type(ctx.into()),
                         _ => Type::PoisonedType,
                     })
@@ -323,14 +323,28 @@ impl Type {
                 }
             }
             (
+                Type::SpecialType {
+                    kind: destination_kind,
+                    inner: destination_inner,
+                },
+                Type::SpecialType {
+                    kind: value_kind,
+                    inner: value_inner,
+                },
+            ) => {
+                if destination_kind == value_kind {
+                    return destination_inner.subsumation_issues(ctx, value_inner);
+                }
+            }
+            (
                 destination,
                 Type::InnerType {
-                    kind,
+                    kind: value_kind,
                     inner: value_inner,
                 },
             ) => {
                 return Type::SpecialType {
-                    kind: *kind,
+                    kind: *value_kind,
                     inner: Rc::new(destination.clone()),
                 }
                 .subsumation_issues(ctx, value_inner)
