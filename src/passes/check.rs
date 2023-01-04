@@ -72,7 +72,7 @@ where
                 let path_name = path.downcast();
                 let path_name = path_name.value.as_str();
 
-                if ctx.modules.import(module_id, path_name).is_none() {
+                if ctx.modules.import_raw(module_id, path_name).is_none() {
                     report_error(BagelError::MiscError {
                         module_id: module_id.clone(),
                         src: path.slice().clone(),
@@ -91,7 +91,7 @@ where
                 let path_name = path.downcast();
                 let path_name = path_name.value.as_str();
 
-                let imported_module = ctx.modules.import(module_id, path_name);
+                let imported_module = ctx.modules.import_raw(module_id, path_name);
 
                 match imported_module {
                     None => report_error(BagelError::MiscError {
@@ -103,7 +103,8 @@ where
                             blue_string(module_id)
                         ),
                     }),
-                    Some(imported_module) => {
+                    Some(Err(_)) => {}
+                    Some(Ok(imported_module)) => {
                         for item in imports {
                             let item_downcast = item.downcast();
                             let item_name = item_downcast.name.downcast();

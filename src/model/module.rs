@@ -46,7 +46,7 @@ impl ModulesStore {
                 .get(&module_id)
                 .map(|res| res.as_ref().map(|module| module.ast.downcast()))
             {
-                let imported: Vec<String> = declarations
+                let imported = declarations
                     .iter()
                     .filter_map(|decl| match decl.downcast() {
                         Declaration::ImportAllDeclaration(ImportAllDeclaration {
@@ -57,8 +57,7 @@ impl ModulesStore {
                             Some(path.downcast().value.as_str().to_owned())
                         }
                         _ => None,
-                    })
-                    .collect();
+                    });
 
                 for path in imported {
                     let other_module_id = module_id.imported(&path);
@@ -80,15 +79,20 @@ impl ModulesStore {
         self.modules.iter()
     }
 
-    pub fn import(&self, current_module_id: &ModuleID, path: &str) -> Option<&Module> {
+    pub fn import_raw(
+        &self,
+        current_module_id: &ModuleID,
+        path: &str,
+    ) -> Option<Result<&Module, &ParseError>> {
         current_module_id
             .imported(&path)
-            .map(|other_module_id| {
-                self.modules
-                    .get(&other_module_id)
-                    .map(|res| res.as_ref().ok())
-            })
+            .map(|other_module_id| self.modules.get(&other_module_id).map(|res| res.as_ref()))
             .flatten()
+    }
+
+    pub fn import(&self, current_module_id: &ModuleID, path: &str) -> Option<&Module> {
+        self.import_raw(current_module_id, path)
+            .map(|res| res.ok())
             .flatten()
     }
 
