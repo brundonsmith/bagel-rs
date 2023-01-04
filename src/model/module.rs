@@ -199,7 +199,12 @@ impl ModuleID {
             ModuleID::try_from(Path::new(imported)).ok()
         } else {
             match self {
-                ModuleID::Local(this) => ModuleID::try_from(this.join(imported).as_path()).ok(),
+                ModuleID::Local(this) => this
+                    .parent()
+                    .map(|dir| dir.to_path_buf().join(imported).canonicalize().ok())
+                    .flatten()
+                    .map(|path| ModuleID::try_from(path.as_path()).ok())
+                    .flatten(),
                 ModuleID::Remote(this) => this.join(imported).ok().map(ModuleID::from),
                 ModuleID::Artificial(_) => Some(ModuleID::Artificial(Rc::new(imported.to_owned()))),
             }
