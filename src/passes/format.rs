@@ -10,7 +10,11 @@ impl Module {
     }
 }
 
-impl Display for ASTAny {
+impl<TKind> Display for AST<TKind>
+where
+    TKind: Clone + TryFrom<Any>,
+    Any: From<TKind>,
+{
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         self.format(f, FormatOptions::DEFAULT)
     }
