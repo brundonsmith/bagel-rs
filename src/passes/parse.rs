@@ -188,7 +188,7 @@ fn import_declaration(i: Slice) -> ParseResult<AST<ImportDeclaration>> {
             exact_string_literal,
             tag("import"),
             tag("{"),
-            separated_list0(w(tag(",")), import_item),
+            separated_list0(w(tag(",")), w(import_item)),
             tag("}"),
         ),
         |(start, mut path, _, _, mut imports, end)| {

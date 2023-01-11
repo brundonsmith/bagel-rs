@@ -29,9 +29,38 @@ where
 
                 Ok(())
             }
-            Any::ImportAllDeclaration(ImportAllDeclaration { name, path }) => todo!(),
-            Any::ImportDeclaration(ImportDeclaration { imports, path }) => todo!(),
-            Any::ImportItem(ImportItem { name, alias }) => todo!(),
+            Any::ImportAllDeclaration(ImportAllDeclaration { name, path }) => {
+                //             import { a, b as otherb } from \"./foo.bgl.ts\";
+                //   import * as bar from \"./bar.bgl.ts\";
+                f.write_str("import * as ")?;
+                name.compile(ctx, f)?;
+                f.write_str(" from \"")?;
+                f.write_str(path.downcast().value.as_str())?; // TODO: Get the correct path for the current build mode
+                f.write_str("\";")
+            }
+            Any::ImportDeclaration(ImportDeclaration { imports, path }) => {
+                f.write_str("import { ")?;
+                for (index, import) in imports.iter().enumerate() {
+                    if index > 0 {
+                        f.write_str(", ")?;
+                    }
+
+                    import.compile(ctx, f)?;
+                }
+                f.write_str(" } from \"")?;
+                f.write_str(path.downcast().value.as_str())?; // TODO: Get the correct path for the current build mode
+                f.write_str("\";")
+            }
+            Any::ImportItem(ImportItem { name, alias }) => {
+                name.compile(ctx, f)?;
+
+                if let Some(alias) = alias {
+                    f.write_str(" as ")?;
+                    alias.compile(ctx, f)?;
+                }
+
+                Ok(())
+            }
             Any::TypeDeclaration(TypeDeclaration {
                 name,
                 declared_type,
