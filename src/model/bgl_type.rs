@@ -16,7 +16,6 @@ use super::{
         Any, ElementOrSpread, KeyValueOrSpread, LocalIdentifier, SpecialTypeKind, TypeDeclaration,
         AST,
     },
-    errors::BagelError,
     module::Module,
     slice::Slice,
 };
@@ -95,6 +94,24 @@ pub fn truthiness_safe_types() -> Type {
     Type::UnionType(vec![
         Type::ANY_BOOLEAN,
         Type::NilType,
+        // RECORD_OF_ANY,
+        any_array(),
+        any_iterator(),
+        any_plan(),
+        // PROC,
+        // FUNC
+    ])
+}
+
+#[memoize]
+pub fn falsy_types() -> Type {
+    Type::UnionType(vec![Type::BooleanType(Some(false)), Type::NilType])
+}
+
+#[memoize]
+pub fn truthy_types() -> Type {
+    Type::UnionType(vec![
+        Type::BooleanType(Some(true)),
         // RECORD_OF_ANY,
         any_array(),
         any_iterator(),
@@ -458,6 +475,48 @@ impl Type {
             }
             _ => None,
         }
+    }
+
+    pub fn subtract(mut self, other: &Type) -> Type {
+        println!("subtracting");
+        println!("self: {}", self);
+        println!("other: {}", other);
+
+        if &self == other {
+            return Type::UnionType(vec![]);
+        }
+
+        match self {
+            Type::UnionType(members) => {
+                distill_union_members(members.into_iter().map(|m| m.subtract(other)).collect())
+            }
+            _ => self,
+        }
+    }
+
+    pub fn narrow(mut self, other: &Type) -> Type {
+        self
+    }
+}
+
+fn distill_union_members(mut members: Vec<Type>) -> Type {
+    if members.len() == 1 {
+        members.remove(0)
+    } else {
+        Type::UnionType(
+            members
+                .into_iter()
+                .filter(|member| {
+                    if let Type::UnionType(members) = member {
+                        if members.len() == 0 {
+                            return false;
+                        }
+                    }
+
+                    return true;
+                })
+                .collect(),
+        )
     }
 }
 

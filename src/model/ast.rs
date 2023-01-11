@@ -1,5 +1,5 @@
 use crate::model::slice::Slice;
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::marker::PhantomData;
 use std::{
     cell::RefCell,
@@ -79,6 +79,14 @@ where
 {
     pub fn details(&self) -> &Any {
         &self.0.details
+    }
+
+    pub fn ptr_eq<TOtherKind>(&self, other: &AST<TOtherKind>) -> bool
+    where
+        TOtherKind: Clone + TryFrom<Any>,
+        Any: From<TOtherKind>,
+    {
+        Rc::ptr_eq(&self.0, &other.0)
     }
 
     pub fn parent(&self) -> Option<ASTAny> {

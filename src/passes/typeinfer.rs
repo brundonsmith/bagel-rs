@@ -11,56 +11,60 @@ use super::resolve_type::ResolveContext;
 
 impl AST<Expression> {
     pub fn infer_type<'a>(&self, ctx: InferTypeContext<'a>) -> Type {
-        match self.downcast() {
-            Expression::BinaryOperation(BinaryOperation { left, op, right }) => {
-                match op.downcast().0 {
-                    BinaryOperatorOp::NullishCoalescing => todo!(),
-                    BinaryOperatorOp::Or => todo!(),
-                    BinaryOperatorOp::And => todo!(),
-                    BinaryOperatorOp::Equals => Type::ANY_BOOLEAN,
-                    BinaryOperatorOp::NotEquals => Type::ANY_BOOLEAN,
-                    BinaryOperatorOp::LessEqual => Type::ANY_BOOLEAN,
-                    BinaryOperatorOp::GreaterEqual => Type::ANY_BOOLEAN,
-                    BinaryOperatorOp::Less => Type::ANY_BOOLEAN,
-                    BinaryOperatorOp::Greater => Type::ANY_BOOLEAN,
-                    BinaryOperatorOp::Plus => {
-                        let left_type = left.infer_type(ctx);
-                        let right_type = right.infer_type(ctx);
+        self.refine(
+            ctx,
+            self,
+            match self.downcast() {
+                Expression::BinaryOperation(BinaryOperation { left, op, right }) => {
+                    match op.downcast().0 {
+                        BinaryOperatorOp::NullishCoalescing => todo!(),
+                        BinaryOperatorOp::Or => todo!(),
+                        BinaryOperatorOp::And => todo!(),
+                        BinaryOperatorOp::Equals => Type::ANY_BOOLEAN,
+                        BinaryOperatorOp::NotEquals => Type::ANY_BOOLEAN,
+                        BinaryOperatorOp::LessEqual => Type::ANY_BOOLEAN,
+                        BinaryOperatorOp::GreaterEqual => Type::ANY_BOOLEAN,
+                        BinaryOperatorOp::Less => Type::ANY_BOOLEAN,
+                        BinaryOperatorOp::Greater => Type::ANY_BOOLEAN,
+                        BinaryOperatorOp::Plus => {
+                            let left_type = left.infer_type(ctx);
+                            let right_type = right.infer_type(ctx);
 
-                        if Type::ANY_NUMBER.subsumes(ctx.into(), &left_type) {
-                            if Type::ANY_NUMBER.subsumes(ctx.into(), &right_type) {
-                                Type::ANY_NUMBER
-                            } else if Type::ANY_STRING.subsumes(ctx.into(), &right_type) {
-                                Type::ANY_STRING
+                            if Type::ANY_NUMBER.subsumes(ctx.into(), &left_type) {
+                                if Type::ANY_NUMBER.subsumes(ctx.into(), &right_type) {
+                                    Type::ANY_NUMBER
+                                } else if Type::ANY_STRING.subsumes(ctx.into(), &right_type) {
+                                    Type::ANY_STRING
+                                } else {
+                                    Type::UnknownType
+                                }
+                            } else if Type::ANY_STRING.subsumes(ctx.into(), &left_type) {
+                                if Type::ANY_NUMBER.subsumes(ctx.into(), &right_type)
+                                    || Type::ANY_STRING.subsumes(ctx.into(), &right_type)
+                                {
+                                    Type::ANY_STRING
+                                } else {
+                                    Type::UnknownType
+                                }
                             } else {
                                 Type::UnknownType
                             }
-                        } else if Type::ANY_STRING.subsumes(ctx.into(), &left_type) {
-                            if Type::ANY_NUMBER.subsumes(ctx.into(), &right_type)
-                                || Type::ANY_STRING.subsumes(ctx.into(), &right_type)
-                            {
-                                Type::ANY_STRING
-                            } else {
-                                Type::UnknownType
-                            }
-                        } else {
-                            Type::UnknownType
                         }
+                        BinaryOperatorOp::Minus => Type::ANY_NUMBER,
+                        BinaryOperatorOp::Times => Type::ANY_NUMBER,
+                        BinaryOperatorOp::Divide => Type::ANY_NUMBER,
                     }
-                    BinaryOperatorOp::Minus => Type::ANY_NUMBER,
-                    BinaryOperatorOp::Times => Type::ANY_NUMBER,
-                    BinaryOperatorOp::Divide => Type::ANY_NUMBER,
                 }
-            }
-            Expression::Parenthesis(Parenthesis(inner)) => inner.infer_type(ctx),
-            Expression::LocalIdentifier(LocalIdentifier(name)) => {
-                let resolved = self.resolve_symbol(name.as_str());
+                Expression::Parenthesis(Parenthesis(inner)) => inner.infer_type(ctx),
+                Expression::LocalIdentifier(LocalIdentifier(name)) => {
+                    let resolved = self.resolve_symbol(name.as_str());
 
-                if let Some(resolved) = resolved {
-                    match resolved.details() {
-                        Any::ImportAllDeclaration(ImportAllDeclaration { name, path }) => todo!(),
-                        Any::ImportDeclaration(ImportDeclaration { imports: _, path }) => {
-                            return ctx
+                    if let Some(resolved) = resolved {
+                        match resolved.details() {
+                            Any::ImportAllDeclaration(ImportAllDeclaration { name, path }) => {
+                                todo!()
+                            }
+                            Any::ImportDeclaration(ImportDeclaration { imports: _, path }) => ctx
                                 .modules
                                 .import(
                                     &ctx.current_module.module_id,
@@ -72,67 +76,57 @@ impl AST<Expression> {
                                 .flatten()
                                 .map(|decl| decl.declaration_type(ctx))
                                 .flatten()
-                                .unwrap_or(Type::PoisonedType);
-                        }
-                        Any::ProcDeclaration(ProcDeclaration {
-                            name: _,
-                            proc,
-                            exported: _,
-                            platforms: _,
-                            decorators: _,
-                        }) => {
-                            return proc.clone().recast::<Expression>().infer_type(ctx);
-                        }
-                        Any::FuncDeclaration(FuncDeclaration {
-                            name: _,
-                            func,
-                            exported: _,
-                            platforms: _,
-                            decorators: _,
-                        }) => {
-                            return func.clone().recast::<Expression>().infer_type(ctx);
-                        }
-                        Any::ValueDeclaration(ValueDeclaration {
-                            name: _,
-                            type_annotation,
-                            value,
-                            is_const: _,
-                            exported: _,
-                            platforms: _,
-                        }) => {
-                            return type_annotation
+                                .unwrap_or(Type::PoisonedType),
+                            Any::ProcDeclaration(ProcDeclaration {
+                                name: _,
+                                proc,
+                                exported: _,
+                                platforms: _,
+                                decorators: _,
+                            }) => proc.clone().recast::<Expression>().infer_type(ctx),
+                            Any::FuncDeclaration(FuncDeclaration {
+                                name: _,
+                                func,
+                                exported: _,
+                                platforms: _,
+                                decorators: _,
+                            }) => func.clone().recast::<Expression>().infer_type(ctx),
+                            Any::ValueDeclaration(ValueDeclaration {
+                                name: _,
+                                type_annotation,
+                                value,
+                                is_const: _,
+                                exported: _,
+                                platforms: _,
+                            }) => type_annotation
                                 .as_ref()
                                 .map(|t| t.resolve_type(ctx.into()))
-                                .unwrap_or_else(|| value.infer_type(ctx));
-                        }
-                        Any::Arg(Arg {
-                            name,
-                            type_annotation,
-                            optional,
-                        }) => {
-                            return type_annotation
+                                .unwrap_or_else(|| value.infer_type(ctx)),
+                            Any::Arg(Arg {
+                                name,
+                                type_annotation,
+                                optional,
+                            }) => type_annotation
                                 .as_ref()
                                 .map(|t| t.resolve_type(ctx.into()))
-                                .unwrap_or(Type::PoisonedType);
-                        }
-                        Any::InlineDeclaration(InlineDeclaration { destination, value }) => {
-                            return match destination {
-                                DeclarationDestination::NameAndType(NameAndType {
-                                    name: _,
-                                    type_annotation,
-                                }) => type_annotation
-                                    .as_ref()
-                                    .map(|x| x.resolve_type(ctx.into()))
-                                    .unwrap_or_else(|| value.infer_type(ctx)),
-                                DeclarationDestination::Destructure(_) => todo!(),
+                                .unwrap_or(Type::PoisonedType),
+                            Any::InlineDeclaration(InlineDeclaration { destination, value }) => {
+                                match destination {
+                                    DeclarationDestination::NameAndType(NameAndType {
+                                        name: _,
+                                        type_annotation,
+                                    }) => type_annotation
+                                        .as_ref()
+                                        .map(|x| x.resolve_type(ctx.into()))
+                                        .unwrap_or_else(|| value.infer_type(ctx)),
+                                    DeclarationDestination::Destructure(_) => todo!(),
+                                }
                             }
-                        }
-                        Any::DeclarationStatement(DeclarationStatement {
-                            destination,
-                            value,
-                            is_const,
-                        }) => {
-                            return match destination {
+                            Any::DeclarationStatement(DeclarationStatement {
+                                destination,
+                                value,
+                                is_const,
+                            }) => match destination {
                                 DeclarationDestination::NameAndType(NameAndType {
                                     name: _,
                                     type_annotation,
@@ -149,223 +143,300 @@ impl AST<Expression> {
                                         }
                                     }),
                                 DeclarationDestination::Destructure(_) => todo!(),
-                            };
+                            },
+                            _ => Type::PoisonedType,
                         }
-                        _ => todo!(),
+                    } else {
+                        Type::PoisonedType
                     }
                 }
+                Expression::InlineConstGroup(InlineConstGroup {
+                    declarations: _,
+                    inner,
+                }) => inner.infer_type(ctx),
+                Expression::NilLiteral(_) => Type::NilType,
+                Expression::NumberLiteral(NumberLiteral(value)) => {
+                    let n = Some(value.as_str().parse().unwrap());
 
-                Type::PoisonedType
-            }
-            Expression::InlineConstGroup(InlineConstGroup {
-                declarations: _,
-                inner,
-            }) => inner.infer_type(ctx),
-            Expression::NilLiteral(_) => Type::NilType,
-            Expression::NumberLiteral(NumberLiteral(value)) => {
-                let n = Some(value.as_str().parse().unwrap());
-
-                Type::NumberType { min: n, max: n }
-            }
-            Expression::BooleanLiteral(BooleanLiteral(value)) => Type::BooleanType(Some(value)),
-            Expression::ExactStringLiteral(ExactStringLiteral { value, tag: _ }) => {
-                Type::StringType(Some(value.clone()))
-            }
-            Expression::StringLiteral(StringLiteral {
-                tag: _,
-                segments: _,
-            }) => Type::ANY_STRING,
-            Expression::ArrayLiteral(ArrayLiteral(members)) => Type::TupleType(
-                members
-                    .into_iter()
-                    .map(|member| match member {
-                        ElementOrSpread::Element(element) => {
-                            ElementOrSpread::Element(element.infer_type(ctx))
-                        }
-                        ElementOrSpread::Spread(spread) => {
-                            ElementOrSpread::Spread(spread.infer_type(ctx))
-                        }
-                    })
-                    .collect(),
-            ),
-            Expression::ObjectLiteral(ObjectLiteral(entries)) => Type::ObjectType {
-                entries: entries
-                    .into_iter()
-                    .map(|entry| match entry {
-                        KeyValueOrSpread::KeyValue(key, value) => {
-                            KeyValueOrSpread::KeyValue(key.infer_type(ctx), value.infer_type(ctx))
-                        }
-                        KeyValueOrSpread::Spread(expr) => {
-                            KeyValueOrSpread::Spread(expr.infer_type(ctx))
-                        }
-                    })
-                    .collect(),
-                is_interface: false,
-            },
-            Expression::NegationOperation(NegationOperation(_)) => Type::BooleanType(None),
-            Expression::Func(Func {
-                type_annotation,
-                is_async: _,
-                is_pure,
-                body,
-            }) => {
-                let type_annotation = type_annotation.downcast();
-
-                Type::FuncType {
-                    args: type_annotation
-                        .args
-                        .into_iter()
-                        .map(|a| {
-                            a.downcast()
-                                .type_annotation
-                                .map(|a| a.resolve_type(ctx.into()))
-                        })
-                        .collect(),
-                    args_spread: type_annotation
-                        .args_spread
-                        .map(|a| a.resolve_type(ctx.into()))
-                        .map(Rc::new),
-                    is_pure,
-                    returns: Rc::new(
-                        type_annotation
-                            .returns
-                            .map(|r| r.resolve_type(ctx.into()))
-                            .unwrap_or_else(|| body.infer_type(ctx)),
-                    ),
+                    Type::NumberType { min: n, max: n }
                 }
-            }
-            Expression::Proc(Proc {
-                type_annotation,
-                is_async,
-                is_pure,
-                body,
-            }) => {
-                let type_annotation = type_annotation.downcast();
-
-                Type::ProcType {
-                    args: type_annotation
-                        .args
+                Expression::BooleanLiteral(BooleanLiteral(value)) => Type::BooleanType(Some(value)),
+                Expression::ExactStringLiteral(ExactStringLiteral { value, tag: _ }) => {
+                    Type::StringType(Some(value.clone()))
+                }
+                Expression::StringLiteral(StringLiteral {
+                    tag: _,
+                    segments: _,
+                }) => Type::ANY_STRING,
+                Expression::ArrayLiteral(ArrayLiteral(members)) => Type::TupleType(
+                    members
                         .into_iter()
-                        .map(|a| {
-                            a.downcast()
-                                .type_annotation
-                                .map(|a| a.resolve_type(ctx.into()))
+                        .map(|member| match member {
+                            ElementOrSpread::Element(element) => {
+                                ElementOrSpread::Element(element.infer_type(ctx))
+                            }
+                            ElementOrSpread::Spread(spread) => {
+                                ElementOrSpread::Spread(spread.infer_type(ctx))
+                            }
                         })
                         .collect(),
-                    args_spread: type_annotation
-                        .args_spread
-                        .map(|a| a.resolve_type(ctx.into()))
-                        .map(Rc::new),
+                ),
+                Expression::ObjectLiteral(ObjectLiteral(entries)) => Type::ObjectType {
+                    entries: entries
+                        .into_iter()
+                        .map(|entry| match entry {
+                            KeyValueOrSpread::KeyValue(key, value) => KeyValueOrSpread::KeyValue(
+                                key.infer_type(ctx),
+                                value.infer_type(ctx),
+                            ),
+                            KeyValueOrSpread::Spread(expr) => {
+                                KeyValueOrSpread::Spread(expr.infer_type(ctx))
+                            }
+                        })
+                        .collect(),
+                    is_interface: false,
+                },
+                Expression::NegationOperation(NegationOperation(_)) => Type::BooleanType(None),
+                Expression::Func(Func {
+                    type_annotation,
+                    is_async: _,
+                    is_pure,
+                    body,
+                }) => {
+                    let type_annotation = type_annotation.downcast();
+
+                    Type::FuncType {
+                        args: type_annotation
+                            .args
+                            .into_iter()
+                            .map(|a| {
+                                a.downcast()
+                                    .type_annotation
+                                    .map(|a| a.resolve_type(ctx.into()))
+                            })
+                            .collect(),
+                        args_spread: type_annotation
+                            .args_spread
+                            .map(|a| a.resolve_type(ctx.into()))
+                            .map(Rc::new),
+                        is_pure,
+                        returns: Rc::new(
+                            type_annotation
+                                .returns
+                                .map(|r| r.resolve_type(ctx.into()))
+                                .unwrap_or_else(|| body.infer_type(ctx)),
+                        ),
+                    }
+                }
+                Expression::Proc(Proc {
+                    type_annotation,
                     is_async,
                     is_pure,
-                    throws: type_annotation
-                        .throws
-                        .map(|throws| throws.resolve_type(ctx.into()))
-                        .map(Rc::new),
-                }
-            }
-            Expression::JavascriptEscape(_) => Type::AnyType,
-            Expression::RangeExpression(RangeExpression { start, end }) => {
-                let min = start.infer_type(ctx).to_exact_number();
-                let max = end.infer_type(ctx).to_exact_number();
+                    body,
+                }) => {
+                    let type_annotation = type_annotation.downcast();
 
-                Type::SpecialType {
-                    kind: SpecialTypeKind::Iterator,
-                    inner: Rc::new(Type::NumberType { min, max }),
+                    Type::ProcType {
+                        args: type_annotation
+                            .args
+                            .into_iter()
+                            .map(|a| {
+                                a.downcast()
+                                    .type_annotation
+                                    .map(|a| a.resolve_type(ctx.into()))
+                            })
+                            .collect(),
+                        args_spread: type_annotation
+                            .args_spread
+                            .map(|a| a.resolve_type(ctx.into()))
+                            .map(Rc::new),
+                        is_async,
+                        is_pure,
+                        throws: type_annotation
+                            .throws
+                            .map(|throws| throws.resolve_type(ctx.into()))
+                            .map(Rc::new),
+                    }
                 }
-            }
-            Expression::AwaitExpression(AwaitExpression(inner)) => Type::InnerType {
-                kind: SpecialTypeKind::Plan,
-                inner: Rc::new(inner.infer_type(ctx)),
+                Expression::JavascriptEscape(_) => Type::AnyType,
+                Expression::RangeExpression(RangeExpression { start, end }) => {
+                    let min = start.infer_type(ctx).to_exact_number();
+                    let max = end.infer_type(ctx).to_exact_number();
+
+                    Type::SpecialType {
+                        kind: SpecialTypeKind::Iterator,
+                        inner: Rc::new(Type::NumberType { min, max }),
+                    }
+                }
+                Expression::AwaitExpression(AwaitExpression(inner)) => Type::InnerType {
+                    kind: SpecialTypeKind::Plan,
+                    inner: Rc::new(inner.infer_type(ctx)),
+                },
+                Expression::Invocation(Invocation {
+                    subject,
+                    args,
+                    spread_args,
+                    type_args,
+                    bubbles,
+                    awaited_or_detached,
+                }) => {
+                    let subject_type = subject.infer_type(ctx);
+
+                    if let Type::FuncType {
+                        args: _,
+                        args_spread: _,
+                        is_pure: _,
+                        returns,
+                    } = subject_type
+                    {
+                        returns.as_ref().clone()
+                    } else {
+                        Type::PoisonedType
+                    }
+                }
+                Expression::PropertyAccessor(PropertyAccessor {
+                    subject,
+                    property,
+                    optional,
+                }) => {
+                    // TODO: optional
+
+                    Type::PropertyType {
+                        subject: Rc::new(subject.infer_type(ctx)),
+                        property: Rc::new(match property {
+                            Property::Expression(expr) => expr.infer_type(ctx.into()),
+                            Property::PlainIdentifier(ident) => {
+                                Type::StringType(Some(ident.downcast().0.clone()))
+                            }
+                        }),
+                    }
+                }
+                Expression::IfElseExpression(IfElseExpression {
+                    cases,
+                    default_case,
+                }) => Type::UnionType(
+                    cases
+                        .iter()
+                        .map(|case| case.downcast().outcome.infer_type(ctx))
+                        .chain(
+                            default_case
+                                .as_ref()
+                                .map(|case| case.infer_type(ctx))
+                                .into_iter(),
+                        )
+                        .collect(),
+                ),
+                Expression::SwitchExpression(SwitchExpression {
+                    value,
+                    cases,
+                    default_case,
+                }) => Type::UnionType(
+                    cases
+                        .iter()
+                        .map(|case| case.downcast().outcome.infer_type(ctx))
+                        .chain(
+                            default_case
+                                .as_ref()
+                                .map(|case| case.infer_type(ctx))
+                                .into_iter(),
+                        )
+                        .collect(),
+                ),
+                Expression::ElementTag(ElementTag {
+                    tag_name,
+                    attributes,
+                    children,
+                }) => todo!(),
+                Expression::AsCast(AsCast { inner: _, as_type }) => {
+                    as_type.resolve_type(ctx.into())
+                }
+                Expression::InstanceOf(InstanceOf {
+                    inner: _,
+                    possible_type: _,
+                }) => Type::ANY_BOOLEAN,
+                Expression::ErrorExpression(ErrorExpression(inner)) => Type::SpecialType {
+                    kind: SpecialTypeKind::Error,
+                    inner: Rc::new(inner.infer_type(ctx)),
+                },
+                Expression::RegularExpression(RegularExpression { expr, flags }) => {
+                    Type::RegularExpressionType
+                }
             },
-            Expression::Invocation(Invocation {
-                subject,
-                args,
-                spread_args,
-                type_args,
-                bubbles,
-                awaited_or_detached,
-            }) => {
-                let subject_type = subject.infer_type(ctx);
+        )
+    }
+}
 
-                if let Type::FuncType {
-                    args: _,
-                    args_spread: _,
-                    is_pure: _,
-                    returns,
-                } = subject_type
-                {
-                    returns.as_ref().clone()
-                } else {
-                    Type::PoisonedType
-                }
-            }
-            Expression::PropertyAccessor(PropertyAccessor {
-                subject,
-                property,
-                optional,
-            }) => {
-                // TODO: optional
+impl ASTAny {
+    pub fn refine<'a>(
+        &self,
+        ctx: InferTypeContext<'a>,
+        expr_to_refine: &AST<Expression>,
+        type_to_refine: Type,
+    ) -> Type {
+        // short-circuit expressions that can never be refined
+        match expr_to_refine.downcast() {
+            Expression::NilLiteral(_) => return type_to_refine,
+            Expression::StringLiteral(_) => return type_to_refine,
+            Expression::NumberLiteral(_) => return type_to_refine,
+            Expression::BooleanLiteral(_) => return type_to_refine,
+            _ => {}
+        };
 
-                Type::PropertyType {
-                    subject: Rc::new(subject.infer_type(ctx)),
-                    property: Rc::new(match property {
-                        Property::Expression(expr) => expr.infer_type(ctx.into()),
-                        Property::PlainIdentifier(ident) => {
-                            Type::StringType(Some(ident.downcast().0.clone()))
+        match self.parent() {
+            Some(parent) => parent.refine(
+                ctx,
+                expr_to_refine,
+                match parent.details() {
+                    Any::IfElseExpressionCase(IfElseExpressionCase { condition, outcome }) => {
+                        if self.ptr_eq(outcome) {
+                            match condition.details() {
+                                Any::BinaryOperation(BinaryOperation { left, op, right }) => {
+                                    match op.downcast().0 {
+                                        BinaryOperatorOp::Equals => {
+                                            if left.details() == expr_to_refine.details() {
+                                                type_to_refine.narrow(&right.infer_type(ctx))
+                                            } else if right.details() == expr_to_refine.details() {
+                                                type_to_refine.narrow(&left.infer_type(ctx))
+                                            } else {
+                                                type_to_refine
+                                            }
+                                        }
+                                        BinaryOperatorOp::NotEquals => {
+                                            if left.details() == expr_to_refine.details() {
+                                                type_to_refine.subtract(&right.infer_type(ctx))
+                                            } else if right.details() == expr_to_refine.details() {
+                                                type_to_refine.subtract(&left.infer_type(ctx))
+                                            } else {
+                                                type_to_refine
+                                            }
+                                        }
+                                        _ => type_to_refine,
+                                    }
+                                }
+                                _ => type_to_refine,
+                            }
+                        } else {
+                            type_to_refine
                         }
-                    }),
-                }
-            }
-            Expression::IfElseExpression(IfElseExpression {
-                cases,
-                default_case,
-            }) => Type::UnionType(
-                cases
-                    .iter()
-                    .map(|case| case.downcast().outcome.infer_type(ctx))
-                    .chain(
-                        default_case
-                            .as_ref()
-                            .map(|case| case.infer_type(ctx))
-                            .into_iter(),
-                    )
-                    .collect(),
+                    }
+                    _ => type_to_refine,
+                },
             ),
-            Expression::SwitchExpression(SwitchExpression {
-                value,
-                cases,
-                default_case,
-            }) => Type::UnionType(
-                cases
-                    .iter()
-                    .map(|case| case.downcast().outcome.infer_type(ctx))
-                    .chain(
-                        default_case
-                            .as_ref()
-                            .map(|case| case.infer_type(ctx))
-                            .into_iter(),
-                    )
-                    .collect(),
-            ),
-            Expression::ElementTag(ElementTag {
-                tag_name,
-                attributes,
-                children,
-            }) => todo!(),
-            Expression::AsCast(AsCast { inner: _, as_type }) => as_type.resolve_type(ctx.into()),
-            Expression::InstanceOf(InstanceOf {
-                inner: _,
-                possible_type: _,
-            }) => Type::ANY_BOOLEAN,
-            Expression::ErrorExpression(ErrorExpression(inner)) => Type::SpecialType {
-                kind: SpecialTypeKind::Error,
-                inner: Rc::new(inner.infer_type(ctx)),
-            },
-            Expression::RegularExpression(RegularExpression { expr, flags }) => {
-                Type::RegularExpressionType
-            }
+            None => type_to_refine,
         }
+    }
+}
+
+impl AST<Expression> {
+    pub fn refine<'a>(
+        &self,
+        ctx: InferTypeContext<'a>,
+        expr_to_refine: &AST<Expression>,
+        type_to_refine: Type,
+    ) -> Type {
+        self.clone()
+            .upcast()
+            .refine(ctx, expr_to_refine, type_to_refine)
     }
 }
 
