@@ -345,7 +345,15 @@ pub fn binary_operation_type<'a>(
             let left_type = left.infer_type(ctx);
             let right_type = right.infer_type(ctx);
 
-            if Type::ANY_NUMBER.subsumes(ctx.into(), &left_type) {
+            if let (Some(left), Some(right)) =
+                (left_type.to_exact_number(), right_type.to_exact_number())
+            {
+                let result = Some(left + right);
+                Type::NumberType {
+                    min: result,
+                    max: result,
+                }
+            } else if Type::ANY_NUMBER.subsumes(ctx.into(), &left_type) {
                 if Type::ANY_NUMBER.subsumes(ctx.into(), &right_type) {
                     Type::ANY_NUMBER
                 } else if Type::ANY_STRING.subsumes(ctx.into(), &right_type) {
@@ -365,9 +373,54 @@ pub fn binary_operation_type<'a>(
                 Type::UnknownType
             }
         }
-        BinaryOperatorOp::Minus => Type::ANY_NUMBER,
-        BinaryOperatorOp::Times => Type::ANY_NUMBER,
-        BinaryOperatorOp::Divide => Type::ANY_NUMBER,
+        BinaryOperatorOp::Minus => {
+            let left_type = left.infer_type(ctx);
+            let right_type = right.infer_type(ctx);
+
+            if let (Some(left), Some(right)) =
+                (left_type.to_exact_number(), right_type.to_exact_number())
+            {
+                let result = Some(left - right);
+                Type::NumberType {
+                    min: result,
+                    max: result,
+                }
+            } else {
+                Type::ANY_NUMBER
+            }
+        }
+        BinaryOperatorOp::Times => {
+            let left_type = left.infer_type(ctx);
+            let right_type = right.infer_type(ctx);
+
+            if let (Some(left), Some(right)) =
+                (left_type.to_exact_number(), right_type.to_exact_number())
+            {
+                let result = Some(left * right);
+                Type::NumberType {
+                    min: result,
+                    max: result,
+                }
+            } else {
+                Type::ANY_NUMBER
+            }
+        }
+        BinaryOperatorOp::Divide => {
+            let left_type = left.infer_type(ctx);
+            let right_type = right.infer_type(ctx);
+
+            if let (Some(left), Some(right)) =
+                (left_type.to_exact_number(), right_type.to_exact_number())
+            {
+                let result = Some(left / right);
+                Type::NumberType {
+                    min: result,
+                    max: result,
+                }
+            } else {
+                Type::ANY_NUMBER
+            }
+        }
     }
 }
 
