@@ -2,7 +2,12 @@ use std::rc::Rc;
 
 use crate::{
     model::ast::*,
-    model::{ast::Any, bgl_type::Type, errors::BagelError, module::Module},
+    model::{
+        ast::Any,
+        bgl_type::{falsy_types, truthy_types, Type},
+        errors::BagelError,
+        module::Module,
+    },
     passes::check::CheckContext,
     ModulesStore,
 };
