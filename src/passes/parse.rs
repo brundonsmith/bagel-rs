@@ -722,7 +722,16 @@ fn object_or_interface_type(i: Slice) -> ParseResult<AST<ObjectType>> {
         seq!(
             opt(tag("interface")),
             tag("{"),
-            separated_list0(w(tag(",")), w(key_value_type)),
+            separated_list0(
+                w(tag(",")),
+                alt((
+                    map(
+                        preceded(tag("..."), type_expression(0)),
+                        KeyValueOrSpread::Spread
+                    ),
+                    key_value_type,
+                ))
+            ),
             tag("}"),
         ),
         |(interface, open, mut entries, close)| {
@@ -741,8 +750,8 @@ fn object_or_interface_type(i: Slice) -> ParseResult<AST<ObjectType>> {
 #[memoize]
 fn key_value_type(i: Slice) -> ParseResult<KeyValueOrSpread<AST<TypeExpression>>> {
     map(
-        separated_pair(plain_identifier, tag(":"), type_expression(0)),
-        |(key, value)| {
+        seq!(plain_identifier, tag(":"), type_expression(0)),
+        |(key, _, value)| {
             KeyValueOrSpread::KeyValue(
                 identifier_to_string_type(key).recast::<TypeExpression>(),
                 value,
@@ -1531,7 +1540,16 @@ fn object_literal(i: Slice) -> ParseResult<AST<ObjectLiteral>> {
     map(
         seq!(
             tag("{"),
-            separated_list0(w(char(',')), w(key_value_expression)),
+            separated_list0(
+                w(char(',')),
+                w(alt((
+                    map(
+                        preceded(tag("..."), expression(0)),
+                        KeyValueOrSpread::Spread
+                    ),
+                    key_value_expression,
+                )))
+            ),
             tag("}"),
         ),
         |(open_bracket, mut entries, close_bracket)| {
