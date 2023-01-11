@@ -252,6 +252,73 @@ impl Type {
                     return None;
                 }
             }
+            (
+                Type::RecordType {
+                    key_type: destination_key_type,
+                    value_type: destination_value_type,
+                },
+                Type::RecordType {
+                    key_type: value_key_type,
+                    value_type: value_value_type,
+                },
+            ) => {
+                if destination_key_type.subsumes(ctx, value_key_type)
+                    && destination_value_type.subsumes(ctx, value_value_type)
+                {
+                    return None;
+                }
+            }
+            (
+                Type::RecordType {
+                    key_type: destination_key_type,
+                    value_type: destination_value_type,
+                },
+                Type::ObjectType {
+                    entries: value_entries,
+                    is_interface: value_is_interface,
+                },
+            ) => {
+                if !*value_is_interface
+                    && value_entries.iter().all(|value_entry| match value_entry {
+                        KeyValueOrSpread::KeyValue(key, value) => {
+                            destination_key_type.subsumes(ctx, key)
+                                && destination_value_type.subsumes(ctx, value)
+                        }
+                        KeyValueOrSpread::Spread(spread) => destination.subsumes(ctx, spread),
+                    })
+                {
+                    return None;
+                }
+            }
+            (
+                Type::ObjectType {
+                    entries: destination_entries,
+                    is_interface: destination_is_interface,
+                },
+                Type::ObjectType {
+                    entries: value_entries,
+                    is_interface: value_is_interface,
+                },
+            ) => {
+                if (*destination_is_interface || !*value_is_interface)
+                    && value_entries.iter().all(|value_entry| match value_entry {
+                        KeyValueOrSpread::KeyValue(value_key, value_value) => destination_entries
+                            .iter()
+                            .any(|destination_entry| match destination_entry {
+                                KeyValueOrSpread::KeyValue(destination_key, destination_value) => {
+                                    destination_key.subsumes(ctx, value_key)
+                                        && destination_value.subsumes(ctx, value_value)
+                                }
+                                KeyValueOrSpread::Spread(destination_spread) => todo!(),
+                            }),
+                        KeyValueOrSpread::Spread(value_spread) => {
+                            destination.subsumes(ctx, value_spread)
+                        }
+                    })
+                {
+                    return None;
+                }
+            }
             (Type::UnionType(members), value) => {
                 if members.iter().any(|member| member.subsumes(ctx, &value)) {
                     return None;
@@ -488,7 +555,7 @@ impl Type {
 
         match self {
             Type::UnionType(members) => {
-                distill_union_members(members.into_iter().map(|m| m.subtract(other)).collect())
+                Type::UnionType(members.into_iter().map(|m| m.subtract(other)).collect())
             }
             _ => self,
         }
@@ -497,26 +564,61 @@ impl Type {
     pub fn narrow(mut self, other: &Type) -> Type {
         self
     }
-}
 
-fn distill_union_members(mut members: Vec<Type>) -> Type {
-    if members.len() == 1 {
-        members.remove(0)
-    } else {
-        Type::UnionType(
-            members
-                .into_iter()
-                .filter(|member| {
-                    if let Type::UnionType(members) = member {
-                        if members.len() == 0 {
-                            return false;
+    fn simplify_for_display(self) -> Type {
+        match self {
+            Type::UnionType(mut members) => {
+                if members.len() == 1 {
+                    members.remove(0).simplify_for_display()
+                } else {
+                    Type::UnionType(
+                        members
+                            .into_iter()
+                            .filter(|member| {
+                                if let Type::UnionType(members) = member {
+                                    if members.len() == 0 {
+                                        return false;
+                                    }
+                                }
+
+                                return true;
+                            })
+                            .map(Type::simplify_for_display)
+                            .collect(),
+                    )
+                }
+            }
+            Type::ObjectType {
+                entries,
+                is_interface,
+            } => {
+                let mut flattened_entries = Vec::with_capacity(entries.len());
+
+                for entry in entries {
+                    match entry {
+                        KeyValueOrSpread::KeyValue(key, value) => {
+                            flattened_entries.push(KeyValueOrSpread::KeyValue(
+                                key.simplify_for_display(),
+                                value.simplify_for_display(),
+                            ))
                         }
-                    }
+                        KeyValueOrSpread::Spread(spread) => match spread.simplify_for_display() {
+                            Type::ObjectType {
+                                mut entries,
+                                is_interface,
+                            } => flattened_entries.append(&mut entries),
+                            spread => flattened_entries.push(KeyValueOrSpread::Spread(spread)),
+                        },
+                    };
+                }
 
-                    return true;
-                })
-                .collect(),
-        )
+                Type::ObjectType {
+                    entries: flattened_entries,
+                    is_interface,
+                }
+            }
+            _ => self,
+        }
     }
 }
 
@@ -599,7 +701,7 @@ impl<'a> SubsumationContext<'a> {
 
 impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
+        match self.clone().simplify_for_display() {
             Type::ElementofType(inner) => f.write_fmt(format_args!("elementof {}", inner)),
             Type::ValueofType(inner) => f.write_fmt(format_args!("valueof {}", inner)),
             Type::KeyofType(inner) => f.write_fmt(format_args!("keyof {}", inner)),
@@ -623,11 +725,11 @@ impl Display for Type {
                 is_async,
                 throws,
             } => {
-                if *is_pure {
+                if is_pure {
                     f.write_str("pure ")?;
                 }
 
-                if *is_async {
+                if is_async {
                     f.write_str("async ")?;
                 }
 
@@ -649,7 +751,7 @@ impl Display for Type {
                 is_pure,
                 returns,
             } => {
-                if *is_pure {
+                if is_pure {
                     f.write_str("pure ")?;
                 }
 
