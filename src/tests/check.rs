@@ -4315,6 +4315,7 @@ fn test_check(bgl: &str, should_fail: bool) {
             if !should_fail && had_errors {
                 print_errors(&errors);
                 println!("Type check should have passed but failed with errors");
+                panic!("Type check should have failed but passed with no errors");
             } else if should_fail && !had_errors {
                 panic!("Type check should have failed but passed with no errors");
             }
