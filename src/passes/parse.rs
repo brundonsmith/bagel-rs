@@ -1530,7 +1530,7 @@ fn declaration_destination(i: Slice) -> ParseResult<DeclarationDestination> {
 fn negation_operation(level: usize) -> impl Fn(Slice) -> ParseResult<AST<NegationOperation>> {
     move |i: Slice| -> ParseResult<AST<NegationOperation>> {
         map(
-            seq!(tag("!"), expression(level + 1)),
+            pair(tag("!"), expression(level + 1)),
             |(start, mut expr)| make_node_tuple!(NegationOperation, start.spanning(&expr), expr),
         )(i)
     }
@@ -1539,7 +1539,7 @@ fn negation_operation(level: usize) -> impl Fn(Slice) -> ParseResult<AST<Negatio
 fn parenthesis(level: usize) -> impl Fn(Slice) -> ParseResult<AST<Parenthesis>> {
     move |i: Slice| -> ParseResult<AST<Parenthesis>> {
         map(
-            seq!(tag("("), expression(level + 1), tag(")")),
+            seq!(tag("("), expression(0), tag(")")),
             |(open_paren, mut inner, close_paren)| {
                 make_node_tuple!(Parenthesis, open_paren.spanning(&close_paren), inner)
             },
