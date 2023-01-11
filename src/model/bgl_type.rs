@@ -243,15 +243,24 @@ impl Type {
                 return dest
                     .subsumation_issues(ctx.with_val_mutability(Mutability::Readonly), inner);
             }
+            (Type::ArrayType(destination_element), Type::ArrayType(value_element)) => {
+                if destination_element.subsumes(ctx, value_element) {
+                    return None;
+                }
+            }
             (Type::ArrayType(destination_element), Type::TupleType(members)) => {
                 if members.iter().all(|member| match member {
                     ElementOrSpread::Element(element) => destination_element.subsumes(ctx, element),
-                    ElementOrSpread::Spread(spread) => destination_element
-                        .subsumes(ctx, &Type::ElementofType(Rc::new(spread.clone()))),
+                    ElementOrSpread::Spread(spread) => destination.subsumes(ctx, spread),
                 }) {
                     return None;
                 }
             }
+            // (Type::TupleType(destination_members), Type::TupleType(value_members)) => {
+            //     if destination_members.len() <= value_members.len() && destination_members.iter().zip(value_members.iter()).all(|(destination, value)| ) {
+            //         return None;
+            //     }
+            // }
             (
                 Type::RecordType {
                     key_type: destination_key_type,
