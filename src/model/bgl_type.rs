@@ -240,6 +240,14 @@ impl Type {
                     return None;
                 }
             }
+            (destination, Type::UnionType(members)) => {
+                if members
+                    .iter()
+                    .all(|member| destination.subsumes(ctx, &member))
+                {
+                    return None;
+                }
+            }
             (Type::StringType(None), Type::StringType(_)) => {
                 return None;
             }
