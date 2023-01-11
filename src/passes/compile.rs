@@ -38,7 +38,15 @@ where
                 exported,
             }) => {
                 if ctx.include_types {
-                    todo!()
+                    if *exported {
+                        f.write_str("export ")?;
+                    }
+
+                    f.write_str("type ")?;
+                    name.compile(ctx, f)?;
+                    f.write_str(" = ")?;
+                    declared_type.compile(ctx, f)?;
+                    f.write_char(';')?;
                 }
 
                 Ok(())
@@ -113,7 +121,13 @@ where
                 f.write_str(name.slice().as_str())?;
                 compile_type_annotation(ctx, f, type_annotation.as_ref())?;
                 f.write_str(" = ")?;
-                value.compile(ctx, f)?;
+                if *is_const {
+                    value.compile(ctx, f)?;
+                } else {
+                    f.write_str("{ value: ")?;
+                    value.compile(ctx, f)?;
+                    f.write_str(" }")?;
+                }
                 f.write_str(";")
             }
             Any::TestExprDeclaration(TestExprDeclaration { name, expr }) => todo!(),
@@ -152,10 +166,9 @@ where
                 f.write_char('[')?;
                 for (index, entry) in entries.iter().enumerate() {
                     if index > 0 {
-                        f.write_char(',')?;
+                        f.write_str(", ")?;
                     }
 
-                    f.write_char(' ')?;
                     match entry {
                         ElementOrSpread::Element(element) => {
                             element.compile(ctx, f)?;
@@ -166,7 +179,7 @@ where
                         }
                     }
                 }
-                f.write_str(" ]")
+                f.write_char(']')
             }
             Any::ObjectLiteral(ObjectLiteral(entries)) => {
                 f.write_char('{')?;
@@ -213,7 +226,44 @@ where
                 inner.compile(ctx, f)?;
                 f.write_char(')')
             }
-            Any::LocalIdentifier(LocalIdentifier(name)) => f.write_str(name.as_str()),
+            Any::LocalIdentifier(LocalIdentifier(name)) => {
+                let resolved = self.resolve_symbol(name.as_str());
+
+                match resolved.as_ref().map(|r| r.details()) {
+                    Some(Any::ValueDeclaration(ValueDeclaration {
+                        name: _,
+                        type_annotation: _,
+                        value: _,
+                        is_const,
+                        exported: _,
+                        platforms: _,
+                    })) => {
+                        if !*is_const {
+                            f.write_str(INT)?;
+                            f.write_str("observe(")?;
+                            f.write_str(name.as_str())?;
+                            f.write_str(", 'value')")?;
+                            return Ok(());
+                        }
+                    }
+                    Some(Any::DeclarationStatement(DeclarationStatement {
+                        destination: _,
+                        value: _,
+                        is_const,
+                    })) => {
+                        if !*is_const {
+                            f.write_str(INT)?;
+                            f.write_str("observe(")?;
+                            f.write_str(name.as_str())?;
+                            f.write_str(", 'value')")?;
+                            return Ok(());
+                        }
+                    }
+                    _ => {}
+                };
+
+                f.write_str(name.as_str())
+            }
             Any::InlineConstGroup(InlineConstGroup {
                 declarations,
                 inner,
@@ -274,6 +324,8 @@ where
                 f.write_str("{\n")?;
                 for stmt in statements {
                     stmt.compile(ctx, f)?;
+                    f.write_char(';')?;
+                    f.write_char('\n')?;
                 }
                 f.write_str("\n}")
             }
@@ -367,8 +419,20 @@ where
             }) => todo!(),
             Any::ErrorExpression(_) => todo!(),
             Any::RegularExpression(RegularExpression { expr, flags }) => todo!(),
-            Any::UnionType(_) => todo!(),
-            Any::MaybeType(_) => todo!(),
+            Any::UnionType(UnionType(members)) => {
+                for (index, member) in members.iter().enumerate() {
+                    if index > 0 {
+                        f.write_str(" | ")?;
+                    }
+                    member.compile(ctx, f)?;
+                }
+                Ok(())
+            }
+            Any::MaybeType(MaybeType(inner)) => {
+                f.write_char('(')?;
+                inner.compile(ctx, f)?;
+                f.write_str(" | null | undefined)")
+            }
             Any::NamedType(_) => todo!(),
             Any::GenericParamType(GenericParamType { name, extends }) => todo!(),
             Any::ProcType(ProcType {
@@ -384,7 +448,18 @@ where
                 is_pure,
                 is_async,
                 returns,
-            }) => todo!(),
+            }) => {
+                f.write_char('(')?;
+                for (index, arg) in args.iter().enumerate() {
+                    if index > 0 {
+                        f.write_str(", ")?;
+                    }
+
+                    arg.compile(ctx, f)?;
+                }
+                f.write_str(") => ")?;
+                returns.compile(ctx, f)
+            }
             Any::Arg(Arg {
                 name,
                 type_annotation,
@@ -399,21 +474,83 @@ where
             Any::ObjectType(ObjectType {
                 entries,
                 is_interface,
-            }) => todo!(),
+            }) => {
+                f.write_str("{\n")?;
+
+                for entry in entries {
+                    match entry {
+                        KeyValueOrSpread::KeyValue(key, value) => {
+                            if let Some(StringLiteralType(s)) =
+                                key.try_downcast::<StringLiteralType>()
+                            {
+                                // TODO: Do this for any identifier-like
+                                if s.as_str().chars().all(char::is_alphabetic) {
+                                    f.write_str(s.as_str())?;
+                                } else {
+                                    key.compile(ctx, f)?;
+                                }
+                            } else {
+                                key.compile(ctx, f)?;
+                            }
+
+                            f.write_str(": ")?;
+                            value.compile(ctx, f)?;
+                        }
+                        KeyValueOrSpread::Spread(spread) => {
+                            f.write_str("...")?;
+                            spread.compile(ctx, f)?;
+                        }
+                    };
+
+                    f.write_char(',')?;
+                }
+
+                f.write_str("\n}")
+            }
             Any::RecordType(RecordType {
                 key_type,
                 value_type,
             }) => todo!(),
-            Any::ArrayType(_) => todo!(),
-            Any::TupleType(_) => todo!(),
-            Any::StringLiteralType(_) => todo!(),
+            Any::ArrayType(ArrayType(element)) => {
+                f.write_char('(')?;
+                element.compile(ctx, f)?;
+                f.write_str(")[]")
+            }
+            Any::TupleType(TupleType(members)) => {
+                f.write_char('[')?;
+                for (index, member) in members.iter().enumerate() {
+                    if index > 0 {
+                        f.write_str(", ")?;
+                    }
+
+                    match member {
+                        ElementOrSpread::Element(element) => element.compile(ctx, f)?,
+                        ElementOrSpread::Spread(spread) => {
+                            f.write_str("...")?;
+                            spread.compile(ctx, f)?;
+                        }
+                    }
+                }
+                f.write_char(']')
+            }
+            Any::StringLiteralType(StringLiteralType(value)) => {
+                f.write_char('\'')?;
+                f.write_str(value.as_str())?;
+                f.write_char('\'')
+            }
             Any::NumberLiteralType(_) => todo!(),
             Any::BooleanLiteralType(_) => todo!(),
             Any::StringType(_) => f.write_str("string"),
             Any::NumberType(_) => f.write_str("number"),
             Any::BooleanType(_) => f.write_str("boolean"),
             Any::NilType(_) => f.write_str("null | undefined"),
-            Any::SpecialType(SpecialType { kind, inner }) => todo!(),
+            Any::SpecialType(SpecialType { kind, inner }) => {
+                f.write_str(INT)?;
+                f.write_str(kind.into())?;
+                f.write_char('<')?;
+                inner.compile(ctx, f)?;
+                f.write_char('>')
+            }
             Any::ParenthesizedType(_) => todo!(),
             Any::TypeofType(_) => todo!(),
             Any::ModifierType(ModifierType { kind, inner }) => todo!(),
@@ -428,7 +565,20 @@ where
                 destination,
                 value,
                 is_const,
-            }) => todo!(),
+            }) => {
+                f.write_str("const ")?;
+                destination.compile(ctx, f)?;
+                f.write_str(" = ")?;
+                if *is_const {
+                    value.compile(ctx, f)?;
+                } else {
+                    f.write_str("{ value: ")?;
+                    value.compile(ctx, f)?;
+                    f.write_str(" }")?;
+                }
+
+                Ok(())
+            }
             Any::IfElseStatement(IfElseStatement {
                 cases,
                 default_case,
@@ -458,7 +608,14 @@ where
                 item_identifier,
                 iterator,
                 body,
-            }) => todo!(),
+            }) => {
+                f.write_str("for (const ")?;
+                item_identifier.compile(ctx, f)?;
+                f.write_str(" of ")?;
+                iterator.compile(ctx, f)?;
+                f.write_str(".inner) ")?;
+                body.compile(ctx, f)
+            }
             Any::WhileLoop(WhileLoop { condition, body }) => todo!(),
             Any::Assignment(Assignment {
                 target,
@@ -577,7 +734,11 @@ fn compile_function<W: Write>(
     }
 
     f.write_char('(')?;
-    for arg in args {
+    for (index, arg) in args.iter().enumerate() {
+        if index > 0 {
+            f.write_str(", ")?;
+        }
+
         arg.compile(ctx, f)?;
     }
     f.write_char(')')?;

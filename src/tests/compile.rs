@@ -241,7 +241,7 @@ fn Basic_proc_declaration() {
           log(count);
         }",
         "
-        const doStuff = function ___fn_doStuff(items: ___Iter<number>): void { 
+        const doStuff = function ___fn_doStuff(items: ___Iterator<number>): void { 
           const count = { value: 0 };
   
           for (const item of items.inner) {
@@ -275,7 +275,7 @@ fn Proc_declaration_with_statements() {
   
           log(count);
         }", "
-        const doStuff = function ___fn_doStuff(items: ___Iter<number>): void { 
+        const doStuff = function ___fn_doStuff(items: ___Iterator<number>): void { 
           const count = { value: 0 };
   
           for (const item of items.inner) { 
@@ -337,7 +337,7 @@ fn Typed_proc_declaration() {
 fn Func_type() {
     test_compile(
         "export type MyFn = (a: number, b: string) => string[]",
-        "export type MyFn = (a: number, b: string) => string[];",
+        "export type MyFn = (a: number, b: string) => (string)[];",
     );
 }
 
@@ -346,7 +346,7 @@ fn Func_type() {
 fn Tricky_type_parse_1() {
     test_compile(
         "type Foo = string | number[]",
-        "type Foo = string | number[];",
+        "type Foo = string | (number)[];",
     );
 }
 
@@ -355,7 +355,7 @@ fn Tricky_type_parse_1() {
 fn Tricky_type_parse_2() {
     test_compile(
         "type Foo = (a: string) => (b: number|boolean) => { foo: nil[] }",
-        "type Foo = (a: string) => (b: number | boolean) => {foo: (null | undefined)[]};",
+        "type Foo = (a: string) => (b: number | boolean) => { foo: (null | undefined)[], };",
     );
 }
 
@@ -637,7 +637,7 @@ fn Comment_test_block() {
 //       export nominal type Bar(number)
 //       `,
 //       `
-//       export type Foo = {a: string[], b: "stuff", c: ___Iter<Other>};
+//       export type Foo = {a: string[], b: "stuff", c: ___Iterator<Other>};
 
 //       const ___Bar = Symbol('Bar');
 //       export const Bar = ((value: number): Bar => ({ kind: ___Bar, value })) as (((value: number) => Bar) & { sym: typeof ___Bar });

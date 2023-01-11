@@ -586,7 +586,7 @@ fn type_expression_inner(l: usize, i: Slice) -> ParseResult<AST<TypeExpression>>
         map(
             seq!(type_expression(tl + 1), tag("[]")),
             |(mut element, end)| {
-                make_node_tuple!(MaybeType, element.spanning(&end), element)
+                make_node_tuple!(ArrayType, element.spanning(&end), element)
                     .recast::<TypeExpression>()
             }
         )
@@ -872,7 +872,7 @@ fn for_loop(i: Slice) -> ParseResult<AST<ForLoop>> {
         seq!(
             tag("for"),
             plain_identifier,
-            tag("in"),
+            tag("of"),
             expression(0),
             block,
         ),
