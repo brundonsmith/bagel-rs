@@ -1312,13 +1312,21 @@ fn if_else_expression(i: Slice) -> ParseResult<AST<IfElseExpression>> {
             separated_list1(w(tag("else")), w(if_else_expression_case)),
             opt(map(
                 seq!(tag("else"), tag("{"), expression(0), tag("}")),
-                |(_, _, outcome, _)| outcome,
+                |(_, _, outcome, end)| (outcome, end),
             )),
         ),
         |(mut cases, mut default_case)| {
+            let cases_src = covering(&cases).unwrap();
+
+            let end = default_case
+                .as_ref()
+                .map(|(_, end)| end)
+                .unwrap_or(&cases_src);
+            let mut default_case = default_case.clone().map(|(default_case, _)| default_case);
+
             make_node!(
                 IfElseExpression,
-                covering(&cases).unwrap(),
+                cases_src.clone().join(&end),
                 cases,
                 default_case
             )
