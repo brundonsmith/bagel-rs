@@ -3,11 +3,17 @@ use std::{fmt::Debug, rc::Rc};
 
 use nom::{AsChar, Compare, InputIter, InputLength, InputTake, Offset, UnspecializedInput};
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, Hash)]
 pub struct Slice {
     pub full_string: Rc<String>,
     pub start: usize,
     pub end: usize,
+}
+
+impl PartialEq for Slice {
+    fn eq(&self, other: &Self) -> bool {
+        self.as_str() == other.as_str()
+    }
 }
 
 impl Slice {
