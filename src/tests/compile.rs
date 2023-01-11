@@ -382,428 +382,449 @@ fn Comment_test_block() {
     );
 }
 
-//   Deno.test({
-//     name: "Negation precedence",
-//     fn() {
-//       testCompile(`
-//       const a: boolean = true
-//       const b: boolean = true
+#[test]
+#[allow(non_snake_case)]
+fn Negation_precedence() {
+    test_compile(
+        "
+      const a: boolean = true
+      const b: boolean = true
 
-//       const foo = !a && b
-//       `,
-//       `
-//       const a: boolean = true;
+      const foo = !a && b
+      ",
+        "
+      const a: boolean = true;
 
-//       const b: boolean = true;
+      const b: boolean = true;
 
-//       const foo = (!(a) && b);`)
-//     }
-//   })
+      const foo = (!(a) && b);",
+    );
+}
 
-//   Deno.test({
-//     name: "Indexer assignment",
-//     fn() {
-//       testCompile(`
-//       export proc setItem(key: string, value: string) {
-//         _localStorage[key] = value;
-//         setLocalStorage(key, value);
-//       }`,
-//       `
-//       export const setItem = function ___fn_setItem(key: string, value: string): void {
-//         ___invalidate(_localStorage, key, value);
-//         setLocalStorage(key, value);
-//       };`)
-//     }
-//   })
+#[test]
+#[allow(non_snake_case)]
+fn Indexer_assignment() {
+    test_compile(
+        "
+      export proc setItem(key: string, value: string) {
+        _localStorage[key] = value;
+        setLocalStorage(key, value);
+      }",
+        "
+      export const setItem = function ___fn_setItem(key: string, value: string): void {
+        ___invalidate(_localStorage, key, value);
+        setLocalStorage(key, value);
+      };",
+    );
+}
 
-//   Deno.test({
-//     name: "Assignment ops",
-//     fn() {
-//       testCompile(`
-//       proc foo() {
-//         let n = 0;
-//         n *= 2;
+#[test]
+#[allow(non_snake_case)]
+fn Assignment_ops() {
+    test_compile(
+        "
+      proc foo() {
+        let n = 0;
+        n *= 2;
 
-//         let s = 'foo';
-//         s += ' other';
-//       }`,
-//       `
-//       const foo = function ___fn_foo(): void {
-//         const n = { value: 0 };
-//         ___invalidate(n, 'value', n.value * 2);
+        let s = 'foo';
+        s += ' other';
+      }",
+        "
+      const foo = function ___fn_foo(): void {
+        const n = { value: 0 };
+        ___invalidate(n, 'value', n.value * 2);
 
-//         const s = { value: "foo" };
-//         ___invalidate(s, 'value', s.value + " other");
-//       };`)
-//     }
-//   })
+        const s = { value: \"foo\" };
+        ___invalidate(s, 'value', s.value + \" other\");
+      };",
+    );
+}
 
-//   Deno.test({
-//     name: "Method proc call",
-//     fn() {
-//       testCompile(`
-//       proc push<T>(arr: T[], el: T) {
-//         // stub
-//       }
+#[test]
+#[allow(non_snake_case)]
+fn Method_proc_call() {
+    test_compile(
+        "
+      proc push<T>(arr: T[], el: T) {
+        // stub
+      }
 
-//       export proc bar() {
-//         let foo = [1, 2, 3];
-//         foo.push(4);
-//       }`,
-//       `
-//       const push = function ___fn_push<T>(arr: T[], el: T): void {
-//       };
+      export proc bar() {
+        let foo = [1, 2, 3];
+        foo.push(4);
+      }",
+        "
+      const push = function ___fn_push<T>(arr: T[], el: T): void {
+      };
 
-//       export const bar = function ___fn_bar(): void {
-//         const foo = { value: [1, 2, 3] };
-//         push(___observe(foo, 'value'), 4);
-//       };`)
-//     }
-//   })
+      export const bar = function ___fn_bar(): void {
+        const foo = { value: [1, 2, 3] };
+        push(___observe(foo, 'value'), 4);
+      };",
+    );
+}
 
-//   Deno.test({
-//     name: "JS func",
-//     fn() {
-//       testCompile(`
-//       js func foo(a: number, b: string): string => {#
-//         return a + b;
-//       #}
-//       `,
-//       `
-//       const foo = function ___fn_foo(a: number, b: string): string {
-//         return a + b;
-//       };
-//       `)
-//     }
-//   })
+#[test]
+#[allow(non_snake_case)]
+fn JS_func() {
+    test_compile(
+        "
+      js func foo(a: number, b: string): string => {#
+        return a + b;
+      #}
+      ",
+        "
+      const foo = function ___fn_foo(a: number, b: string): string {
+        return a + b;
+      };
+      ",
+    );
+}
 
-//   Deno.test({
-//     name: "JS proc",
-//     fn() {
-//       testCompile(`
-//       js proc foo(a: { foo: number }, b: number) {#
-//         a.foo = b;
-//       #}
-//       `,
-//       `
-//       const foo = function ___fn_foo(a: {foo: number}, b: number): void {
-//         a.foo = b;
-//       };
-//       `)
-//     }
-//   })
+#[test]
+#[allow(non_snake_case)]
+fn JS_proc() {
+    test_compile(
+        "
+      js proc foo(a: { foo: number }, b: number) {#
+        a.foo = b;
+      #}
+      ",
+        "
+      const foo = function ___fn_foo(a: {foo: number}, b: number): void {
+        a.foo = b;
+      };
+      ",
+    );
+}
 
-//   Deno.test({
-//     name: "While loop",
-//     fn() {
-//       testCompile(`
-//       proc foo() {
-//         while true {
-//           log('stuff');
-//         }
-//       }`,
-//       `
-//       const foo = function ___fn_foo(): void {
-//         while (true) {
-//             log("stuff");
-//         };
-//       };`)
-//     }
-//   })
+#[test]
+#[allow(non_snake_case)]
+fn While_loop() {
+    test_compile(
+        "
+      proc foo() {
+        while true {
+          log('stuff');
+        }
+      }",
+        "
+      const foo = function ___fn_foo(): void {
+        while (true) {
+            log(\"stuff\");
+        };
+      };",
+    );
+}
 
-//   Deno.test({
-//     name: "Runtime types",
-//     fn() {
-//       testCompile(`
-//       const x = 12
+#[test]
+#[allow(non_snake_case)]
+fn Runtime_types() {
+    test_compile(
+        "
+      const x = 12
 
-//       nominal type FooNominal(string)
+      nominal type FooNominal(string)
 
-//       const a = x instanceof string
-//       const b = x instanceof number
-//       const c = x instanceof unknown
-//       const d = x instanceof boolean
-//       const e = x instanceof nil
-//       const f = x instanceof 'stuff'
-//       const g = x instanceof Iterator<number>
-//       const h = x instanceof Plan<number>
-//       const j = x instanceof Error<number>
-//       const k = x instanceof FooNominal
-//       const l = x instanceof number[]
-//       const m = x instanceof {[string]: number}
-//       const n = x instanceof { a: string, b: number }
-//       const o = x instanceof { a: string, b?: number }`,
-//       `
-//       const x = 12;
+      const a = x instanceof string
+      const b = x instanceof number
+      const c = x instanceof unknown
+      const d = x instanceof boolean
+      const e = x instanceof nil
+      const f = x instanceof 'stuff'
+      const g = x instanceof Iterator<number>
+      const h = x instanceof Plan<number>
+      const j = x instanceof Error<number>
+      const k = x instanceof FooNominal
+      const l = x instanceof number[]
+      const m = x instanceof {[string]: number}
+      const n = x instanceof { a: string, b: number }
+      const o = x instanceof { a: string, b?: number }",
+        "
+      const x = 12;
 
-//       const ___FooNominal = Symbol('FooNominal');
-//       const FooNominal = ((value: string): FooNominal => ({ kind: ___FooNominal, value })) as (((value: string) => FooNominal) & { sym: typeof ___FooNominal });
-//       FooNominal.sym = ___FooNominal;
-//       type FooNominal = { kind: typeof ___FooNominal, value: string };
+      const ___FooNominal = Symbol('FooNominal');
+      const FooNominal = ((value: string): FooNominal => ({ kind: ___FooNominal, value })) as (((value: string) => FooNominal) & { sym: typeof ___FooNominal });
+      FooNominal.sym = ___FooNominal;
+      type FooNominal = { kind: typeof ___FooNominal, value: string };
 
-//       const a = ___instanceOf(x, ___RT_STRING);
-//       const b = ___instanceOf(x, ___RT_NUMBER);
-//       const c = ___instanceOf(x, ___RT_UNKNOWN);
-//       const d = ___instanceOf(x, ___RT_BOOLEAN);
-//       const e = ___instanceOf(x, ___RT_NIL);
-//       const f = ___instanceOf(x, { kind: ___RT_LITERAL, value: "stuff" });
-//       const g = ___instanceOf(x, { kind: ___RT_ITERATOR, inner: ___RT_NUMBER });
-//       const h = ___instanceOf(x, { kind: ___RT_PLAN, inner: ___RT_NUMBER });
-//       const j = ___instanceOf(x, { kind: ___RT_ERROR, inner: ___RT_NUMBER });
-//       const k = ___instanceOf(x, { kind: ___RT_NOMINAL, nominal: FooNominal.sym });
-//       const l = ___instanceOf(x, { kind: ___RT_ARRAY, inner: ___RT_NUMBER });
-//       const m = ___instanceOf(x, { kind: ___RT_RECORD, key: ___RT_STRING, value: ___RT_NUMBER });
-//       const n = ___instanceOf(x, { kind: ___RT_OBJECT, entries: [{ key: 'a', value: ___RT_STRING, optional: false },{ key: 'b', value: ___RT_NUMBER, optional: false }] });
-//       const o = ___instanceOf(x, { kind: ___RT_OBJECT, entries: [{ key: 'a', value: ___RT_STRING, optional: false },{ key: 'b', value: ___RT_NUMBER, optional: true }] });
-//       `)
-//     }
-//   })
+      const a = ___instanceOf(x, ___RT_STRING);
+      const b = ___instanceOf(x, ___RT_NUMBER);
+      const c = ___instanceOf(x, ___RT_UNKNOWN);
+      const d = ___instanceOf(x, ___RT_BOOLEAN);
+      const e = ___instanceOf(x, ___RT_NIL);
+      const f = ___instanceOf(x, { kind: ___RT_LITERAL, value: \"stuff\" });
+      const g = ___instanceOf(x, { kind: ___RT_ITERATOR, inner: ___RT_NUMBER });
+      const h = ___instanceOf(x, { kind: ___RT_PLAN, inner: ___RT_NUMBER });
+      const j = ___instanceOf(x, { kind: ___RT_ERROR, inner: ___RT_NUMBER });
+      const k = ___instanceOf(x, { kind: ___RT_NOMINAL, nominal: FooNominal.sym });
+      const l = ___instanceOf(x, { kind: ___RT_ARRAY, inner: ___RT_NUMBER });
+      const m = ___instanceOf(x, { kind: ___RT_RECORD, key: ___RT_STRING, value: ___RT_NUMBER });
+      const n = ___instanceOf(x, { kind: ___RT_OBJECT, entries: [{ key: 'a', value: ___RT_STRING, optional: false },{ key: 'b', value: ___RT_NUMBER, optional: false }] });
+      const o = ___instanceOf(x, { kind: ___RT_OBJECT, entries: [{ key: 'a', value: ___RT_STRING, optional: false },{ key: 'b', value: ___RT_NUMBER, optional: true }] });
+      ",
+    );
+}
 
-//   Deno.test({
-//     name: "Non-JS truthiness",
-//     fn() {
-//       testCompile(`
-//       func foo(n: number?) =>
-//         n && n + 1
-//       `,
-//       `
-//       const foo = function ___fn_foo(n: number|null|undefined) { return
-//         ((n != null && (n as unknown) !== false && (n as any).kind !== ___ERROR_SYM)
-//           ? (n + 1)
-//           : n) };
-//       `)
-//     }
-//   })
+#[test]
+#[allow(non_snake_case)]
+fn Non_JS_truthiness() {
+    test_compile(
+        "
+      func foo(n: number?) =>
+        n && n + 1
+      ",
+        "
+      const foo = function ___fn_foo(n: number|null|undefined) { return
+        ((n != null && (n as unknown) !== false && (n as any).kind !== ___ERROR_SYM)
+          ? (n + 1)
+          : n) };
+      ",
+    );
+}
 
-//   Deno.test({
-//     name: "Range operator",
-//     fn() {
-//       testCompile(`
-//       const arr = (0..9).collectArray()
-//       `,
-//       `
-//       const arr = collectArray((___range(0, 9)));
-//       `)
-//     }
-//   })
+#[test]
+#[allow(non_snake_case)]
+fn Range_operator() {
+    test_compile(
+        "
+      const arr = (0..9).collectArray()
+      ",
+        "
+      const arr = collectArray((___range(0, 9)));
+      ",
+    );
+}
 
-//   Deno.test({
-//     name: "Async proc",
-//     fn() {
-//       testCompile(`
-//       async proc doStuff(plan: Plan<string>) {
-//         const str = await plan;
-//         log(str);
-//       }
-//       `,
-//       `
-//       const doStuff = async function ___fn_doStuff(plan: ___Plan<string>): Promise<void>{
-//         const str = await (plan)();
-//         log(str);
-//       };
-//       `)
-//     }
-//   })
+#[test]
+#[allow(non_snake_case)]
+fn Async_proc() {
+    test_compile(
+        "
+      async proc doStuff(plan: Plan<string>) {
+        const str = await plan;
+        log(str);
+      }
+      ",
+        "
+      const doStuff = async function ___fn_doStuff(plan: ___Plan<string>): Promise<void>{
+        const str = await (plan)();
+        log(str);
+      };
+      ",
+    );
+}
 
-//   Deno.test({
-//     name: "Async func",
-//     fn() {
-//       testCompile(`
-//       func getStuff(plan: Plan<string>) => (
-//         const str = await plan,
+#[test]
+#[allow(non_snake_case)]
+fn Async_func() {
+    test_compile(
+        "
+      func getStuff(plan: Plan<string>) => (
+        const str = await plan,
 
-//         str
-//       )
-//       `,
-//       `
-//       const getStuff = function ___fn_getStuff(plan: ___Plan<string>) { return (() => (async () => {
-//         const str = await (plan)();
-//         return str;
-//       })()) };
-//       `)
-//     }
-//   })
+        str
+      )
+      ",
+        "
+      const getStuff = function ___fn_getStuff(plan: ___Plan<string>) { return (() => (async () => {
+        const str = await (plan)();
+        return str;
+      })()) };
+      ",
+    );
+}
 
-//   Deno.test({
-//     name: "Type declarations",
-//     fn() {
-//       testCompile(`
-//       export type Foo = {
-//         a: string[],
-//         b: 'stuff',
-//         c: Iterator<Other>
-//       }
+#[test]
+#[allow(non_snake_case)]
+fn Type_declarations() {
+    test_compile(
+        "
+      export type Foo = {
+        a: string[],
+        b: 'stuff',
+        c: Iterator<Other>
+      }
 
-//       export nominal type Bar(number)
-//       `,
-//       `
-//       export type Foo = {a: string[], b: "stuff", c: ___Iterator<Other>};
+      export nominal type Bar(number)
+      ",
+        "
+      export type Foo = {a: string[], b: \"stuff\", c: ___Iterator<Other>};
 
-//       const ___Bar = Symbol('Bar');
-//       export const Bar = ((value: number): Bar => ({ kind: ___Bar, value })) as (((value: number) => Bar) & { sym: typeof ___Bar });
-//       Bar.sym = ___Bar;
-//       export type Bar = { kind: typeof ___Bar, value: number };
-//       `)
-//     }
-//   })
+      const ___Bar = Symbol('Bar');
+      export const Bar = ((value: number): Bar => ({ kind: ___Bar, value })) as (((value: number) => Bar) & { sym: typeof ___Bar });
+      Bar.sym = ___Bar;
+      export type Bar = { kind: typeof ___Bar, value: number };
+      ",
+    );
+}
 
-//   Deno.test({
-//     name: "Imports",
-//     fn() {
-//       testCompile(`
-//       from './foo.bgl' import { a, b as otherb }
-//       import './bar.bgl' as bar
-//       `,
-//       `
-//       import { a, b as otherb } from "./foo.bgl.ts";
-//       import * as bar from "./bar.bgl.ts";
-//       `)
-//     }
-//   })
+#[test]
+#[allow(non_snake_case)]
+fn Imports() {
+    test_compile(
+        "
+      from './foo.bgl' import { a, b as otherb }
+      import './bar.bgl' as bar
+      ",
+        "
+      import { a, b as otherb } from \"./foo.bgl.ts\";
+      import * as bar from \"./bar.bgl.ts\";
+      ",
+    );
+}
 
-//   Deno.test({
-//     name: "Inline-destructuring declaration",
-//     fn() {
-//       testCompile(`
-//       func foo(obj: { a: string, b: number }) =>
-//         const { a } = obj,
-//         a
-//       `,
-//       `
-//       const foo = function ___fn_foo(obj: {a: string, b: number}) { return (() => {
-//         const { a } = obj;
-//         return a;
-//       })() };
-//       `)
-//     }
-//   })
+#[test]
+#[allow(non_snake_case)]
+fn Inline_destructuring_declaration() {
+    test_compile(
+        "
+      func foo(obj: { a: string, b: number }) =>
+        const { a } = obj,
+        a
+      ",
+        "
+      const foo = function ___fn_foo(obj: {a: string, b: number}) { return (() => {
+        const { a } = obj;
+        return a;
+      })() };
+      ",
+    );
+}
 
-//   Deno.test({
-//     name: "Inline const",
-//     fn() {
-//       testCompile(`
-//       const a: number = (
-//         const b: number = 12,
+#[test]
+#[allow(non_snake_case)]
+fn Inline_const() {
+    test_compile(
+        "
+      const a: number = (
+        const b: number = 12,
 
-//         b * 2
-//       )`,
-//       `
-//       const a: number = ((() => {
-//         const b: number = 12;
-//         return (b * 2);
-//       })());`)
-//     }
-//   })
+        b * 2
+      )",
+        "
+      const a: number = ((() => {
+        const b: number = 12;
+        return (b * 2);
+      })());",
+    );
+}
 
-//   Deno.test({
-//     name: "Types",
-//     fn() {
-//       testCompile(`
-//       type A = <T>({})
-//       type B = (a: number) { }
-//       type C = (a: string) => number
-//       type E = { ...Other }
-//       type F = {[string]: number}
-//       type G = Error<string>
-//       type H = unknown
-//       type I = (string | number)
+#[test]
+#[allow(non_snake_case)]
+fn Types() {
+    test_compile(
+        "
+      type A = <T>({})
+      type B = (a: number) { }
+      type C = (a: string) => number
+      type E = { ...Other }
+      type F = {[string]: number}
+      type G = Error<string>
+      type H = unknown
+      type I = (string | number)
 
-//       const x = 'foo' as string
-//       `,
-//       `
-//       type A = unknown;
-//       type B = (a: number) => void;
-//       type C = (a: string) => number;
-//       type E = Other & {};
-//       type F = Record<string, number>;
-//       type G = ___Error<string>;
-//       type H = unknown;
-//       type I = (string | number);
+      const x = 'foo' as string
+      ",
+        "
+      type A = unknown;
+      type B = (a: number) => void;
+      type C = (a: string) => number;
+      type E = Other & {};
+      type F = Record<string, number>;
+      type G = ___Error<string>;
+      type H = unknown;
+      type I = (string | number);
 
-//       const x = "foo" as string;
-//       `)
-//     }
-//   })
+      const x = \"foo\" as string;
+      ",
+    );
+}
 
-//   Deno.test({
-//     name: "Decorators",
-//     fn() {
-//       testCompile(`
-//       func myDecorator1(fn: (n: number) => number): (n: number) => number => fn
-//       func myDecorator2(fn: (n: number) => number): (n: number) => number => fn
+#[test]
+#[allow(non_snake_case)]
+fn Decorators() {
+    test_compile(
+        "
+      func myDecorator1(fn: (n: number) => number): (n: number) => number => fn
+      func myDecorator2(fn: (n: number) => number): (n: number) => number => fn
 
-//       @myDecorator1
-//       @myDecorator2
-//       func foo(n: number): number => n
+      @myDecorator1
+      @myDecorator2
+      func foo(n: number): number => n
 
-//       func myProcDecorator(p: () {}): () {} => p
+      func myProcDecorator(p: () {}): () {} => p
 
-//       @myProcDecorator
-//       proc bar() {
-//       }
-//       `,
-//       `
-//       const myDecorator1 = function ___fn_myDecorator1(fn: (n: number) => number): (n: number) => number { return fn };
-//       const myDecorator2 = function ___fn_myDecorator2(fn: (n: number) => number): (n: number) => number { return fn };
+      @myProcDecorator
+      proc bar() {
+      }
+      ",
+        "
+      const myDecorator1 = function ___fn_myDecorator1(fn: (n: number) => number): (n: number) => number { return fn };
+      const myDecorator2 = function ___fn_myDecorator2(fn: (n: number) => number): (n: number) => number { return fn };
 
-//       const foo = myDecorator1(myDecorator2(function ___fn_foo(n: number): number { return n }));
+      const foo = myDecorator1(myDecorator2(function ___fn_foo(n: number): number { return n }));
 
-//       const myProcDecorator = function ___fn_myProcDecorator(p: () => void): () => void { return p };
+      const myProcDecorator = function ___fn_myProcDecorator(p: () => void): () => void { return p };
 
-//       const bar = myProcDecorator(function ___fn_bar(): void {
-//       });
-//       `)
-//     }
-//   })
+      const bar = myProcDecorator(function ___fn_bar(): void {
+      });
+      ",
+    );
+}
 
-//   Deno.test({
-//     name: "Regular expressions",
-//     fn() {
-//       testCompile(`
-//       const expr: RegExp = /([a-z]+)/gi
-//       `,
-//       `
-//       const expr: RegExp = /([a-z]+)/gi;
-//       `)
-//     }
-//   })
+#[test]
+#[allow(non_snake_case)]
+fn Regular_expressions() {
+    test_compile(
+        "
+      const expr: RegExp = /([a-z]+)/gi
+      ",
+        "
+      const expr: RegExp = /([a-z]+)/gi;
+      ",
+    );
+}
 
-//   Deno.test({
-//     name: "Tests",
-//     fn() {
-//       testCompile(`
-//       test expr 'Two plus two equals four' => assert(2 + 2 == 3)
+#[test]
+#[allow(non_snake_case)]
+fn Tests() {
+    test_compile(
+        "
+      test expr 'Two plus two equals four' => assert(2 + 2 == 3)
 
-//       test block 'Do thing!' => {
-//           throw Error('Foo');
-//       }`,
-//       `
-//       export const ___tests = {
-//         testExprs: [{ name: 'Two plus two equals four', expr: assert(((2 + 2) === 3)) }],
-//         testBlocks: [{ name: 'Do thing!', block: () => {
-//           return { kind: ___ERROR_SYM, value: "Foo" };;
-//         } }]
-//       }`)
-//     }
-//   })
+      test block 'Do thing!' => {
+          throw Error('Foo');
+      }",
+        "
+      export const ___tests = {
+        testExprs: [{ name: 'Two plus two equals four', expr: assert(((2 + 2) === 3)) }],
+        testBlocks: [{ name: 'Do thing!', block: () => {
+          return { kind: ___ERROR_SYM, value: \"Foo\" };;
+        } }]
+      }",
+    );
+}
 
-//   Deno.test({
-//     name: "Strings",
-//     fn() {
-//       testCompile(`
-//       const a = 'Hello world \${12}'
-//       const b = 'it\\'s me!'
-//       const c = '\\\\foobar'
-//       const d = 'num: \\\${12}'
-//       const e = ''`,
-//       `
-//       const a = \`Hello world \${12}\`;
-//       const b = "it's me!";
-//       const c = "\\\\foobar";
-//       const d = "num: \${12}";
-//       const e = "";`)
-//     }
-//   })
+#[test]
+#[allow(non_snake_case)]
+fn Strings() {
+    test_compile(
+        "
+      const a = 'Hello world ${12}'
+      const b = 'it\\'s me!'
+      const c = '\\\\foobar'
+      const d = 'num: \\${12}'
+      const e = ''",
+        "
+      const a = `Hello world \\${12}`;
+      const b = \"it's me!\";
+      const c = \"\\\\foobar\";
+      const d = \"num: \\${12}\";
+      const e = \"\";",
+    );
+}
 
 fn test_compile(bgl: &str, js: &str) {
     let parsed = parse(
@@ -838,37 +859,3 @@ fn normalize(js: &str) -> String {
     let re = Regex::new(r"[\s]+").unwrap();
     re.replace_all(js.trim(), " ").to_string()
 }
-
-//   function testCompile(code: string, exp: string) {
-//     const moduleName = '<test>.bgl' as ModuleName
-
-//     const parseResult = parse(moduleName, code)
-
-//     const allModules: AllModules = new Map()
-//     allModules.set(moduleName, parseResult)
-//     const ctx = { allModules, config: DEFAULT_CONFIG, moduleName, includeTests: true, transpilePath: (m: string) => m + '.ts', canonicalModuleName: (_: ModuleName, m: string) => m as ModuleName }
-
-//     if (parseResult) {
-//       const { noPreludeAst: ast, errors } = parseResult
-
-//       const compiled = compile(ctx, ast, true)
-
-//       if (errors.length > 0) {
-//         console.log(`\n${code}\nFailed to parse:\n` +
-//           errors.map(err => prettyProblem(ctx, moduleName, err)).join("\n"))
-//         throw Error()
-//       }
-
-//       if (normalize(compiled) !== normalize(exp)) {
-//         console.log(`Compiler output did not match expected:
-//     bagel:\n${code}
-//     expected:\n${exp}
-//     received:\n${compiled}`)
-//         throw Error()
-//       }
-//     }
-//   }
-
-//   function normalize(ts: string): string {
-//     return (' ' + ts + ' ').replace(/[\s\n]+/gm, " ");
-//   }
