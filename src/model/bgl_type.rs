@@ -248,17 +248,21 @@ impl Type {
                 }
             }
             (Type::ArrayType(destination_element), Type::ArrayType(value_element)) => {
-                if !ctx.dest_mutability.is_mutable()
+                if ctx.dest_mutability.encompasses(ctx.val_mutability)
                     && destination_element.subsumes(ctx, value_element)
                 {
                     return None;
                 }
             }
             (Type::ArrayType(destination_element), Type::TupleType(value_members)) => {
-                if value_members.iter().all(|member| match member {
-                    ElementOrSpread::Element(element) => destination_element.subsumes(ctx, element),
-                    ElementOrSpread::Spread(spread) => destination.subsumes(ctx, spread),
-                }) {
+                if ctx.dest_mutability.encompasses(ctx.val_mutability)
+                    && value_members.iter().all(|member| match member {
+                        ElementOrSpread::Element(element) => {
+                            destination_element.subsumes(ctx, element)
+                        }
+                        ElementOrSpread::Spread(spread) => destination.subsumes(ctx, spread),
+                    })
+                {
                     return None;
                 }
             }
@@ -277,7 +281,8 @@ impl Type {
                     value_type: value_value_type,
                 },
             ) => {
-                if destination_key_type.subsumes(ctx, value_key_type)
+                if ctx.dest_mutability.encompasses(ctx.val_mutability)
+                    && destination_key_type.subsumes(ctx, value_key_type)
                     && destination_value_type.subsumes(ctx, value_value_type)
                 {
                     return None;
@@ -293,7 +298,8 @@ impl Type {
                     is_interface: value_is_interface,
                 },
             ) => {
-                if !*value_is_interface
+                if ctx.dest_mutability.encompasses(ctx.val_mutability)
+                    && !*value_is_interface
                     && value_entries.iter().all(|value_entry| match value_entry {
                         KeyValueOrSpread::KeyValue(key, value) => {
                             destination_key_type.subsumes(ctx, key)
@@ -315,7 +321,8 @@ impl Type {
                     is_interface: value_is_interface,
                 },
             ) => {
-                if (*destination_is_interface || !*value_is_interface)
+                if ctx.dest_mutability.encompasses(ctx.val_mutability)
+                    && (*destination_is_interface || !*value_is_interface)
                     && destination_entries
                         .iter()
                         .all(|destination_entry| match destination_entry {
@@ -916,12 +923,21 @@ pub enum Mutability {
 }
 
 impl Mutability {
-    pub fn is_mutable(&self) -> bool {
+    pub fn is_mutable(self) -> bool {
         match self {
             Mutability::Constant => false,
             Mutability::Readonly => false,
             Mutability::Mutable => true,
             Mutability::Literal => true,
+        }
+    }
+
+    pub fn encompasses(self, other: Mutability) -> bool {
+        match self {
+            Mutability::Constant => other == Mutability::Constant,
+            Mutability::Readonly => true,
+            Mutability::Mutable => other == Mutability::Mutable || other == Mutability::Literal,
+            Mutability::Literal => other == Mutability::Literal,
         }
     }
 }
