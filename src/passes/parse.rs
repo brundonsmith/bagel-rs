@@ -188,7 +188,10 @@ fn import_declaration(i: Slice) -> ParseResult<AST<ImportDeclaration>> {
             exact_string_literal,
             tag("import"),
             tag("{"),
-            separated_list0(w(tag(",")), w(import_item)),
+            terminated(
+                separated_list0(w(tag(",")), w(import_item)),
+                opt(w(tag(",")))
+            ),
             tag("}"),
         ),
         |(start, mut path, _, _, mut imports, end)| {
@@ -557,7 +560,10 @@ fn type_expression_inner(l: usize, i: Slice) -> ParseResult<AST<TypeExpression>>
         tl,
         i,
         map(
-            separated_list2(w(tag("|")), w(type_expression(tl + 1))),
+            preceded(
+                opt(w(tag("|"))),
+                separated_list2(w(tag("|")), w(type_expression(tl + 1))),
+            ),
             |mut members| {
                 make_node_tuple!(UnionType, covering(&members).unwrap(), members)
                     .recast::<TypeExpression>()
@@ -722,15 +728,18 @@ fn object_or_interface_type(i: Slice) -> ParseResult<AST<ObjectType>> {
         seq!(
             opt(tag("interface")),
             tag("{"),
-            separated_list0(
-                w(tag(",")),
-                alt((
-                    map(
-                        preceded(tag("..."), type_expression(0)),
-                        KeyValueOrSpread::Spread
-                    ),
-                    key_value_type,
-                ))
+            terminated(
+                separated_list0(
+                    w(tag(",")),
+                    alt((
+                        map(
+                            preceded(tag("..."), type_expression(0)),
+                            KeyValueOrSpread::Spread
+                        ),
+                        key_value_type,
+                    ))
+                ),
+                opt(w(tag(","))),
             ),
             tag("}"),
         ),
@@ -765,15 +774,18 @@ fn tuple_type(i: Slice) -> ParseResult<AST<TupleType>> {
     map(
         seq!(
             tag("["),
-            separated_list0(
-                w(tag(",")),
-                w(alt((
-                    map(
-                        preceded(tag("..."), type_expression(0)),
-                        ElementOrSpread::Spread
-                    ),
-                    map(type_expression(0), ElementOrSpread::Element),
-                )))
+            terminated(
+                separated_list0(
+                    w(tag(",")),
+                    w(alt((
+                        map(
+                            preceded(tag("..."), type_expression(0)),
+                            ElementOrSpread::Spread
+                        ),
+                        map(type_expression(0), ElementOrSpread::Element),
+                    )))
+                ),
+                opt(w(tag(",")))
             ),
             tag("]"),
         ),
@@ -1540,15 +1552,18 @@ fn object_literal(i: Slice) -> ParseResult<AST<ObjectLiteral>> {
     map(
         seq!(
             tag("{"),
-            separated_list0(
-                w(char(',')),
-                w(alt((
-                    map(
-                        preceded(tag("..."), expression(0)),
-                        KeyValueOrSpread::Spread
-                    ),
-                    key_value_expression,
-                )))
+            terminated(
+                separated_list0(
+                    w(char(',')),
+                    w(alt((
+                        map(
+                            preceded(tag("..."), expression(0)),
+                            KeyValueOrSpread::Spread
+                        ),
+                        key_value_expression,
+                    )))
+                ),
+                opt(w(tag(",")))
             ),
             tag("}"),
         ),
@@ -1576,12 +1591,15 @@ fn array_literal(i: Slice) -> ParseResult<AST<ArrayLiteral>> {
     map(
         seq!(
             tag("["),
-            separated_list0(
-                w(char(',')),
-                w(alt((
-                    map(preceded(tag("..."), expression(0)), ElementOrSpread::Spread),
-                    map(expression(0), ElementOrSpread::Element),
-                )))
+            terminated(
+                separated_list0(
+                    w(char(',')),
+                    w(alt((
+                        map(preceded(tag("..."), expression(0)), ElementOrSpread::Spread),
+                        map(expression(0), ElementOrSpread::Element),
+                    )))
+                ),
+                opt(w(tag(",")))
             ),
             tag("]"),
         ),
