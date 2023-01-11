@@ -853,30 +853,90 @@ where
                 value.check(ctx, report_error);
                 operator.check(ctx, report_error);
 
-                match operator.as_ref() {
-                    Some(op) => {
-                        let operation = BinaryOperation {
-                            left: target.clone(),
-                            op: op.clone(),
-                            right: value.clone(),
-                        };
+                let (invalid_target, reason) = match target.details() {
+                    Any::LocalIdentifier(ident) => {
+                        let resolved = target.resolve_symbol(ident.0.as_str());
 
-                        check_binary_operation(&operation, report_error);
-
-                        check_subsumation(
-                            &target.infer_type(ctx.into()),
-                            binary_operation_type(ctx.into(), &operation),
-                            value.slice(),
-                            report_error,
-                        );
+                        if let Some(resolved) = resolved {
+                            match resolved.details() {
+                                Any::ValueDeclaration(ValueDeclaration {
+                                    name: _,
+                                    type_annotation: _,
+                                    value: _,
+                                    is_const,
+                                    exported: _,
+                                    platforms: _,
+                                }) => {
+                                    if *is_const {
+                                        (true, Some("it's a constant"))
+                                    } else {
+                                        (false, None)
+                                    }
+                                }
+                                Any::DeclarationStatement(DeclarationStatement {
+                                    destination: _,
+                                    value: _,
+                                    is_const,
+                                }) => {
+                                    if *is_const {
+                                        (true, Some("it's a constant"))
+                                    } else {
+                                        (false, None)
+                                    }
+                                }
+                                Any::Arg(_) => (true, Some("it's an argument")),
+                                _ => (true, None),
+                            }
+                        } else {
+                            (false, None) // invalid, but skip reporting error
+                        }
                     }
-                    None => {
-                        check_subsumation(
-                            &target.infer_type(ctx.into()),
-                            value.infer_type(ctx.into()),
-                            value.slice(),
-                            report_error,
-                        );
+                    Any::PropertyAccessor(_) => {
+                        // TODO: Check that subject is mutable
+                        todo!()
+                    }
+                    _ => (true, None),
+                };
+
+                if invalid_target {
+                    report_error(BagelError::MiscError {
+                        module_id: module_id.clone(),
+                        src: target.slice().clone(),
+                        message: match reason {
+                            Some(reason) => format!(
+                                "Can't assign to {} because {}",
+                                blue_string(target),
+                                reason
+                            ),
+                            None => format!("Can't assign to {}", blue_string(target)),
+                        },
+                    });
+                } else {
+                    match operator.as_ref() {
+                        Some(op) => {
+                            let operation = BinaryOperation {
+                                left: target.clone(),
+                                op: op.clone(),
+                                right: value.clone(),
+                            };
+
+                            check_binary_operation(&operation, report_error);
+
+                            check_subsumation(
+                                &target.infer_type(ctx.into()),
+                                binary_operation_type(ctx.into(), &operation),
+                                value.slice(),
+                                report_error,
+                            );
+                        }
+                        None => {
+                            check_subsumation(
+                                &target.infer_type(ctx.into()),
+                                value.infer_type(ctx.into()),
+                                value.slice(),
+                                report_error,
+                            );
+                        }
                     }
                 }
             }
