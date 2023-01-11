@@ -333,8 +333,14 @@ pub fn binary_operation_type<'a>(
 ) -> Type {
     match op.downcast().0 {
         BinaryOperatorOp::NullishCoalescing => todo!(),
-        BinaryOperatorOp::Or => todo!(),
-        BinaryOperatorOp::And => todo!(),
+        BinaryOperatorOp::Or => left
+            .infer_type(ctx)
+            .narrow(ctx.into(), &truthy_types())
+            .union(right.infer_type(ctx)),
+        BinaryOperatorOp::And => left
+            .infer_type(ctx)
+            .narrow(ctx.into(), &falsy_types())
+            .union(right.infer_type(ctx)),
         BinaryOperatorOp::Equals => Type::ANY_BOOLEAN,
         BinaryOperatorOp::NotEquals => Type::ANY_BOOLEAN,
         BinaryOperatorOp::LessEqual => Type::ANY_BOOLEAN,
@@ -452,18 +458,22 @@ impl ASTAny {
                                     match op.downcast().0 {
                                         BinaryOperatorOp::Equals => {
                                             if left.details() == expr_to_refine.details() {
-                                                type_to_refine.narrow(&right.infer_type(ctx))
+                                                type_to_refine
+                                                    .narrow(ctx.into(), &right.infer_type(ctx))
                                             } else if right.details() == expr_to_refine.details() {
-                                                type_to_refine.narrow(&left.infer_type(ctx))
+                                                type_to_refine
+                                                    .narrow(ctx.into(), &left.infer_type(ctx))
                                             } else {
                                                 type_to_refine
                                             }
                                         }
                                         BinaryOperatorOp::NotEquals => {
                                             if left.details() == expr_to_refine.details() {
-                                                type_to_refine.subtract(&right.infer_type(ctx))
+                                                type_to_refine
+                                                    .subtract(ctx.into(), &right.infer_type(ctx))
                                             } else if right.details() == expr_to_refine.details() {
-                                                type_to_refine.subtract(&left.infer_type(ctx))
+                                                type_to_refine
+                                                    .subtract(ctx.into(), &left.infer_type(ctx))
                                             } else {
                                                 type_to_refine
                                             }

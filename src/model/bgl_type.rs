@@ -573,25 +573,37 @@ impl Type {
         }
     }
 
-    pub fn subtract(mut self, other: &Type) -> Type {
-        println!("subtracting");
-        println!("self: {}", self);
-        println!("other: {}", other);
-
+    pub fn subtract<'a>(self, ctx: SubsumationContext<'a>, other: &Type) -> Type {
         if &self == other {
             return Type::UnionType(vec![]);
         }
 
         match self {
-            Type::UnionType(members) => {
-                Type::UnionType(members.into_iter().map(|m| m.subtract(other)).collect())
-            }
+            Type::UnionType(members) => Type::UnionType(
+                members
+                    .into_iter()
+                    .map(|m| m.subtract(ctx, other))
+                    .collect(),
+            ),
             _ => self,
         }
     }
 
-    pub fn narrow(mut self, other: &Type) -> Type {
-        self
+    pub fn narrow<'a>(self, ctx: SubsumationContext<'a>, other: &Type) -> Type {
+        if &self == other {
+            return self;
+        }
+
+        match self {
+            Type::UnionType(members) => Type::UnionType(
+                members
+                    .into_iter()
+                    .map(|m| m.narrow(ctx, other))
+                    .filter(|member| other.subsumes(ctx, member))
+                    .collect(),
+            ),
+            _ => self,
+        }
     }
 
     fn simplify_for_display(self) -> Type {
