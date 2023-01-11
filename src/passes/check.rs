@@ -18,6 +18,8 @@ use crate::{
 use std::fmt::Debug;
 use std::time::SystemTime;
 
+use super::typeinfer::binary_operation_type;
+
 impl Module {
     pub fn check<'a, F: FnMut(BagelError)>(&self, ctx: &CheckContext<'a>, report_error: &mut F) {
         let start = SystemTime::now();
@@ -244,40 +246,8 @@ where
             Any::SpreadExpression(SpreadExpression(inner)) => {
                 inner.check(ctx, report_error);
             }
-            Any::BinaryOperation(BinaryOperation { left, op, right }) => {
-                let left_type = left.infer_type(ctx.into());
-                let right_type = right.infer_type(ctx.into());
-
-                let number_or_string = Type::ANY_NUMBER.union(Type::ANY_STRING);
-
-                let operator = op.downcast().0;
-
-                if operator == BinaryOperatorOp::Plus {
-                    check_subsumation(&number_or_string, left_type, left.slice(), report_error);
-                    check_subsumation(&number_or_string, right_type, right.slice(), report_error);
-                } else if operator == BinaryOperatorOp::Minus
-                    || operator == BinaryOperatorOp::Times
-                    || operator == BinaryOperatorOp::Divide
-                {
-                    check_subsumation(&Type::ANY_NUMBER, left_type, left.slice(), report_error);
-                    check_subsumation(&Type::ANY_NUMBER, right_type, right.slice(), report_error);
-                } else if operator == BinaryOperatorOp::Equals
-                    || operator == BinaryOperatorOp::NotEquals
-                {
-                    if !left_type.subsumes(ctx.into(), &right_type)
-                        && !right_type.subsumes(ctx.into(), &left_type)
-                    {
-                        report_error(BagelError::MiscError {
-                            module_id: ctx.current_module.module_id.clone(),
-                            src: op.slice().clone(),
-                            message: format!(
-                                "Can't compare types {} and {} because they have no overlap",
-                                blue_string(&left_type),
-                                blue_string(&right_type),
-                            ),
-                        });
-                    }
-                }
+            Any::BinaryOperation(op) => {
+                check_binary_operation(ctx, report_error, op);
             }
             Any::NegationOperation(NegationOperation(inner)) => {
                 inner.check(ctx, report_error);
@@ -827,14 +797,32 @@ where
                 value.check(ctx, report_error);
                 operator.check(ctx, report_error);
 
-                // TODO: Check operator compatibility for value and target
+                match operator.as_ref() {
+                    Some(op) => {
+                        let operation = BinaryOperation {
+                            left: target.clone(),
+                            op: op.clone(),
+                            right: value.clone(),
+                        };
 
-                check_subsumation(
-                    &target.infer_type(ctx.into()),
-                    value.infer_type(ctx.into()),
-                    value.slice(),
-                    report_error,
-                );
+                        check_binary_operation(ctx, report_error, &operation);
+
+                        check_subsumation(
+                            &target.infer_type(ctx.into()),
+                            binary_operation_type(ctx.into(), &operation),
+                            value.slice(),
+                            report_error,
+                        );
+                    }
+                    None => {
+                        check_subsumation(
+                            &target.infer_type(ctx.into()),
+                            value.infer_type(ctx.into()),
+                            value.slice(),
+                            report_error,
+                        );
+                    }
+                }
             }
             Any::TryCatch(TryCatch {
                 try_block,
@@ -889,6 +877,59 @@ where
             Any::BooleanType(_) => {}
             Any::NilType(_) => {}
             Any::UnknownType(_) => {}
+        }
+    }
+}
+
+fn check_binary_operation<'a, F: FnMut(BagelError)>(
+    ctx: &CheckContext<'a>,
+    report_error: &mut F,
+    BinaryOperation { left, op, right }: &BinaryOperation,
+) {
+    let module_id = &ctx.current_module.module_id.clone();
+    let subsumation_context = SubsumationContext::from(ctx);
+    let check_subsumation =
+        |destination: &Type, value: Type, slice: &Slice, report_error: &mut F| {
+            let issues = destination.subsumation_issues(subsumation_context, &value);
+
+            if let Some(issues) = issues {
+                report_error(BagelError::AssignmentError {
+                    module_id: module_id.clone(),
+                    src: slice.clone(),
+                    issues,
+                });
+            }
+        };
+
+    let left_type = left.infer_type(ctx.into());
+    let right_type = right.infer_type(ctx.into());
+
+    let number_or_string = Type::ANY_NUMBER.union(Type::ANY_STRING);
+
+    let operator = op.downcast().0;
+
+    if operator == BinaryOperatorOp::Plus {
+        check_subsumation(&number_or_string, left_type, left.slice(), report_error);
+        check_subsumation(&number_or_string, right_type, right.slice(), report_error);
+    } else if operator == BinaryOperatorOp::Minus
+        || operator == BinaryOperatorOp::Times
+        || operator == BinaryOperatorOp::Divide
+    {
+        check_subsumation(&Type::ANY_NUMBER, left_type, left.slice(), report_error);
+        check_subsumation(&Type::ANY_NUMBER, right_type, right.slice(), report_error);
+    } else if operator == BinaryOperatorOp::Equals || operator == BinaryOperatorOp::NotEquals {
+        if !left_type.subsumes(ctx.into(), &right_type)
+            && !right_type.subsumes(ctx.into(), &left_type)
+        {
+            report_error(BagelError::MiscError {
+                module_id: ctx.current_module.module_id.clone(),
+                src: op.slice().clone(),
+                message: format!(
+                    "Can't compare types {} and {} because they have no overlap",
+                    blue_string(&left_type),
+                    blue_string(&right_type),
+                ),
+            });
         }
     }
 }
