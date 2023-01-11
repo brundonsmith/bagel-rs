@@ -372,6 +372,8 @@ where
                     }) => {
                         properties.check(ctx, report_error);
                         spread.check(ctx, report_error);
+
+                        // TODO: Check that value is the right type and all destructured properties exist
                     }
                 }
                 value.check(ctx, report_error);
@@ -791,6 +793,8 @@ where
                     }) => {
                         properties.check(ctx, report_error);
                         spread.check(ctx, report_error);
+
+                        // TODO: Check that value is the right type and all destructured properties exist
                     }
                 }
                 value.check(ctx, report_error);

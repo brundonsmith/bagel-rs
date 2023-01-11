@@ -782,8 +782,8 @@ pub struct NameAndType {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Destructure {
-    pub properties: Vec<ASTAny>,
-    pub spread: Option<ASTAny>,
+    pub properties: Vec<AST<PlainIdentifier>>,
+    pub spread: Option<AST<PlainIdentifier>>,
     pub destructure_kind: DestructureKind,
 }
 

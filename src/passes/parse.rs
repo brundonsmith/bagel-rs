@@ -1517,22 +1517,53 @@ fn inline_declaration(i: Slice) -> ParseResult<AST<InlineDeclaration>> {
 
 #[memoize]
 fn declaration_destination(i: Slice) -> ParseResult<DeclarationDestination> {
-    // TODO: Destructuring
-    map(
-        seq!(
-            plain_identifier,
-            opt(map(
-                seq!(tag(":"), type_expression(0)),
-                |(_, type_annotation)| type_annotation
-            ))
+    alt((
+        map(
+            seq!(
+                tag("{"),
+                separated_list0(w(char(',')), w(plain_identifier)),
+                opt(w(tag(","))),
+                tag("}"),
+            ),
+            |(_, properties, _, _)| {
+                DeclarationDestination::Destructure(Destructure {
+                    properties,
+                    spread: None, // TODO
+                    destructure_kind: DestructureKind::Object,
+                })
+            },
         ),
-        |(name, type_annotation)| {
-            DeclarationDestination::NameAndType(NameAndType {
-                name,
-                type_annotation,
-            })
-        },
-    )(i)
+        map(
+            seq!(
+                tag("["),
+                separated_list0(w(char(',')), w(plain_identifier)),
+                opt(w(tag(","))),
+                tag("]"),
+            ),
+            |(_, properties, _, _)| {
+                DeclarationDestination::Destructure(Destructure {
+                    properties,
+                    spread: None, // TODO
+                    destructure_kind: DestructureKind::Array,
+                })
+            },
+        ),
+        map(
+            seq!(
+                plain_identifier,
+                opt(map(
+                    seq!(tag(":"), type_expression(0)),
+                    |(_, type_annotation)| type_annotation
+                ))
+            ),
+            |(name, type_annotation)| {
+                DeclarationDestination::NameAndType(NameAndType {
+                    name,
+                    type_annotation,
+                })
+            },
+        ),
+    ))(i)
 }
 
 fn negation_operation(level: usize) -> impl Fn(Slice) -> ParseResult<AST<NegationOperation>> {

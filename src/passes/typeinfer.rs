@@ -85,7 +85,37 @@ impl AST<Expression> {
                                         .as_ref()
                                         .map(|x| x.resolve_type(ctx.into()))
                                         .unwrap_or_else(|| value.infer_type(ctx)),
-                                    DeclarationDestination::Destructure(_) => todo!(),
+                                    DeclarationDestination::Destructure(Destructure {
+                                        properties,
+                                        spread,
+                                        destructure_kind,
+                                    }) => {
+                                        if let Some((index, property)) = properties
+                                            .iter()
+                                            .enumerate()
+                                            .find(|(_, p)| p.downcast().0.as_str() == name.as_str())
+                                        {
+                                            Type::PropertyType {
+                                                subject: Rc::new(value.infer_type(ctx)),
+                                                property: match destructure_kind {
+                                                    DestructureKind::Array => {
+                                                        Rc::new(Type::NumberType {
+                                                            min: Some(index as i32),
+                                                            max: Some(index as i32),
+                                                        })
+                                                    }
+                                                    DestructureKind::Object => Rc::new(
+                                                        identifier_to_string_type(property.clone())
+                                                            .recast::<TypeExpression>()
+                                                            .resolve_type(ctx.into()),
+                                                    ),
+                                                },
+                                            }
+                                        } else {
+                                            // spread
+                                            todo!()
+                                        }
+                                    }
                                 }
                             }
                             Any::DeclarationStatement(DeclarationStatement {

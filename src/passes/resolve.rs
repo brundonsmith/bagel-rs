@@ -125,7 +125,17 @@ where
                                 name,
                                 type_annotation: _,
                             }) => name.downcast().0.as_str() == symbol,
-                            DeclarationDestination::Destructure(_) => todo!(),
+                            DeclarationDestination::Destructure(Destructure {
+                                properties,
+                                spread,
+                                destructure_kind: _,
+                            }) => properties.iter().any(|property| {
+                                property.downcast().0.as_str() == symbol
+                                    || spread
+                                        .as_ref()
+                                        .map(|spread| spread.downcast().0.as_str() == symbol)
+                                        .unwrap_or(false)
+                            }),
                         })
                 {
                     return Some(found.clone().upcast());
