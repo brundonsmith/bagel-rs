@@ -248,7 +248,9 @@ impl Type {
                 }
             }
             (Type::ArrayType(destination_element), Type::ArrayType(value_element)) => {
-                if destination_element.subsumes(ctx, value_element) {
+                if !ctx.dest_mutability.is_mutable()
+                    && destination_element.subsumes(ctx, value_element)
+                {
                     return None;
                 }
             }
@@ -314,20 +316,22 @@ impl Type {
                 },
             ) => {
                 if (*destination_is_interface || !*value_is_interface)
-                    && value_entries.iter().all(|value_entry| match value_entry {
-                        KeyValueOrSpread::KeyValue(value_key, value_value) => destination_entries
-                            .iter()
-                            .any(|destination_entry| match destination_entry {
-                                KeyValueOrSpread::KeyValue(destination_key, destination_value) => {
-                                    destination_key.subsumes(ctx, value_key)
-                                        && destination_value.subsumes(ctx, value_value)
-                                }
-                                KeyValueOrSpread::Spread(destination_spread) => todo!(),
-                            }),
-                        KeyValueOrSpread::Spread(value_spread) => {
-                            destination.subsumes(ctx, value_spread)
-                        }
-                    })
+                    && destination_entries
+                        .iter()
+                        .all(|destination_entry| match destination_entry {
+                            KeyValueOrSpread::KeyValue(destination_key, destination_value) => {
+                                value_entries.iter().any(|value_entry| match value_entry {
+                                    KeyValueOrSpread::KeyValue(value_key, value_value) => {
+                                        destination_key.subsumes(ctx, value_key)
+                                            && destination_value.subsumes(ctx, value_value)
+                                    }
+                                    KeyValueOrSpread::Spread(destination_spread) => todo!(),
+                                })
+                            }
+                            KeyValueOrSpread::Spread(destination_spread) => {
+                                destination_spread.subsumes(ctx, value)
+                            }
+                        })
                 {
                     return None;
                 }
