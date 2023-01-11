@@ -236,20 +236,24 @@ impl Type {
                 return destination.subsumation_issues(ctx, &value);
             }
             (Type::ReadonlyType(inner), value) => {
-                return inner
-                    .subsumation_issues(ctx.with_dest_mutability(Mutability::Readonly), value);
+                let ctx = ctx.with_dest_mutability(Mutability::Readonly);
+                if inner.subsumes(ctx, value) {
+                    return None;
+                }
             }
             (dest, Type::ReadonlyType(inner)) => {
-                return dest
-                    .subsumation_issues(ctx.with_val_mutability(Mutability::Readonly), inner);
+                let ctx = ctx.with_val_mutability(Mutability::Readonly);
+                if dest.subsumes(ctx, inner) {
+                    return None;
+                }
             }
             (Type::ArrayType(destination_element), Type::ArrayType(value_element)) => {
                 if destination_element.subsumes(ctx, value_element) {
                     return None;
                 }
             }
-            (Type::ArrayType(destination_element), Type::TupleType(members)) => {
-                if members.iter().all(|member| match member {
+            (Type::ArrayType(destination_element), Type::TupleType(value_members)) => {
+                if value_members.iter().all(|member| match member {
                     ElementOrSpread::Element(element) => destination_element.subsumes(ctx, element),
                     ElementOrSpread::Spread(spread) => destination.subsumes(ctx, spread),
                 }) {
@@ -328,15 +332,27 @@ impl Type {
                     return None;
                 }
             }
-            (Type::UnionType(members), value) => {
-                if members.iter().any(|member| member.subsumes(ctx, &value)) {
+            (Type::UnionType(destination_members), Type::UnionType(value_members)) => {
+                if value_members.iter().all(|value_member| {
+                    destination_members
+                        .iter()
+                        .any(|destination_member| destination_member.subsumes(ctx, value_member))
+                }) {
                     return None;
                 }
             }
-            (destination, Type::UnionType(members)) => {
-                if members
+            (Type::UnionType(destination_members), value) => {
+                if destination_members
                     .iter()
-                    .all(|member| destination.subsumes(ctx, &member))
+                    .any(|member| member.subsumes(ctx, value))
+                {
+                    return None;
+                }
+            }
+            (destination, Type::UnionType(value_members)) => {
+                if value_members
+                    .iter()
+                    .all(|member| destination.subsumes(ctx, member))
                 {
                     return None;
                 }
@@ -819,7 +835,13 @@ impl Display for Type {
                 key_type,
                 value_type,
             } => f.write_fmt(format_args!("{{[{}]: {}}}", key_type, value_type)),
-            Type::ArrayType(element) => f.write_fmt(format_args!("{}[]", element)),
+            Type::ArrayType(element) => {
+                if matches!(element.as_ref(), Type::UnionType(_)) {
+                    f.write_fmt(format_args!("({})[]", element))
+                } else {
+                    f.write_fmt(format_args!("{}[]", element))
+                }
+            }
             Type::TupleType(members) => {
                 f.write_char('[')?;
                 for (index, member) in members.iter().enumerate() {
