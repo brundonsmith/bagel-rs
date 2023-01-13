@@ -24,7 +24,7 @@ where
             Any::Module(ast::Module { declarations }) => {
                 for decl in declarations {
                     decl.compile(ctx, f)?;
-                    f.write_str("\n\n")?;
+                    f.write_str(";\n\n")?;
                 }
 
                 Ok(())
@@ -36,7 +36,7 @@ where
                 name.compile(ctx, f)?;
                 f.write_str(" from \"")?;
                 f.write_str(path.downcast().value.as_str())?; // TODO: Get the correct path for the current build mode
-                f.write_str("\";")
+                f.write_str("\"")
             }
             Any::ImportDeclaration(ImportDeclaration { imports, path }) => {
                 f.write_str("import { ")?;
@@ -49,7 +49,7 @@ where
                 }
                 f.write_str(" } from \"")?;
                 f.write_str(path.downcast().value.as_str())?; // TODO: Get the correct path for the current build mode
-                f.write_str("\";")
+                f.write_str("\"")
             }
             Any::ImportItem(ImportItem { name, alias }) => {
                 name.compile(ctx, f)?;
@@ -75,7 +75,6 @@ where
                     name.compile(ctx, f)?;
                     f.write_str(" = ")?;
                     declared_type.compile(ctx, f)?;
-                    f.write_char(';')?;
                 }
 
                 Ok(())
@@ -104,8 +103,7 @@ where
                     false,
                     type_annotation.returns.as_ref(),
                     &func.body.upcast(),
-                )?;
-                f.write_str(";")
+                )
             }
             Any::ProcDeclaration(ProcDeclaration {
                 name,
@@ -131,13 +129,11 @@ where
                     true,
                     None,
                     &proc.body.upcast(),
-                )?;
-                f.write_str(";")
+                )
             }
             Any::Decorator(Decorator { name }) => todo!(),
             Any::ValueDeclaration(ValueDeclaration {
-                name,
-                type_annotation,
+                destination,
                 value,
                 is_const,
                 exported,
@@ -147,8 +143,7 @@ where
                     f.write_str("export ")?;
                 }
                 f.write_str("const ")?;
-                f.write_str(name.slice().as_str())?;
-                compile_type_annotation(ctx, f, type_annotation.as_ref())?;
+                destination.compile(ctx, f)?;
                 f.write_str(" = ")?;
                 if *is_const {
                     value.compile(ctx, f)?;
@@ -157,7 +152,8 @@ where
                     value.compile(ctx, f)?;
                     f.write_str(" }")?;
                 }
-                f.write_str(";")
+
+                Ok(())
             }
             Any::TestExprDeclaration(TestExprDeclaration { name, expr }) => todo!(),
             Any::TestBlockDeclaration(TestBlockDeclaration { name, block }) => todo!(),
@@ -260,25 +256,11 @@ where
 
                 match resolved.as_ref().map(|r| r.details()) {
                     Some(Any::ValueDeclaration(ValueDeclaration {
-                        name: _,
-                        type_annotation: _,
+                        destination: _,
                         value: _,
                         is_const,
                         exported: _,
                         platforms: _,
-                    })) => {
-                        if !*is_const {
-                            f.write_str(INT)?;
-                            f.write_str("observe(")?;
-                            f.write_str(name.as_str())?;
-                            f.write_str(", 'value')")?;
-                            return Ok(());
-                        }
-                    }
-                    Some(Any::DeclarationStatement(DeclarationStatement {
-                        destination: _,
-                        value: _,
-                        is_const,
                     })) => {
                         if !*is_const {
                             f.write_str(INT)?;
@@ -590,24 +572,6 @@ where
                 property,
                 optional,
             }) => todo!(),
-            Any::DeclarationStatement(DeclarationStatement {
-                destination,
-                value,
-                is_const,
-            }) => {
-                f.write_str("const ")?;
-                destination.compile(ctx, f)?;
-                f.write_str(" = ")?;
-                if *is_const {
-                    value.compile(ctx, f)?;
-                } else {
-                    f.write_str("{ value: ")?;
-                    value.compile(ctx, f)?;
-                    f.write_str(" }")?;
-                }
-
-                Ok(())
-            }
             Any::IfElseStatement(IfElseStatement {
                 cases,
                 default_case,
@@ -650,7 +614,65 @@ where
                 target,
                 value,
                 operator,
-            }) => todo!(),
+            }) => {
+                f.write_str(INT)?;
+                f.write_str("invalidate(")?;
+                match target.details() {
+                    Any::LocalIdentifier(LocalIdentifier(name)) => {
+                        f.write_str(name.as_str())?;
+                        f.write_str(", 'value', ")?;
+
+                        if let Some(operator) = operator {
+                            f.write_str(name.as_str())?;
+                            f.write_str(".value ")?;
+                            f.write_str(operator.downcast().0.into())?;
+                            f.write_char(' ')?;
+                        }
+                        value.compile(ctx, f)?;
+
+                        f.write_str(")")?;
+                    }
+                    Any::PropertyAccessor(PropertyAccessor {
+                        subject,
+                        property,
+                        optional: _,
+                    }) => {
+                        subject.compile(ctx, f)?;
+                        f.write_str(", ")?;
+                        match property {
+                            Property::Expression(expr) => expr.compile(ctx, f)?,
+                            Property::PlainIdentifier(ident) => {
+                                f.write_char('\'')?;
+                                f.write_str(ident.downcast().0.as_str())?;
+                                f.write_char('\'')?;
+                            }
+                        };
+                        f.write_str(", ")?;
+
+                        if let Some(operator) = operator {
+                            subject.compile(ctx, f)?;
+                            f.write_char('[')?;
+                            match property {
+                                Property::Expression(expr) => expr.compile(ctx, f)?,
+                                Property::PlainIdentifier(ident) => {
+                                    f.write_char('\'')?;
+                                    f.write_str(ident.downcast().0.as_str())?;
+                                    f.write_char('\'')?;
+                                }
+                            };
+                            f.write_char(']')?;
+                            f.write_str(operator.downcast().0.into())?;
+                            f.write_char(' ')?;
+                        }
+                        value.compile(ctx, f)?;
+
+                        f.write_str(")")?;
+                    }
+                    _ => {}
+                }
+
+                Ok(())
+            }
             Any::TryCatch(TryCatch {
                 try_block,
                 error_identifier,
@@ -736,7 +758,37 @@ impl Compilable for DeclarationDestination {
 
                 Ok(())
             }
-            DeclarationDestination::Destructure(_) => todo!(),
+            DeclarationDestination::Destructure(Destructure {
+                properties,
+                spread,
+                destructure_kind,
+            }) => {
+                f.write_char(match destructure_kind {
+                    DestructureKind::Array => '[',
+                    DestructureKind::Object => '{',
+                })?;
+
+                for (index, property) in properties.iter().enumerate() {
+                    if index > 0 {
+                        f.write_str(", ")?;
+                    }
+
+                    property.compile(ctx, f)?;
+                }
+
+                if let Some(spread) = spread {
+                    if properties.len() > 0 {
+                        f.write_str(", ")?;
+                    }
+
+                    spread.compile(ctx, f)?;
+                }
+
+                f.write_char(match destructure_kind {
+                    DestructureKind::Array => ']',
+                    DestructureKind::Object => '}',
+                })
+            }
         }
     }
 }

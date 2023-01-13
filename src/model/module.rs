@@ -1,6 +1,6 @@
 use super::ast::{
-    self, Declaration, FuncDeclaration, ImportAllDeclaration, ImportDeclaration, ProcDeclaration,
-    ValueDeclaration, AST,
+    self, Declaration, Destructure, FuncDeclaration, ImportAllDeclaration, ImportDeclaration,
+    NameAndType, ProcDeclaration, ValueDeclaration, AST,
 };
 use super::errors::ParseError;
 use super::slice::Slice;
@@ -274,13 +274,32 @@ impl Module {
             .iter()
             .find(|decl| match decl.downcast() {
                 Declaration::ValueDeclaration(ValueDeclaration {
-                    name,
+                    destination,
                     exported,
-                    type_annotation: _,
                     value: _,
                     is_const: _,
                     platforms: _,
-                }) => (!must_be_exported || exported) && name.downcast().0.as_str() == item_name,
+                }) => {
+                    (!must_be_exported || exported)
+                        && match destination {
+                            ast::DeclarationDestination::NameAndType(NameAndType {
+                                name,
+                                type_annotation: _,
+                            }) => name.downcast().0.as_str() == item_name,
+                            ast::DeclarationDestination::Destructure(Destructure {
+                                properties,
+                                spread,
+                                destructure_kind: _,
+                            }) => {
+                                properties
+                                    .iter()
+                                    .any(|p| p.downcast().0.as_str() == item_name)
+                                    || spread
+                                        .map(|s| s.downcast().0.as_str() == item_name)
+                                        .unwrap_or(false)
+                            }
+                        }
+                }
                 Declaration::FuncDeclaration(FuncDeclaration {
                     name,
                     exported,

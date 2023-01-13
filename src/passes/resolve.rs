@@ -62,14 +62,19 @@ where
                             }
                         }
                         Declaration::ValueDeclaration(ValueDeclaration {
-                            name,
-                            type_annotation: _,
+                            destination,
                             value: _,
                             is_const: _,
                             exported: _,
                             platforms: _,
                         }) => {
-                            if name.downcast().0.as_str() == symbol {
+                            if match destination {
+                                DeclarationDestination::NameAndType(NameAndType {
+                                    name,
+                                    type_annotation,
+                                }) => name.downcast().0.as_str() == symbol,
+                                DeclarationDestination::Destructure(_) => todo!(),
+                            } {
                                 return Some(decl.clone());
                             }
                         }
@@ -155,10 +160,12 @@ where
                         .iter()
                         .take(self_index)
                         .find(|stmt| match stmt.details() {
-                            Any::DeclarationStatement(DeclarationStatement {
+                            Any::ValueDeclaration(ValueDeclaration {
                                 destination,
                                 value: _,
                                 is_const: _,
+                                exported: _,
+                                platforms: _,
                             }) => match destination {
                                 DeclarationDestination::NameAndType(NameAndType {
                                     name,

@@ -3,7 +3,6 @@ use std::rc::Rc;
 use crate::model::{
     ast::*,
     bgl_type::{SubsumationContext, Type},
-    errors::BagelError,
     module::{Module, ModulesStore},
 };
 

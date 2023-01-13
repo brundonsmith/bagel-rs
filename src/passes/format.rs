@@ -63,8 +63,7 @@ where
             }) => todo!(),
             Any::Decorator(Decorator { name }) => todo!(),
             Any::ValueDeclaration(ValueDeclaration {
-                name,
-                type_annotation,
+                destination,
                 value,
                 is_const,
                 exported,
@@ -75,11 +74,7 @@ where
                 }
 
                 f.write_str(if *is_const { "const " } else { "let " })?;
-                name.format(f, opts)?;
-                if let Some(type_annotation) = type_annotation {
-                    f.write_str(": ")?;
-                    type_annotation.format(f, opts)?;
-                }
+                destination.format(f, opts)?;
                 f.write_str(" = ")?;
                 value.format(f, opts)
             }
@@ -345,11 +340,6 @@ where
                 property,
                 optional,
             }) => todo!(),
-            Any::DeclarationStatement(DeclarationStatement {
-                destination,
-                value,
-                is_const,
-            }) => todo!(),
             Any::IfElseStatement(IfElseStatement {
                 cases,
                 default_case,
@@ -396,6 +386,56 @@ impl Formattable for Arg {
         format_type_annotation(f, opts, type_annotation.as_ref())?;
 
         Ok(())
+    }
+}
+
+impl Formattable for DeclarationDestination {
+    fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
+        match self {
+            DeclarationDestination::NameAndType(NameAndType {
+                name,
+                type_annotation,
+            }) => {
+                name.format(f, opts)?;
+                if let Some(type_annotation) = type_annotation {
+                    f.write_str(": ")?;
+                    type_annotation.format(f, opts)?;
+                }
+
+                Ok(())
+            }
+            DeclarationDestination::Destructure(Destructure {
+                properties,
+                spread,
+                destructure_kind,
+            }) => {
+                f.write_char(match destructure_kind {
+                    DestructureKind::Array => '[',
+                    DestructureKind::Object => '{',
+                })?;
+
+                for (index, property) in properties.iter().enumerate() {
+                    if index > 0 {
+                        f.write_str(", ")?;
+                    }
+
+                    property.format(f, opts)?;
+                }
+
+                if let Some(spread) = spread {
+                    if properties.len() > 0 {
+                        f.write_str(", ")?;
+                    }
+
+                    spread.format(f, opts)?;
+                }
+
+                f.write_char(match destructure_kind {
+                    DestructureKind::Array => ']',
+                    DestructureKind::Object => '}',
+                })
+            }
+        }
     }
 }
 

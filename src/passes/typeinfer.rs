@@ -5,7 +5,6 @@ use crate::{
     model::{
         ast::Any,
         bgl_type::{falsy_types, truthy_types, Type},
-        errors::BagelError,
         module::Module,
     },
     passes::check::CheckContext,
@@ -58,16 +57,29 @@ impl AST<Expression> {
                                 decorators: _,
                             }) => func.clone().recast::<Expression>().infer_type(ctx),
                             Any::ValueDeclaration(ValueDeclaration {
-                                name: _,
-                                type_annotation,
+                                destination,
                                 value,
-                                is_const: _,
+                                is_const,
                                 exported: _,
                                 platforms: _,
-                            }) => type_annotation
-                                .as_ref()
-                                .map(|t| t.resolve_type(ctx.into()))
-                                .unwrap_or_else(|| value.infer_type(ctx)),
+                            }) => match destination {
+                                DeclarationDestination::NameAndType(NameAndType {
+                                    name: _,
+                                    type_annotation,
+                                }) => type_annotation
+                                    .as_ref()
+                                    .map(|x| x.resolve_type(ctx.into()))
+                                    .unwrap_or_else(|| {
+                                        let base_type = value.infer_type(ctx);
+
+                                        if *is_const {
+                                            base_type
+                                        } else {
+                                            base_type.broaden_for_mutation()
+                                        }
+                                    }),
+                                DeclarationDestination::Destructure(_) => todo!(),
+                            },
                             Any::Arg(Arg {
                                 name,
                                 type_annotation,
@@ -118,28 +130,6 @@ impl AST<Expression> {
                                     }
                                 }
                             }
-                            Any::DeclarationStatement(DeclarationStatement {
-                                destination,
-                                value,
-                                is_const,
-                            }) => match destination {
-                                DeclarationDestination::NameAndType(NameAndType {
-                                    name: _,
-                                    type_annotation,
-                                }) => type_annotation
-                                    .as_ref()
-                                    .map(|x| x.resolve_type(ctx.into()))
-                                    .unwrap_or_else(|| {
-                                        let base_type = value.infer_type(ctx);
-
-                                        if *is_const {
-                                            base_type
-                                        } else {
-                                            base_type.broaden_for_mutation()
-                                        }
-                                    }),
-                                DeclarationDestination::Destructure(_) => todo!(),
-                            },
                             _ => Type::PoisonedType,
                         }
                     } else {
@@ -561,18 +551,22 @@ impl AST<Declaration> {
                 decorators: _,
             }) => Some(proc.recast::<Expression>().infer_type(ctx)),
             Declaration::ValueDeclaration(ValueDeclaration {
-                name,
-                type_annotation,
+                destination,
                 value,
                 is_const,
                 exported,
                 platforms,
-            }) => Some(
-                type_annotation
-                    .map(|t| t.resolve_type(ctx.into()))
-                    .unwrap_or_else(|| value.infer_type(ctx)),
-            ),
-
+            }) => match destination {
+                DeclarationDestination::NameAndType(NameAndType {
+                    name: _,
+                    type_annotation,
+                }) => Some(
+                    type_annotation
+                        .map(|t| t.resolve_type(ctx.into()))
+                        .unwrap_or_else(|| value.infer_type(ctx)),
+                ),
+                DeclarationDestination::Destructure(_) => None,
+            },
             Declaration::ImportAllDeclaration(_) => None,
             Declaration::ImportDeclaration(_) => None,
             Declaration::TypeDeclaration(_) => None,

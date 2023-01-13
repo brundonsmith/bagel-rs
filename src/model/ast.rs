@@ -1,5 +1,5 @@
 use crate::model::slice::Slice;
-use std::fmt::{Debug, Display};
+use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::{
     cell::RefCell,
@@ -302,8 +302,7 @@ pub struct Decorator {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ValueDeclaration {
-    pub name: AST<PlainIdentifier>,
-    pub type_annotation: Option<AST<TypeExpression>>,
+    pub destination: DeclarationDestination,
     pub value: AST<Expression>,
     pub is_const: bool,
     pub exported: bool,
@@ -623,13 +622,6 @@ pub struct PropertyType {
 
 // --- Statements ---
 #[derive(Debug, Clone, PartialEq)]
-pub struct DeclarationStatement {
-    pub destination: DeclarationDestination,
-    pub value: AST<Expression>,
-    pub is_const: bool,
-}
-
-#[derive(Debug, Clone, PartialEq)]
 pub struct IfElseStatement {
     pub cases: Vec<AST<IfElseStatementCase>>,
     pub default_case: Option<AST<Block>>,
@@ -747,6 +739,22 @@ pub struct KeyValueType {
 pub struct SpreadType(pub AST<TypeExpression>);
 
 union_type!(DeclarationDestination = NameAndType | Destructure);
+
+impl DeclarationDestination {
+    pub fn slice(&self) -> Slice {
+        match self {
+            DeclarationDestination::NameAndType(NameAndType {
+                name,
+                type_annotation,
+            }) => todo!(),
+            DeclarationDestination::Destructure(Destructure {
+                properties,
+                spread,
+                destructure_kind,
+            }) => todo!(),
+        }
+    }
+}
 
 impl Parentable for DeclarationDestination {
     fn set_parent<TParentKind>(&mut self, parent: &AST<TParentKind>)
@@ -1056,7 +1064,6 @@ union_type! {
         | UnknownType
         | RegularExpressionType
         | PropertyType
-        | DeclarationStatement
         | IfElseStatement
         | IfElseStatementCase
         | ForLoop

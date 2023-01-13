@@ -414,12 +414,11 @@ fn value_declaration(i: Slice) -> ParseResult<AST<ValueDeclaration>> {
         seq!(
             opt(tag("export")),
             alt((tag("const"), tag("let"))),
-            plain_identifier,
-            opt(type_annotation),
+            declaration_destination,
             tag("="),
             expression(0),
         ),
-        |(export, keyword, mut name, mut type_annotation, _, mut value)| {
+        |(export, keyword, mut destination, _, mut value)| {
             let mut exported = export.is_some();
             let mut is_const = keyword.as_str() == "const";
             let mut platforms = PlatformSet::all(); // TODO
@@ -428,8 +427,7 @@ fn value_declaration(i: Slice) -> ParseResult<AST<ValueDeclaration>> {
             make_node!(
                 ValueDeclaration,
                 src,
-                name,
-                type_annotation,
+                destination,
                 value,
                 is_const,
                 exported,
@@ -616,7 +614,7 @@ fn type_expression_inner(l: usize, i: Slice) -> ParseResult<AST<TypeExpression>>
                 }
             ),
             map(
-                seq!(tag("\'"), string_contents, tag("\'")),
+                tuple((tag("\'"), string_contents, tag("\'"))),
                 |(open_quote, value, close_quote)| {
                     StringLiteralType(value)
                         .as_ast(open_quote.spanning(&close_quote))
@@ -805,7 +803,10 @@ fn named_type(i: Slice) -> ParseResult<AST<NamedType>> {
 #[memoize]
 fn statement(i: Slice) -> ParseResult<AST<Statement>> {
     alt((
-        map(declaration_statement, AST::recast::<Statement>),
+        map(
+            terminated(value_declaration, w(tag(";"))),
+            AST::recast::<Statement>,
+        ),
         map(if_else_statement, AST::recast::<Statement>),
         map(for_loop, AST::recast::<Statement>),
         map(while_loop, AST::recast::<Statement>),
@@ -826,30 +827,6 @@ fn statement(i: Slice) -> ParseResult<AST<Statement>> {
             },
         ),
     ))(i)
-}
-
-#[memoize]
-fn declaration_statement(i: Slice) -> ParseResult<AST<DeclarationStatement>> {
-    map(
-        seq!(
-            alt((tag("let"), tag("const"))),
-            declaration_destination,
-            tag("="),
-            expression(0),
-            tag(";")
-        ),
-        |(keyword, mut destination, _, mut value, end)| {
-            let mut is_const = keyword.as_str() == "const";
-
-            make_node!(
-                DeclarationStatement,
-                keyword.spanning(&end),
-                destination,
-                value,
-                is_const
-            )
-        },
-    )(i)
 }
 
 #[memoize]
@@ -1653,7 +1630,7 @@ fn string_literal(i: Slice) -> ParseResult<AST<StringLiteral>> {
     map(
         pair(
             opt(plain_identifier),
-            seq!(tag("\'"), many0(string_literal_segment), tag("\'")),
+            tuple((tag("\'"), many0(string_literal_segment), tag("\'"))),
         ),
         |(mut tag, (open_quote, mut segments, close_quote))| {
             make_node!(
@@ -1674,7 +1651,7 @@ fn exact_string_literal(i: Slice) -> ParseResult<AST<ExactStringLiteral>> {
     map(
         pair(
             opt(plain_identifier),
-            seq!(tag("\'"), string_contents, tag("\'")),
+            tuple((tag("\'"), string_contents, tag("\'"))),
         ),
         |(mut tag, (open_quote, mut value, close_quote))| {
             make_node!(
@@ -1703,7 +1680,7 @@ fn string_literal_segment(i: Slice) -> ParseResult<StringLiteralSegment> {
 #[memoize]
 fn number_literal(i: Slice) -> ParseResult<AST<NumberLiteral>> {
     map(
-        seq!(opt(tag("-")), numeric, opt(seq!(tag("."), numeric))),
+        tuple((opt(tag("-")), numeric, opt(tuple((tag("."), numeric))))),
         |(neg, int, tail)| {
             let front = neg.unwrap_or(int.clone());
             let back = tail.map(|(_, decimal)| decimal).unwrap_or(int);

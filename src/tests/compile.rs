@@ -435,8 +435,8 @@ fn Assignment_ops() {
         const n = { value: 0 };
         ___invalidate(n, 'value', n.value * 2);
 
-        const s = { value: \"foo\" };
-        ___invalidate(s, 'value', s.value + \" other\");
+        const s = { value: `foo` };
+        ___invalidate(s, 'value', s.value + ` other`);
       };",
     );
 }
@@ -512,7 +512,7 @@ fn While_loop() {
         "
       const foo = function ___fn_foo(): void {
         while (true) {
-            log(\"stuff\");
+            log(`stuff`);
         };
       };",
     );
@@ -554,7 +554,7 @@ fn Runtime_types() {
       const c = ___instanceOf(x, ___RT_UNKNOWN);
       const d = ___instanceOf(x, ___RT_BOOLEAN);
       const e = ___instanceOf(x, ___RT_NIL);
-      const f = ___instanceOf(x, { kind: ___RT_LITERAL, value: \"stuff\" });
+      const f = ___instanceOf(x, { kind: ___RT_LITERAL, value: `stuff` });
       const g = ___instanceOf(x, { kind: ___RT_ITERATOR, inner: ___RT_NUMBER });
       const h = ___instanceOf(x, { kind: ___RT_PLAN, inner: ___RT_NUMBER });
       const j = ___instanceOf(x, { kind: ___RT_ERROR, inner: ___RT_NUMBER });
@@ -650,7 +650,7 @@ fn Type_declarations() {
       export nominal type Bar(number)
       ",
         "
-      export type Foo = {a: string[], b: \"stuff\", c: ___Iterator<Other>};
+      export type Foo = {a: string[], b: `stuff`, c: ___Iterator<Other>};
 
       const ___Bar = Symbol('Bar');
       export const Bar = ((value: number): Bar => ({ kind: ___Bar, value })) as (((value: number) => Bar) & { sym: typeof ___Bar });
@@ -669,8 +669,8 @@ fn Imports() {
       import './bar.bgl' as bar
       ",
         "
-      import { a, b as otherb } from \"./foo.bgl.ts\";
-      import * as bar from \"./bar.bgl.ts\";
+      import { a, b as otherb } from `./foo.bgl.ts`;
+      import * as bar from `./bar.bgl.ts`;
       ",
     );
 }
@@ -737,7 +737,7 @@ fn Types() {
       type H = unknown;
       type I = (string | number);
 
-      const x = \"foo\" as string;
+      const x = `foo` as string;
       ",
     );
 }
@@ -801,7 +801,7 @@ fn Tests() {
       export const ___tests = {
         testExprs: [{ name: 'Two plus two equals four', expr: assert(((2 + 2) === 3)) }],
         testBlocks: [{ name: 'Do thing!', block: () => {
-          return { kind: ___ERROR_SYM, value: \"Foo\" };;
+          return { kind: ___ERROR_SYM, value: `Foo` };;
         } }]
       }",
     );
@@ -819,10 +819,10 @@ fn Strings() {
       const e = ''",
         "
       const a = `Hello world \\${12}`;
-      const b = \"it's me!\";
-      const c = \"\\\\foobar\";
-      const d = \"num: \\${12}\";
-      const e = \"\";",
+      const b = `it's me!`;
+      const c = `\\\\foobar`;
+      const d = `num: \\${12}`;
+      const e = ``;",
     );
 }
 

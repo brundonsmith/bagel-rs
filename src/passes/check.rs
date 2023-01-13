@@ -217,24 +217,34 @@ where
             }
             Any::Decorator(Decorator { name }) => todo!(),
             Any::ValueDeclaration(ValueDeclaration {
-                name,
-                type_annotation,
+                destination,
                 value,
                 is_const,
                 exported,
                 platforms,
             }) => {
-                name.check(ctx, report_error);
-                type_annotation.check(ctx, report_error);
+                destination.check(ctx, report_error);
                 value.check(ctx, report_error);
 
-                if let Some(type_annotation) = type_annotation {
+                if let DeclarationDestination::NameAndType(NameAndType {
+                    name: _,
+                    type_annotation: Some(type_annotation),
+                }) = destination
+                {
                     check_subsumation(
                         &type_annotation.resolve_type(ctx.into()),
                         value.infer_type(ctx.into()),
                         value.slice(),
                         report_error,
                     );
+                }
+
+                if !*is_const && matches!(destination, DeclarationDestination::Destructure(_)) {
+                    report_error(BagelError::MiscError {
+                        module_id: module_id.clone(),
+                        src: self.slice().clone(),
+                        message: format!("Can only destructure when declaring a const"),
+                    });
                 }
             }
             Any::TestExprDeclaration(TestExprDeclaration { name, expr }) => todo!(),
@@ -764,41 +774,6 @@ where
             }) => todo!(),
             Any::MaybeType(MaybeType(inner)) => inner.check(ctx, report_error),
             Any::UnionType(UnionType(members)) => members.check(ctx, report_error),
-            Any::DeclarationStatement(DeclarationStatement {
-                destination,
-                value,
-                is_const,
-            }) => {
-                match destination {
-                    DeclarationDestination::NameAndType(NameAndType {
-                        name,
-                        type_annotation,
-                    }) => {
-                        name.check(ctx, report_error);
-                        type_annotation.check(ctx, report_error);
-
-                        if let Some(type_annotation) = type_annotation {
-                            check_subsumation(
-                                &type_annotation.resolve_type(ctx.into()),
-                                value.infer_type(ctx.into()),
-                                value.slice(),
-                                report_error,
-                            );
-                        }
-                    }
-                    DeclarationDestination::Destructure(Destructure {
-                        properties,
-                        spread,
-                        destructure_kind,
-                    }) => {
-                        properties.check(ctx, report_error);
-                        spread.check(ctx, report_error);
-
-                        // TODO: Check that value is the right type and all destructured properties exist
-                    }
-                }
-                value.check(ctx, report_error);
-            }
             Any::IfElseStatement(IfElseStatement {
                 cases,
                 default_case,
@@ -860,23 +835,11 @@ where
                         if let Some(resolved) = resolved {
                             match resolved.details() {
                                 Any::ValueDeclaration(ValueDeclaration {
-                                    name: _,
-                                    type_annotation: _,
+                                    destination: _,
                                     value: _,
                                     is_const,
                                     exported: _,
                                     platforms: _,
-                                }) => {
-                                    if *is_const {
-                                        (true, Some("it's a constant"))
-                                    } else {
-                                        (false, None)
-                                    }
-                                }
-                                Any::DeclarationStatement(DeclarationStatement {
-                                    destination: _,
-                                    value: _,
-                                    is_const,
                                 }) => {
                                     if *is_const {
                                         (true, Some("it's a constant"))
@@ -893,6 +856,7 @@ where
                     }
                     Any::PropertyAccessor(_) => {
                         // TODO: Check that subject is mutable
+                        // TODO: Can't be an optional property access
                         todo!()
                     }
                     _ => (true, None),
@@ -1046,6 +1010,28 @@ where
                 element.check(ctx, report_error);
             }
             ElementOrSpread::Spread(spread) => {
+                spread.check(ctx, report_error);
+            }
+        }
+    }
+}
+
+impl Checkable for DeclarationDestination {
+    fn check<'a, F: FnMut(BagelError)>(&self, ctx: &CheckContext<'a>, report_error: &mut F) {
+        match self {
+            DeclarationDestination::NameAndType(NameAndType {
+                name,
+                type_annotation,
+            }) => {
+                name.check(ctx, report_error);
+                type_annotation.check(ctx, report_error);
+            }
+            DeclarationDestination::Destructure(Destructure {
+                properties,
+                spread,
+                destructure_kind: _,
+            }) => {
+                properties.check(ctx, report_error);
                 spread.check(ctx, report_error);
             }
         }
