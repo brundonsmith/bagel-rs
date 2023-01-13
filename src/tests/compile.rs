@@ -149,7 +149,7 @@ fn Chained_if_expression() {
 #[allow(non_snake_case)]
 fn Empty_proc() {
     test_compile(
-        "proc foo() { }",
+        "proc foo() |> { }",
         "const foo = function ___fn_foo(): void { };",
     );
 }
@@ -158,7 +158,7 @@ fn Empty_proc() {
 #[allow(non_snake_case)]
 fn Chained_if_statements() {
     test_compile(
-        "proc foo() {
+        "proc foo() |> {
                 if true {
                   log('true');
                 } else if false {
@@ -222,7 +222,7 @@ fn Indexing_an_array() {
 #[allow(non_snake_case)]
 fn Simple_proc_declaration() {
     test_compile(
-        "proc doStuff(a) { }",
+        "proc doStuff(a) |> { }",
         "const doStuff = function ___fn_doStuff(a): void { };",
     );
 }
@@ -232,7 +232,7 @@ fn Simple_proc_declaration() {
 fn Basic_proc_declaration() {
     test_compile(
         "
-        proc doStuff(items: Iterator<number>) {
+        proc doStuff(items: Iterator<number>) |> {
           let count = 0;
           
           for item of items {
@@ -256,7 +256,7 @@ fn Basic_proc_declaration() {
 #[allow(non_snake_case)]
 fn Proc_declaration_with_statements() {
     test_compile("
-        proc doStuff(items: Iterator<number>) {
+        proc doStuff(items: Iterator<number>) |> {
           let count = 0;
   
           for item of items {
@@ -327,7 +327,7 @@ fn Typed_func_declaration() {
 #[allow(non_snake_case)]
 fn Typed_proc_declaration() {
     test_compile(
-        "proc bar(a: string[], b: { foo: number }) { }",
+        "proc bar(a: string[], b: { foo: number }) |> { }",
         "const bar = function ___fn_bar(a: string[], b: {foo: number}): void { };",
     );
 }
@@ -354,8 +354,8 @@ fn Tricky_type_parse_1() {
 #[allow(non_snake_case)]
 fn Tricky_type_parse_2() {
     test_compile(
-        "type Foo = (a: string) => (b: number|boolean) => { foo: nil[] }",
-        "type Foo = (a: string) => (b: number | boolean) => { foo: (null | undefined)[], };",
+        "type Foo = (a: string) => (b: number|boolean) |> { foo: nil[] }",
+        "type Foo = (a: string) => (b: number | boolean) |> { foo: (null | undefined)[], };",
     );
 }
 
@@ -406,7 +406,7 @@ fn Negation_precedence() {
 fn Indexer_assignment() {
     test_compile(
         "
-      export proc setItem(key: string, value: string) {
+      export proc setItem(key: string, value: string) |> {
         _localStorage[key] = value;
         setLocalStorage(key, value);
       }",
@@ -423,7 +423,7 @@ fn Indexer_assignment() {
 fn Assignment_ops() {
     test_compile(
         "
-      proc foo() {
+      proc foo() |> {
         let n = 0;
         n *= 2;
 
@@ -446,11 +446,11 @@ fn Assignment_ops() {
 fn Method_proc_call() {
     test_compile(
         "
-      proc push<T>(arr: T[], el: T) {
+      proc push<T>(arr: T[], el: T) |> {
         // stub
       }
 
-      export proc bar() {
+      export proc bar() |> {
         let foo = [1, 2, 3];
         foo.push(4);
       }",
@@ -470,7 +470,7 @@ fn Method_proc_call() {
 fn JS_func() {
     test_compile(
         "
-      js func foo(a: number, b: string): string => {#
+      js func foo(a: number, b: string): string |> {#
         return a + b;
       #}
       ",
@@ -487,7 +487,7 @@ fn JS_func() {
 fn JS_proc() {
     test_compile(
         "
-      js proc foo(a: { foo: number }, b: number) {#
+      js proc foo(a: { foo: number }, b: number) |> {#
         a.foo = b;
       #}
       ",
@@ -504,7 +504,7 @@ fn JS_proc() {
 fn While_loop() {
     test_compile(
         "
-      proc foo() {
+      proc foo() |> {
         while true {
           log('stuff');
         }
@@ -602,7 +602,7 @@ fn Range_operator() {
 fn Async_proc() {
     test_compile(
         "
-      async proc doStuff(plan: Plan<string>) {
+      async proc doStuff(plan: Plan<string>) |> {
         const str = await plan;
         log(str);
       }
@@ -717,7 +717,7 @@ fn Types() {
     test_compile(
         "
       type A = <T>({})
-      type B = (a: number) { }
+      type B = (a: number) |> {}
       type C = (a: string) => number
       type E = { ...Other }
       type F = {[string]: number}
@@ -754,10 +754,10 @@ fn Decorators() {
       @myDecorator2
       func foo(n: number): number => n
 
-      func myProcDecorator(p: () {}): () {} => p
+      func myProcDecorator(p: () |> {}): () |> {} => p
 
       @myProcDecorator
-      proc bar() {
+      proc bar() |> {
       }
       ",
         "
@@ -794,7 +794,7 @@ fn Tests() {
         "
       test expr 'Two plus two equals four' => assert(2 + 2 == 3)
 
-      test block 'Do thing!' => {
+      test block 'Do thing!' |> {
           throw Error('Foo');
       }",
         "

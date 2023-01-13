@@ -858,7 +858,7 @@ fn Initializing_a_const_from_impure_function() {
 fn Let_declarations_out_of_order() {
     test_check(
         "
-      proc foo() {
+      proc foo() |> {
         let a = b;
         let b = 12;
       }",
@@ -871,7 +871,7 @@ fn Let_declarations_out_of_order() {
 fn Let_declarations_in_order() {
     test_check(
         "
-      proc foo() {
+      proc foo() |> {
         let b = 12;
         let a = b;
       }",
@@ -884,7 +884,7 @@ fn Let_declarations_in_order() {
 fn Duplicate_declaration_name_1() {
     test_check(
         "
-      proc foo() {
+      proc foo() |> {
       }
       
       const foo = 12",
@@ -1121,8 +1121,8 @@ fn Refinement_invalidation_pass() {
     func foo(x: { prop: number }): ((n: number) => number) =>
       (n: number) => n * x.prop
     
-    proc log(x: unknown) { }
-    proc bar() {
+    proc log(x: unknown) |> { }
+    proc bar() |> {
       let obj: { prop: number|string } = { prop: 14 }
       if obj.prop instanceof number {
         log(obj.prop * 2);
@@ -1153,9 +1153,9 @@ fn Refinement_invalidation_fail_1() {
 fn Refinement_invalidation_fail_2() {
     test_check(
         "
-    proc log(x: unknown) { }
+    proc log(x: unknown) |> { }
 
-    proc bar() {
+    proc bar() |> {
       let obj: { prop: number|string } = { prop: 14 }
       if obj.prop instanceof number {
         obj.prop = 'foo';
@@ -1505,7 +1505,7 @@ fn Optional_property_access_pass() {
     test_check(
         "
     type Obj = { foo?: string }
-    proc foo(obj: Obj) {
+    proc foo(obj: Obj) |> {
       const str: string? = obj.foo;
     }",
         false,
@@ -1518,7 +1518,7 @@ fn Optional_property_access_fail() {
     test_check(
         "
     type Obj = { foo?: string }
-    proc foo(obj: Obj) {
+    proc foo(obj: Obj) |> {
       const str: string = obj.foo;
     }",
         true,
@@ -1563,14 +1563,14 @@ fn Import_type_across_modules_pass() {
                 "module-1.bgl",
                 "
       export type Foo = {
-        method: () {}
+        method: () |> {}
       }",
             ),
             (
                 "module-2.bgl",
                 "
       from 'module-1.bgl' import { Foo }
-      proc bar(foo: Foo) {
+      proc bar(foo: Foo) |> {
         foo.method();
       }",
             ),
@@ -1588,14 +1588,14 @@ fn Import_type_across_modules_fail() {
                 "module-1.bgl",
                 "
       export type Foo = {
-        method: () {}
+        method: () |> {}
       }",
             ),
             (
                 "module-2.bgl",
                 "
       from 'module-1.bgl' import { Foo }
-      proc bar(foo: Foo) {
+      proc bar(foo: Foo) |> {
         foo.other();
       }",
             ),
@@ -1659,7 +1659,7 @@ fn Expose_access_in_module() {
                 "module-2.bgl",
                 "
       from 'module-1.bgl' import { foo }
-      proc bar() {
+      proc bar() |> {
         let a: number = 0;
 
         a = foo;
@@ -1679,7 +1679,7 @@ fn Expose_assignment() {
             (
                 "module-2.bgl",
                 "from 'module-1.bgl' import { foo }
-            proc bar() {
+            proc bar() |> {
               foo = 13;
             }",
             ),
@@ -1693,7 +1693,7 @@ fn Expose_assignment() {
 fn Assignment_ops_pass() {
     test_check(
         "
-    proc foo() {
+    proc foo() |> {
       let n = 0;
 
       n += 1;
@@ -1715,7 +1715,7 @@ fn Assignment_ops_pass() {
 fn Assignment_ops_fail_1() {
     test_check(
         "
-    proc foo() {
+    proc foo() |> {
       let n = 0;
 
       n += '1';
@@ -1730,7 +1730,7 @@ fn Assignment_ops_fail_1() {
 fn Assignment_ops_fail_2() {
     test_check(
         "
-    proc foo() {
+    proc foo() |> {
       let s = 'foo';
       s -= 12;
     }
@@ -1817,7 +1817,7 @@ fn Immutability_test_1() {
         "
     const obj = { foo: 'stuff' }
 
-    proc foo() {
+    proc foo() |> {
       obj.foo = 'other';
     }",
         true,
@@ -1829,7 +1829,7 @@ fn Immutability_test_1() {
 fn Immutability_test_2() {
     test_check(
         "
-    proc foo(param: { foo: string }) {
+    proc foo(param: { foo: string }) |> {
       param = { foo: 'stuff' };
     }",
         true,
@@ -1841,7 +1841,7 @@ fn Immutability_test_2() {
 fn Immutability_test_3() {
     test_check(
         "
-    proc foo(param: { foo: string }) {
+    proc foo(param: { foo: string }) |> {
       param.foo = 'stuff';
     }",
         false,
@@ -1853,7 +1853,7 @@ fn Immutability_test_3() {
 fn Immutability_test_4() {
     test_check(
         "
-    proc foo(param: readonly { foo: string }) {
+    proc foo(param: readonly { foo: string }) |> {
       param.foo = 'stuff';
     }",
         true,
@@ -1865,7 +1865,7 @@ fn Immutability_test_4() {
 fn Immutability_test_5() {
     test_check(
         "
-    proc foo(param: readonly { foo: { bar: string } }) {
+    proc foo(param: readonly { foo: { bar: string } }) |> {
       param.foo.bar = 'stuff';
     }",
         true,
@@ -1879,7 +1879,7 @@ fn Immutability_test_6() {
         "
     const obj = { foo: 'bar' }
 
-    proc foo(param: { foo: string }) {
+    proc foo(param: { foo: string }) |> {
       let alias = obj;
       alias.foo = 'other';
     }",
@@ -1894,7 +1894,7 @@ fn Immutability_test_7() {
         "
     const obj = { foo: 'bar' }
 
-    proc foo(param: { foo: string }) {
+    proc foo(param: { foo: string }) |> {
       let alias = obj as readonly { foo: string }
       alias = { foo: 'other' }
     }",
@@ -1907,7 +1907,7 @@ fn Immutability_test_7() {
 fn Immutability_test_8() {
     test_check(
         "
-    proc foo(param: { foo: string }) {
+    proc foo(param: { foo: string }) |> {
       const obj = param;
     }",
         false,
@@ -1919,7 +1919,7 @@ fn Immutability_test_8() {
 fn Immutability_test_9() {
     test_check(
         "
-    proc foo(param: { foo: string }) {
+    proc foo(param: { foo: string }) |> {
       const obj = param;
       obj.foo = 'other';
     }",
@@ -1932,7 +1932,7 @@ fn Immutability_test_9() {
 fn Immutability_test_10() {
     test_check(
         "
-    proc foo(param: readonly string) {
+    proc foo(param: readonly string) |> {
       const x: string = param;
     }",
         false,
@@ -1944,7 +1944,7 @@ fn Immutability_test_10() {
 fn Immutability_test_11() {
     test_check(
         "
-    proc foo(param: readonly number[]) {
+    proc foo(param: readonly number[]) |> {
       const x: readonly unknown = param;
     }",
         false,
@@ -1956,7 +1956,7 @@ fn Immutability_test_11() {
 fn Immutability_test_12() {
     test_check(
         "
-    proc foo(param: readonly number[]) {
+    proc foo(param: readonly number[]) |> {
       const x: unknown = param;
     }",
         true,
@@ -1994,7 +1994,7 @@ fn Mutability_test_1() {
     test_check(
         "
     type Obj = { foo?: string }
-    proc foo(obj: Obj) {
+    proc foo(obj: Obj) |> {
       obj.foo = 'foo';
       obj.foo = nil;
     }",
@@ -2111,9 +2111,9 @@ fn Function_method_call_with_property_3() {
 fn Proc_declaration_with_statements_pass() {
     test_check(
         "
-    proc log(val: unknown) { }
+    proc log(val: unknown) |> { }
 
-    proc doStuff(items: Iterator<{ foo: boolean }>) {
+    proc doStuff(items: Iterator<{ foo: boolean }>) |> {
       let count = 0;
 
       for item of items {
@@ -2141,9 +2141,9 @@ fn Proc_declaration_with_statements_pass() {
 fn Proc_declaration_with_statements_fail_1() {
     test_check(
         "
-    proc log(val: unknown) { }
+    proc log(val: unknown) |> { }
 
-    proc doStuff(items: Iterator<{ foo: boolean }>) {
+    proc doStuff(items: Iterator<{ foo: boolean }>) |> {
       let count: string = 0;
     }",
         true,
@@ -2155,9 +2155,9 @@ fn Proc_declaration_with_statements_fail_1() {
 fn Proc_declaration_with_statements_fail_2() {
     test_check(
         "
-    proc log(val: unknown) { }
+    proc log(val: unknown) |> { }
 
-    proc doStuff(items: Iterator<{ foo: boolean }>) {
+    proc doStuff(items: Iterator<{ foo: boolean }>) |> {
       const count = 0;
 
       for item of items {
@@ -2173,7 +2173,7 @@ fn Proc_declaration_with_statements_fail_2() {
 fn Proc_declaration_with_statements_fail_3() {
     test_check(
         "
-    proc doStuff(items: Iterator<{ foo: boolean }>) {
+    proc doStuff(items: Iterator<{ foo: boolean }>) |> {
       const count = count;
     }",
         true,
@@ -2185,7 +2185,7 @@ fn Proc_declaration_with_statements_fail_3() {
 fn Destructuring_statement_pass() {
     test_check(
         "
-    proc doStuff(stuff: { foo: boolean }) {
+    proc doStuff(stuff: { foo: boolean }) |> {
       const { foo } = stuff;
     }",
         false,
@@ -2197,7 +2197,7 @@ fn Destructuring_statement_pass() {
 fn Destructuring_statement_fail_1() {
     test_check(
         "
-    proc doStuff(stuff: { foo: boolean }) {
+    proc doStuff(stuff: { foo: boolean }) |> {
       const { foo } = foo;
     }",
         true,
@@ -2209,7 +2209,7 @@ fn Destructuring_statement_fail_1() {
 fn Destructuring_statement_fail_2() {
     test_check(
         "
-    proc doStuff(stuff: { foo: boolean }) {
+    proc doStuff(stuff: { foo: boolean }) |> {
       const { bar } = stuff;
     }",
         true,
@@ -2221,7 +2221,7 @@ fn Destructuring_statement_fail_2() {
 fn Destructuring_statement_fail_3() {
     test_check(
         "
-    proc doStuff(stuff: { foo: boolean }) {
+    proc doStuff(stuff: { foo: boolean }) |> {
       const { foo } = stuff;
       foo = true;
     }",
@@ -2234,7 +2234,7 @@ fn Destructuring_statement_fail_3() {
 fn Destructuring_array_statement_pass() {
     test_check(
         "
-    proc doStuff(tuple: [number, number], array: number[]) {
+    proc doStuff(tuple: [number, number], array: number[]) |> {
       const [a] = tuple;
       const [b, c] = tuple;
       const ap: number = a;
@@ -2254,7 +2254,7 @@ fn Destructuring_array_statement_pass() {
 fn Destructuring_array_statement_fail_1() {
     test_check(
         "
-    proc doStuff(tuple: [number, number]) {
+    proc doStuff(tuple: [number, number]) |> {
       const [a, b, c] = tuple;
     }",
         true,
@@ -2266,7 +2266,7 @@ fn Destructuring_array_statement_fail_1() {
 fn Destructuring_array_statement_fail_2() {
     test_check(
         "
-    proc doStuff(array: number[]) {
+    proc doStuff(array: number[]) |> {
       const [a, b] = array;
       const ap: number = a;
     }",
@@ -2699,7 +2699,7 @@ fn Range_expression_pass() {
         "
     const a: Iterator<number> = 0..10
     
-    proc foo() {
+    proc foo() |> {
       for n of 5..15 {
 
       }
@@ -3044,10 +3044,10 @@ fn Exact_string_indexer_fail_2() {
 fn Mutability_broadening() {
     test_check(
         "
-    proc push(arr: number[], el: number) {
+    proc push(arr: number[], el: number) |> {
     }
 
-    proc foo() {
+    proc foo() |> {
       let obj = { a: 0, b: '', c: false }
       obj.a = 12;
       obj.b = 'stuff';
@@ -3065,7 +3065,7 @@ fn Mutability_broadening() {
 fn Throw_statement_pass() {
     test_check(
         "
-    proc foo() {
+    proc foo() |> {
       throw Error('message');
     }",
         false,
@@ -3077,7 +3077,7 @@ fn Throw_statement_pass() {
 fn Throw_statement_fail() {
     test_check(
         "
-    proc foo() {
+    proc foo() |> {
       throw 12;
     }",
         true,
@@ -3089,11 +3089,11 @@ fn Throw_statement_fail() {
 fn Error_bubble_pass() {
     test_check(
         "
-    proc foo() {
+    proc foo() |> {
       throw Error('message');
     }
     
-    proc main() {
+    proc main() |> {
       foo()?;
     }",
         false,
@@ -3105,11 +3105,11 @@ fn Error_bubble_pass() {
 fn Error_bubble_fail() {
     test_check(
         "
-    proc foo() {
+    proc foo() |> {
       throw Error('message');
     }
     
-    proc main() {
+    proc main() |> {
       foo();
     }",
         true,
@@ -3121,13 +3121,13 @@ fn Error_bubble_fail() {
 fn Try_catch_pass() {
     test_check(
         "
-    proc log(s: string) { }
+    proc log(s: string) |> { }
 
-    proc foo() {
+    proc foo() |> {
       throw Error({ prop1: 'stuff' });
     }
     
-    proc main() {
+    proc main() |> {
       try {
         foo();
       } catch e {
@@ -3143,13 +3143,13 @@ fn Try_catch_pass() {
 fn Try_catch_fail_1() {
     test_check(
         "
-    proc log(s: string) { }
+    proc log(s: string) |> { }
 
-    proc foo() {
+    proc foo() |> {
       throw Error({ prop1: 'stuff' });
     }
     
-    proc main() {
+    proc main() |> {
       try {
         foo();
       } catch e {
@@ -3165,13 +3165,13 @@ fn Try_catch_fail_1() {
 fn Try_catch_fail_2() {
     test_check(
         "
-    proc log(s: string) { }
+    proc log(s: string) |> { }
 
-    proc foo() {
+    proc foo() |> {
       throw Error({ prop1: 'stuff' });
     }
     
-    proc main() {
+    proc main() |> {
       try {
         foo()?;
       } catch e {
@@ -3187,7 +3187,7 @@ fn Try_catch_fail_2() {
 fn Throws_declaration_pass() {
     test_check(
         "
-    proc foo() throws Error<number> {
+    proc foo() throws Error<number> |> {
       throw Error(12);
     }
 
@@ -3203,7 +3203,7 @@ fn Throws_declaration_pass() {
 fn Throws_declaration_fail_1() {
     test_check(
         "
-    proc foo() throws Error<number> {
+    proc foo() throws Error<number> |> {
       throw Error('stuff');
     }",
         true,
@@ -3215,7 +3215,7 @@ fn Throws_declaration_fail_1() {
 fn Throws_declaration_fail_2() {
     test_check(
         "
-    proc foo() throws Error<number> {
+    proc foo() throws Error<number> |> {
       throw Error(12);
     }
 
@@ -3231,13 +3231,13 @@ fn Throws_declaration_fail_2() {
 fn Throws_declaration_fail_3() {
     test_check(
         "
-    proc log(x: unknown) {}
+    proc log(x: unknown) |> {}
 
-    proc foo() throws Error<string> {
+    proc foo() throws Error<string> |> {
       throw Error('stuff');
     }
 
-    proc bar() {
+    proc bar() |> {
       try {
         foo();
       } catch e {
@@ -3700,10 +3700,10 @@ fn Array_spread_fail() {
 fn Await_statement_pass() {
     test_check(
         "
-    async proc other() {
+    async proc other() |> {
     }
 
-    async proc foo(plan: Plan<string>) {
+    async proc foo(plan: Plan<string>) |> {
       const s1: string = await plan;
       const x: string = s1;
 
@@ -3721,7 +3721,7 @@ fn Await_statement_pass() {
 fn Await_statement_fail_1() {
     test_check(
         "
-    async proc foo(plan: string) {
+    async proc foo(plan: string) |> {
       const s = await plan;
     }",
         true,
@@ -3733,7 +3733,7 @@ fn Await_statement_fail_1() {
 fn Await_statement_fail_2() {
     test_check(
         "
-    async proc foo(plan: Plan<string>) {
+    async proc foo(plan: Plan<string>) |> {
       const s = await plan;
       const x: number = s;
     }",
@@ -3746,7 +3746,7 @@ fn Await_statement_fail_2() {
 fn Await_statement_fail_3() {
     test_check(
         "
-    proc foo(plan: Plan<string>) {
+    proc foo(plan: Plan<string>) |> {
       const s1: string = await plan;
     }",
         true,
@@ -3758,10 +3758,10 @@ fn Await_statement_fail_3() {
 fn Async_proc_type_fail() {
     test_check(
         "
-    async proc foo() {
+    async proc foo() |> {
     }
 
-    const x: () {} = foo
+    const x: () |> {} = foo
     ",
         true,
     );
@@ -3865,10 +3865,10 @@ fn Decorators_pass() {
     @myGenericDecorator
     func foo2(n: number) => n
 
-    func myProcDecorator(p: () {}): () {} => p
+    func myProcDecorator(p: () |> {}): () |> {} => p
 
     @myProcDecorator
-    proc bar() {
+    proc bar() |> {
       
     }
     ",
@@ -3910,7 +3910,7 @@ fn Decorators_fail_2() {
 fn Decorators_fail_3() {
     test_check(
         "
-    func myProcDecorator(p: () {}): () {} => p
+    func myProcDecorator(p: () |> {}): () |> {} => p
 
     @myProcDecorator
     func foo(n: number): number => n",
@@ -4027,7 +4027,7 @@ fn Tests_pass() {
 
     test expr 'Two plus two equals four' => assert(2 + 2 == 3 as number)
 
-    test block 'Do thing!' => {
+    test block 'Do thing!' |> {
         throw Error('Foo');
     }
 
@@ -4059,7 +4059,7 @@ fn Tests_fail_1() {
 fn Tests_fail_2() {
     test_check(
         "
-    test block 'Do thing!' => {
+    test block 'Do thing!' |> {
     }",
         true,
     );
@@ -4216,15 +4216,15 @@ fn Pure_procs_pass() {
         "
     let val = 12
 
-    pure proc foo(n: number) {
+    pure proc foo(n: number) |> {
       let x = n;
     }
 
-    proc bar() {
+    proc bar() |> {
       foo(val);
     }
 
-    proc main() {
+    proc main() |> {
       bar();
     }
 
@@ -4244,7 +4244,7 @@ fn Pure_procs_fail_1() {
         "
     let val = 12
 
-    pure proc foo(n: number) {
+    pure proc foo(n: number) |> {
       let x = val;
     }
     ",
@@ -4259,11 +4259,11 @@ fn Pure_procs_fail_2() {
         "
     let val = 12
 
-    proc foo() {
+    proc foo() |> {
       let x = val;
     }
 
-    pure proc bar() {
+    pure proc bar() |> {
       foo();
     }
     ",

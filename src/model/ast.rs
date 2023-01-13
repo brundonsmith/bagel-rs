@@ -400,7 +400,7 @@ pub struct Proc {
     pub type_annotation: AST<ProcType>,
     pub is_async: bool,
     pub is_pure: bool,
-    pub body: AST<Block>,
+    pub body: AST<Statement>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1155,4 +1155,5 @@ union_subtype!(
         | ThrowStatement
         | Autorun
         | Invocation
+        | Block
 );

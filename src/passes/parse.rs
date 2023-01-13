@@ -17,7 +17,7 @@ use nom::{
     combinator::{complete, map, opt},
     error::ErrorKind,
     multi::{many0, many1, separated_list0, separated_list1},
-    sequence::{pair, preceded, separated_pair, terminated, tuple},
+    sequence::{pair, preceded, terminated, tuple},
     IResult, Parser,
 };
 use std::str::FromStr;
@@ -357,9 +357,10 @@ fn proc_declaration(i: Slice) -> ParseResult<AST<ProcDeclaration>> {
             tag("proc"),
             plain_identifier,
             alt((args_parenthesized, arg_singleton)),
-            block,
+            tag("|>"),
+            statement,
         ),
-        |(export, pure, asyn, keyword, mut name, mut args, mut body)| {
+        |(export, pure, asyn, keyword, mut name, mut args, _, mut body)| {
             let src = export
                 .clone()
                 .unwrap_or(pure.clone().unwrap_or(asyn.clone().unwrap_or(keyword)))
@@ -666,7 +667,7 @@ fn func_type(i: Slice) -> ParseResult<AST<FuncType>> {
             // TODO: func type with 0 arguments will have weird src
             let src = args
                 .get(0)
-                .map(|arg| arg.downcast().name.slice().clone())
+                .map(|a| a.slice().clone())
                 .unwrap_or(returns.slice().clone())
                 .spanning(&returns);
 
@@ -683,14 +684,14 @@ fn func_type(i: Slice) -> ParseResult<AST<FuncType>> {
 #[memoize]
 fn proc_type(i: Slice) -> ParseResult<AST<ProcType>> {
     map(
-        seq!(args_parenthesized, tag("{"), tag("}")),
-        |(mut args, open_brace, close)| {
+        seq!(args_parenthesized, tag("|>"), tag("{"), tag("}")),
+        |(mut args, arrow, _, end)| {
             // TODO: proc type with 0 arguments will have weird src
             let src = args
                 .get(0)
-                .map(|arg| arg.downcast().name.slice().clone())
-                .unwrap_or(open_brace.clone())
-                .spanning(&close);
+                .map(|a| a.slice().clone())
+                .unwrap_or(arrow)
+                .spanning(&end);
 
             let mut args_spread = None; // TODO
             let mut is_pure = false; // TODO
@@ -814,6 +815,7 @@ fn statement(i: Slice) -> ParseResult<AST<Statement>> {
         map(try_catch, AST::recast::<Statement>),
         map(throw_statement, AST::recast::<Statement>),
         map(autorun, AST::recast::<Statement>),
+        map(block, AST::recast::<Statement>),
         map(
             seq!(
                 invocation_accessor_chain(13), // HACK: Has to be kept in sync with expression() function!
@@ -995,7 +997,7 @@ fn expression_inner(l: usize, i: Slice) -> ParseResult<AST<Expression>> {
         i,
         alt((
             map(func, AST::recast::<Expression>),
-            // map(proc, AST::recast::<Expression>)
+            map(proc, AST::recast::<Expression>)
         ))
     );
     parse_level_expression!(l, tl, i, binary_operation_1(tl, "??"));
@@ -1394,17 +1396,20 @@ fn proc(i: Slice) -> ParseResult<AST<Proc>> {
                 seq!(tag("throws"), type_expression(0)),
                 |(_, throws)| throws
             )),
-            block,
+            tag("|>"),
+            statement,
         ),
-        |(pure, asyn, mut args, mut throws, mut body)| {
+        |(pure, asyn, mut args, mut throws, _, mut body)| {
             let mut is_async = asyn.is_some();
             let mut is_pure = pure.is_some();
             let src = pure
-                .unwrap_or(asyn.unwrap_or_else(|| {
-                    args.get(0)
-                        .map(|arg| arg.downcast().name.slice().clone())
-                        .unwrap_or(body.slice().clone())
-                }))
+                .unwrap_or(
+                    asyn.unwrap_or(
+                        args.get(0)
+                            .map(|a| a.slice().clone())
+                            .unwrap_or(body.slice().clone()),
+                    ),
+                )
                 .spanning(&body);
 
             let mut args_spread = None; // TODO
@@ -1438,11 +1443,13 @@ fn func(i: Slice) -> ParseResult<AST<Func>> {
             let mut is_async = asyn.is_some();
             let mut is_pure = pure.is_some();
             let src = pure
-                .unwrap_or(asyn.unwrap_or_else(|| {
-                    args.get(0)
-                        .map(|arg| arg.downcast().name.slice().clone())
-                        .unwrap_or(body.slice().clone())
-                }))
+                .unwrap_or(
+                    asyn.unwrap_or(
+                        args.get(0)
+                            .map(|a| a.slice().clone())
+                            .unwrap_or(body.slice().clone()),
+                    ),
+                )
                 .spanning(&body);
 
             let mut args_spread = None; // TODO
