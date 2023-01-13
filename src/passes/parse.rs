@@ -663,7 +663,7 @@ fn type_expression_inner(l: usize, i: Slice) -> ParseResult<AST<TypeExpression>>
 fn func_type(i: Slice) -> ParseResult<AST<FuncType>> {
     map(
         seq!(args_parenthesized, tag("=>"), type_expression(0)),
-        |(mut args, _, mut returns)| {
+        |(mut args, _, returns)| {
             // TODO: func type with 0 arguments will have weird src
             let src = args
                 .get(0)

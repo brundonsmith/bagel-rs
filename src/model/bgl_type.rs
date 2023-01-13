@@ -188,10 +188,10 @@ impl Type {
     pub fn subsumation_issues<'a>(
         &self,
         ctx: SubsumationContext<'a>,
-        other: &Self,
+        value: &Self,
     ) -> Option<SubsumationIssue> {
         let destination = self;
-        let value = other;
+        let value = value;
 
         if destination == value {
             return None;
@@ -235,6 +235,28 @@ impl Type {
 
                 return destination.subsumation_issues(ctx, &value);
             }
+            (Type::PropertyType { subject, property }, value) => {
+                let destination = subject
+                    .as_ref()
+                    .clone()
+                    .iterate_properties()
+                    .find(|(key, _)| key.subsumes(ctx, property));
+
+                if let Some((_, destination)) = destination {
+                    return destination.subsumation_issues(ctx, &value);
+                }
+            }
+            (destination, Type::PropertyType { subject, property }) => {
+                let value = subject
+                    .as_ref()
+                    .clone()
+                    .iterate_properties()
+                    .find(|(key, _)| key.subsumes(ctx, property));
+
+                if let Some((_, value)) = value {
+                    return destination.subsumation_issues(ctx, &value);
+                }
+            }
             (Type::ReadonlyType(inner), value) => {
                 let ctx = ctx.with_dest_mutability(Mutability::Readonly);
                 if inner.subsumes(ctx, value) {
@@ -266,11 +288,17 @@ impl Type {
                     return None;
                 }
             }
-            // (Type::TupleType(destination_members), Type::TupleType(value_members)) => {
-            //     if destination_members.len() <= value_members.len() && destination_members.iter().zip(value_members.iter()).all(|(destination, value)| ) {
-            //         return None;
-            //     }
-            // }
+            (Type::TupleType(_), Type::TupleType(_)) => {
+                if ctx.dest_mutability.encompasses(ctx.val_mutability)
+                    && destination
+                        .clone()
+                        .iterate_properties()
+                        .zip(value.clone().iterate_properties())
+                        .all(|((_, destination), (_, value))| destination.subsumes(ctx, &value))
+                {
+                    return None;
+                }
+            }
             (
                 Type::RecordType {
                     key_type: destination_key_type,
@@ -509,6 +537,13 @@ impl Type {
         Type::UnionType(vec![self, other])
     }
 
+    pub fn exact_number(n: i32) -> Type {
+        Type::NumberType {
+            min: Some(n),
+            max: Some(n),
+        }
+    }
+
     // pub fn indexed(&self, other: &Self) -> Option<Type> {
     //     match (self, other) {
     //         (Type::ArrayType(element), Type::NumberType { min: _, max: _ }) => {
@@ -610,6 +645,31 @@ impl Type {
                     .collect(),
             ),
             _ => self,
+        }
+    }
+
+    fn iterate_properties(self) -> Box<dyn Iterator<Item = (Type, Type)>> {
+        match self {
+            Type::TupleType(members) => Box::new(
+                members
+                    .into_iter()
+                    .enumerate()
+                    .map(
+                        |(index, member)| -> Box<dyn Iterator<Item = (Type, Type)>> {
+                            match member {
+                                ElementOrSpread::Element(element) => Box::new(std::iter::once((
+                                    Type::exact_number(index as i32),
+                                    element,
+                                ))),
+                                ElementOrSpread::Spread(spread) => {
+                                    Box::new(spread.iterate_properties())
+                                }
+                            }
+                        },
+                    )
+                    .flatten(),
+            ),
+            _ => Box::new(std::iter::empty()),
         }
     }
 
