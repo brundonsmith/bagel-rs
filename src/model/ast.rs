@@ -1146,7 +1146,7 @@ union_subtype!(
 );
 
 union_subtype!(
-    Statement = DeclarationStatement
+    Statement = ValueDeclaration
         | IfElseStatement
         | ForLoop
         | WhileLoop
