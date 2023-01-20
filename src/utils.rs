@@ -2,7 +2,7 @@ use colored::{Color, Colorize};
 use nom::IResult;
 
 use crate::{
-    model::{ast::ASTAny, slice::Slice},
+    model::{ast::ASTAny, bgl_type::Type, slice::Slice},
     passes::parse::RawParseError,
 };
 
@@ -20,6 +20,20 @@ impl Loggable for Slice {
 impl Loggable for ASTAny {
     fn log(self) -> Self {
         println!("{:?}", &self);
+        self
+    }
+}
+
+impl Loggable for Type {
+    fn log(self) -> Self {
+        println!("{}", &self);
+        self
+    }
+}
+
+impl Loggable for &Type {
+    fn log(self) -> Self {
+        println!("{}", &self);
         self
     }
 }

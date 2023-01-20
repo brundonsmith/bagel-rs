@@ -337,7 +337,7 @@ fn Array_literal_with_spread_pass_2() {
     test_check(
         "
       const a = [1, 2, 3]
-      const b: number = [...a, '4'][2]",
+      const b: 3 = [...a, '4'][2]",
         false,
     );
 }

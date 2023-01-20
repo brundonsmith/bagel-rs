@@ -8,6 +8,7 @@ use memoize::memoize;
 
 use crate::{
     passes::{check::CheckContext, resolve_type::ResolveContext, typeinfer::InferTypeContext},
+    utils::Loggable,
     ModulesStore,
 };
 
@@ -190,8 +191,12 @@ impl Type {
         ctx: SubsumationContext<'a>,
         value: &Self,
     ) -> Option<SubsumationIssue> {
-        let destination = self;
-        let value = value;
+        let destination = &self.clone().simplify(ctx.into(), &Vec::new());
+        let value = &value.clone().simplify(ctx.into(), &Vec::new());
+
+        // println!("-------------");
+        // println!("destination: {}", destination);
+        // println!("value:       {}", value);
 
         if destination == value {
             return None;
@@ -205,67 +210,13 @@ impl Type {
         }
 
         match (destination, value) {
-            (Type::NamedType(name), value) => {
-                let destination = name
-                    .resolve_symbol(name.downcast().0.as_str())
-                    .map(|resolved| match resolved.details() {
-                        Any::TypeDeclaration(TypeDeclaration {
-                            name: _,
-                            declared_type,
-                            exported: _,
-                        }) => declared_type.resolve_type(ctx.into()),
-                        _ => Type::PoisonedType,
-                    })
-                    .unwrap_or(Type::PoisonedType);
-
-                return destination.subsumation_issues(ctx, value);
-            }
-            (destination, Type::NamedType(name)) => {
-                let value = name
-                    .resolve_symbol(name.downcast().0.as_str())
-                    .map(|resolved| match resolved.details() {
-                        Any::TypeDeclaration(TypeDeclaration {
-                            name: _,
-                            declared_type,
-                            exported: _,
-                        }) => declared_type.resolve_type(ctx.into()),
-                        _ => Type::PoisonedType,
-                    })
-                    .unwrap_or(Type::PoisonedType);
-
-                return destination.subsumation_issues(ctx, &value);
-            }
-            (Type::PropertyType { subject, property }, value) => {
-                let destination = subject
-                    .as_ref()
-                    .clone()
-                    .iterate_properties()
-                    .find(|(key, _)| key.subsumes(ctx, property));
-
-                if let Some((_, destination)) = destination {
-                    return destination.subsumation_issues(ctx, &value);
-                }
-            }
-            (destination, Type::PropertyType { subject, property }) => {
-                let value = subject
-                    .as_ref()
-                    .clone()
-                    .iterate_properties()
-                    .find(|(key, _)| key.subsumes(ctx, property));
-
-                if let Some((_, value)) = value {
-                    return destination.subsumation_issues(ctx, &value);
-                }
-            }
             (Type::ReadonlyType(inner), value) => {
-                let ctx = ctx.with_dest_mutability(Mutability::Readonly);
-                if inner.subsumes(ctx, value) {
+                if inner.subsumes(ctx.with_dest_mutability(Mutability::Readonly), value) {
                     return None;
                 }
             }
             (dest, Type::ReadonlyType(inner)) => {
-                let ctx = ctx.with_val_mutability(Mutability::Readonly);
-                if dest.subsumes(ctx, inner) {
+                if dest.subsumes(ctx.with_val_mutability(Mutability::Readonly), inner) {
                     return None;
                 }
             }
@@ -288,13 +239,12 @@ impl Type {
                     return None;
                 }
             }
-            (Type::TupleType(_), Type::TupleType(_)) => {
+            (Type::TupleType(destination_members), Type::TupleType(value_members)) => {
                 if ctx.dest_mutability.encompasses(ctx.val_mutability)
-                    && destination
-                        .clone()
-                        .iterate_properties()
-                        .zip(value.clone().iterate_properties())
-                        .all(|((_, destination), (_, value))| destination.subsumes(ctx, &value))
+                    && destination_members
+                        .iter()
+                        .zip(value_members.iter())
+                        .all(|((destination, value))| todo!())
                 {
                     return None;
                 }
@@ -402,15 +352,6 @@ impl Type {
             (Type::StringType(Some(dest)), Type::StringType(Some(val)))
                 if dest.as_str() == val.as_str() =>
             {
-                return None;
-            }
-            (
-                Type::NumberType {
-                    min: None,
-                    max: None,
-                },
-                Type::NumberType { min: _, max: _ },
-            ) => {
                 return None;
             }
             (
@@ -648,36 +589,37 @@ impl Type {
         }
     }
 
-    fn iterate_properties(self) -> Box<dyn Iterator<Item = (Type, Type)>> {
+    fn simplify<'a>(self, ctx: ResolveContext<'a>, symbols_encountered: &Vec<Slice>) -> Type {
         match self {
-            Type::TupleType(members) => Box::new(
-                members
-                    .into_iter()
-                    .enumerate()
-                    .map(
-                        |(index, member)| -> Box<dyn Iterator<Item = (Type, Type)>> {
-                            match member {
-                                ElementOrSpread::Element(element) => Box::new(std::iter::once((
-                                    Type::exact_number(index as i32),
-                                    element,
-                                ))),
-                                ElementOrSpread::Spread(spread) => {
-                                    Box::new(spread.iterate_properties())
-                                }
-                            }
-                        },
-                    )
-                    .flatten(),
-            ),
-            _ => Box::new(std::iter::empty()),
-        }
-    }
+            Type::NamedType(name) => {
+                let name_slice = name.downcast().0;
 
-    fn simplify_for_display(self) -> Type {
-        match self {
+                if symbols_encountered.contains(&name_slice) {
+                    Type::NamedType(name)
+                } else {
+                    let symbols_encountered = symbols_encountered
+                        .iter()
+                        .map(Slice::clone)
+                        .chain(std::iter::once(name_slice.clone()))
+                        .collect();
+                    let symbols_encountered = &symbols_encountered;
+
+                    name.resolve_symbol(name_slice.as_str())
+                        .map(|resolved| match resolved.details() {
+                            Any::TypeDeclaration(TypeDeclaration {
+                                name: _,
+                                declared_type,
+                                exported: _,
+                            }) => declared_type.resolve_type(ctx),
+                            _ => Type::PoisonedType,
+                        })
+                        .unwrap_or(Type::PoisonedType)
+                        .simplify(ctx, symbols_encountered)
+                }
+            }
             Type::UnionType(mut members) => {
                 if members.len() == 1 {
-                    members.remove(0).simplify_for_display()
+                    members.remove(0).simplify(ctx, symbols_encountered)
                 } else {
                     Type::UnionType(
                         members
@@ -691,9 +633,78 @@ impl Type {
 
                                 return true;
                             })
-                            .map(Type::simplify_for_display)
+                            .map(|t| t.simplify(ctx, symbols_encountered))
                             .collect(),
                     )
+                }
+            }
+            Type::PropertyType { subject, property } => {
+                let subject = subject.as_ref().clone().simplify(ctx, symbols_encountered);
+                let property = property.as_ref().clone().simplify(ctx, symbols_encountered);
+
+                match subject {
+                    Type::ObjectType {
+                        entries,
+                        is_interface,
+                    } => todo!(),
+                    Type::RecordType {
+                        key_type,
+                        value_type,
+                    } => {
+                        if key_type.subsumes(ctx.into(), &property) {
+                            value_type.as_ref().clone()
+                        } else {
+                            Type::PoisonedType
+                        }
+                    }
+                    Type::TupleType(members) => {
+                        if let Type::NumberType { min, max } = property {
+                            let len = members.len() as i32;
+                            let min = min.unwrap_or(0);
+                            let max = max.unwrap_or(len - 1);
+
+                            if min == max {
+                                if min >= 0 && max < len {
+                                    members
+                                        .get(min as usize)
+                                        .map(|member| match member {
+                                            ElementOrSpread::Element(element) => element,
+                                            ElementOrSpread::Spread(_) => unreachable!(),
+                                        })
+                                        .cloned()
+                                        .unwrap_or(Type::PoisonedType)
+                                } else {
+                                    Type::PoisonedType
+                                }
+                            } else {
+                                let mut members_type: Vec<Type> = members
+                                    [(min as usize).max(0)..(max as usize).min(members.len() - 1)]
+                                    .iter()
+                                    .map(|member| match member {
+                                        ElementOrSpread::Element(element) => element,
+                                        ElementOrSpread::Spread(_) => unreachable!(),
+                                    })
+                                    .cloned()
+                                    .collect();
+
+                                if min < 0 || max > len - 1 {
+                                    members_type.push(Type::NilType);
+                                }
+
+                                Type::UnionType(members_type)
+                            }
+                        } else {
+                            Type::PoisonedType
+                        }
+                    }
+                    Type::ArrayType(element) => {
+                        if let Type::NumberType { min: _, max: _ } = property {
+                            element.as_ref().clone().union(Type::NilType)
+                        } else {
+                            Type::PoisonedType
+                        }
+                    }
+                    _ => Type::PoisonedType,
                 }
             }
             Type::ObjectType {
@@ -706,17 +717,19 @@ impl Type {
                     match entry {
                         KeyValueOrSpread::KeyValue(key, value) => {
                             flattened_entries.push(KeyValueOrSpread::KeyValue(
-                                key.simplify_for_display(),
-                                value.simplify_for_display(),
+                                key.simplify(ctx, symbols_encountered),
+                                value.simplify(ctx, symbols_encountered),
                             ))
                         }
-                        KeyValueOrSpread::Spread(spread) => match spread.simplify_for_display() {
-                            Type::ObjectType {
-                                mut entries,
-                                is_interface,
-                            } => flattened_entries.append(&mut entries),
-                            spread => flattened_entries.push(KeyValueOrSpread::Spread(spread)),
-                        },
+                        KeyValueOrSpread::Spread(spread) => {
+                            match spread.simplify(ctx, symbols_encountered) {
+                                Type::ObjectType {
+                                    mut entries,
+                                    is_interface: _,
+                                } => flattened_entries.append(&mut entries),
+                                spread => flattened_entries.push(KeyValueOrSpread::Spread(spread)),
+                            }
+                        }
                     };
                 }
 
@@ -725,6 +738,68 @@ impl Type {
                     is_interface,
                 }
             }
+            Type::TupleType(members) => {
+                let mut simplified_members = Vec::new();
+                let mut is_array = false;
+
+                for member in members.into_iter() {
+                    match member {
+                        ElementOrSpread::Element(element) => {
+                            simplified_members.push(element.simplify(ctx, symbols_encountered));
+                        }
+                        ElementOrSpread::Spread(spread) => {
+                            let spread = spread.simplify(ctx, symbols_encountered);
+
+                            match spread {
+                                Type::TupleType(spread_members) => {
+                                    for spread_member in spread_members {
+                                        match spread_member {
+                                            ElementOrSpread::Element(element) => {
+                                                simplified_members.push(element);
+                                            }
+                                            ElementOrSpread::Spread(_) => unreachable!(),
+                                        }
+                                    }
+                                }
+                                Type::ArrayType(spread_element) => {
+                                    is_array = true;
+                                    simplified_members.push(spread_element.as_ref().clone());
+                                }
+                                _ => return Type::PoisonedType,
+                            }
+                        }
+                    };
+                }
+
+                match is_array {
+                    true => Type::ArrayType(Rc::new(Type::UnionType(simplified_members))),
+                    false => Type::TupleType(
+                        simplified_members
+                            .into_iter()
+                            .map(ElementOrSpread::Element)
+                            .collect(),
+                    ),
+                }
+            }
+            Type::RecordType {
+                key_type,
+                value_type,
+            } => Type::RecordType {
+                key_type: Rc::new(key_type.as_ref().clone().simplify(ctx, symbols_encountered)),
+                value_type: Rc::new(
+                    value_type
+                        .as_ref()
+                        .clone()
+                        .simplify(ctx, symbols_encountered),
+                ),
+            },
+            Type::ArrayType(element) => Type::ArrayType(Rc::new(
+                element.as_ref().clone().simplify(ctx, symbols_encountered),
+            )),
+            Type::SpecialType { kind, inner } => Type::SpecialType {
+                kind,
+                inner: Rc::new(inner.as_ref().clone().simplify(ctx, symbols_encountered)),
+            },
             _ => self,
         }
     }
@@ -809,7 +884,7 @@ impl<'a> SubsumationContext<'a> {
 
 impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self.clone().simplify_for_display() {
+        match self {
             Type::ElementofType(inner) => f.write_fmt(format_args!("elementof {}", inner)),
             Type::ValueofType(inner) => f.write_fmt(format_args!("valueof {}", inner)),
             Type::KeyofType(inner) => f.write_fmt(format_args!("keyof {}", inner)),
@@ -833,11 +908,11 @@ impl Display for Type {
                 is_async,
                 throws,
             } => {
-                if is_pure {
+                if *is_pure {
                     f.write_str("pure ")?;
                 }
 
-                if is_async {
+                if *is_async {
                     f.write_str("async ")?;
                 }
 
@@ -859,7 +934,7 @@ impl Display for Type {
                 is_pure,
                 returns,
             } => {
-                if is_pure {
+                if *is_pure {
                     f.write_str("pure ")?;
                 }
 
