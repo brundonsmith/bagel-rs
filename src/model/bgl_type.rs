@@ -3,6 +3,7 @@ use std::{
     rc::Rc,
 };
 
+use boa::string;
 use enum_variant_type::EnumVariantType;
 use memoize::memoize;
 
@@ -696,6 +697,12 @@ impl Type {
                             Type::TupleType(members) => {
                                 return Type::exact_number(members.len() as i32)
                             }
+                            Type::StringType(string) => {
+                                return match string {
+                                    Some(string) => Type::exact_number(string.len() as i32),
+                                    None => Type::ANY_NUMBER,
+                                }
+                            }
                             _ => {}
                         };
                     }
@@ -765,6 +772,53 @@ impl Type {
 
                                 Type::UnionType(members_type)
                             }
+                        } else {
+                            Type::PoisonedType
+                        }
+                    }
+                    Type::StringType(Some(string)) => {
+                        if let Type::NumberType { min, max } = property {
+                            let len = string.len() as i32;
+                            let min = min.unwrap_or(0);
+                            let max = max.unwrap_or(len - 1);
+
+                            if min == max {
+                                if min >= 0 && max < len {
+                                    Type::StringType(Some(
+                                        string
+                                            .clone()
+                                            .slice_range(min as usize, Some(min as usize + 1)),
+                                    ))
+                                } else {
+                                    Type::PoisonedType
+                                }
+                            } else {
+                                let mut members_type: Vec<Type> = string
+                                    .clone()
+                                    .as_str()
+                                    .char_indices()
+                                    .skip((min as usize).max(0))
+                                    .take((max as usize).min(string.len() - 1))
+                                    .map(move |(index, _)| {
+                                        Type::StringType(Some(
+                                            string.clone().slice_range(index, Some(index + 1)),
+                                        ))
+                                    })
+                                    .collect();
+
+                                if min < 0 || max > len - 1 {
+                                    members_type.push(Type::NilType);
+                                }
+
+                                Type::UnionType(members_type)
+                            }
+                        } else {
+                            Type::PoisonedType
+                        }
+                    }
+                    Type::StringType(None) => {
+                        if let Type::NumberType { min: _, max: _ } = property {
+                            Type::ANY_STRING.union(Type::NilType)
                         } else {
                             Type::PoisonedType
                         }
