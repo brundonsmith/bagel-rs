@@ -642,6 +642,18 @@ impl Type {
                 let subject = subject.as_ref().clone().simplify(ctx, symbols_encountered);
                 let property = property.as_ref().clone().simplify(ctx, symbols_encountered);
 
+                if let Type::StringType(Some(s)) = &property {
+                    if s.as_str() == "length" {
+                        match subject {
+                            Type::ArrayType(_) => return Type::ANY_NUMBER,
+                            Type::TupleType(members) => {
+                                return Type::exact_number(members.len() as i32)
+                            }
+                            _ => {}
+                        };
+                    }
+                }
+
                 match subject {
                     Type::ObjectType {
                         entries,
