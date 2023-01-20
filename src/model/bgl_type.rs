@@ -842,6 +842,24 @@ impl Type {
                     _ => Type::PoisonedType,
                 }
             }
+            Type::InnerType { kind, inner } => {
+                let inner = inner.as_ref().clone().simplify(ctx, symbols_encountered);
+
+                match inner {
+                    Type::SpecialType {
+                        kind: inner_kind,
+                        inner,
+                    } => match (inner_kind, kind) {
+                        (SpecialTypeKind::Iterator, SpecialTypeKind::Iterator) => {
+                            inner.as_ref().clone()
+                        }
+                        (SpecialTypeKind::Plan, SpecialTypeKind::Plan) => inner.as_ref().clone(),
+                        (SpecialTypeKind::Error, SpecialTypeKind::Error) => inner.as_ref().clone(),
+                        _ => Type::PoisonedType,
+                    },
+                    _ => Type::PoisonedType,
+                }
+            }
             Type::ObjectType {
                 entries,
                 is_interface,
