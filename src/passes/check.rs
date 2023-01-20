@@ -400,6 +400,32 @@ where
                 body.check(ctx, report_error);
 
                 let type_annotation = type_annotation.downcast();
+
+                // check for duplicate arg names
+                let mut duplicated_args = Vec::new();
+                for (index, arg) in type_annotation.args.iter().enumerate() {
+                    for other_arg in type_annotation.args[index + 1..].iter() {
+                        if other_arg.downcast().name.downcast().0.as_str()
+                            == arg.downcast().name.downcast().0.as_str()
+                            && !duplicated_args.contains(&other_arg.downcast().name)
+                        {
+                            duplicated_args.push(other_arg.downcast().name);
+                        }
+                    }
+                }
+
+                for arg in duplicated_args {
+                    report_error(BagelError::MiscError {
+                        module_id: ctx.current_module.module_id.clone(),
+                        src: arg.slice().clone(),
+                        message: format!(
+                            "Duplicate arg name {}",
+                            blue_string(arg.downcast().0.as_str())
+                        ),
+                    });
+                }
+
+                // check that returned value matches return type
                 if let Some(return_type) = type_annotation.returns {
                     check_subsumation(
                         &return_type.resolve_type(ctx.into()),
