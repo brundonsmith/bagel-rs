@@ -61,7 +61,7 @@ where
                 platforms,
                 decorators,
             }) => todo!(),
-            Any::Decorator(Decorator { name }) => todo!(),
+            Any::Decorator(Decorator { name, arguments }) => todo!(),
             Any::ValueDeclaration(ValueDeclaration {
                 destination,
                 value,

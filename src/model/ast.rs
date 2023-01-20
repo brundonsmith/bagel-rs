@@ -297,7 +297,7 @@ pub struct ProcDeclaration {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Decorator {
     pub name: AST<PlainIdentifier>,
-    // TODO: arguments
+    pub arguments: Option<Vec<AST<Expression>>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -510,7 +510,7 @@ pub struct GenericParamType {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ProcType {
     pub args: Vec<AST<Arg>>,
-    pub args_spread: Option<AST<TypeExpression>>,
+    pub args_spread: Option<AST<Arg>>,
     pub is_pure: bool,
     pub is_async: bool,
     pub throws: Option<AST<TypeExpression>>,
@@ -519,7 +519,7 @@ pub struct ProcType {
 #[derive(Debug, Clone, PartialEq)]
 pub struct FuncType {
     pub args: Vec<AST<Arg>>,
-    pub args_spread: Option<AST<TypeExpression>>,
+    pub args_spread: Option<AST<Arg>>,
     pub is_pure: bool,
     pub is_async: bool,
     pub returns: Option<AST<TypeExpression>>,

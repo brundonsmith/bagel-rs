@@ -42,6 +42,8 @@ impl AST<TypeExpression> {
                     .collect(),
                 args_spread: args_spread
                     .as_ref()
+                    .map(|s| s.downcast().type_annotation.clone())
+                    .flatten()
                     .map(|s| s.resolve_type(ctx))
                     .map(Rc::new),
                 is_pure,
@@ -66,6 +68,8 @@ impl AST<TypeExpression> {
                     .collect(),
                 args_spread: args_spread
                     .as_ref()
+                    .map(|s| s.downcast().type_annotation.clone())
+                    .flatten()
                     .map(|s| s.resolve_type(ctx))
                     .map(Rc::new),
                 is_pure,

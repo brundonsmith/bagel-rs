@@ -215,7 +215,12 @@ where
                 proc.check(ctx, report_error);
                 decorators.check(ctx, report_error);
             }
-            Any::Decorator(Decorator { name }) => todo!(),
+            Any::Decorator(Decorator { name, arguments }) => {
+                name.check(ctx, report_error);
+                arguments.check(ctx, report_error);
+
+                // TODO: convert to invocation and check argument correctness
+            }
             Any::ValueDeclaration(ValueDeclaration {
                 destination,
                 value,

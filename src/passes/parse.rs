@@ -241,17 +241,31 @@ fn type_declaration(i: Slice) -> ParseResult<AST<TypeDeclaration>> {
 fn func_declaration(i: Slice) -> ParseResult<AST<FuncDeclaration>> {
     map(
         seq!(
-            opt(tag("export")),
-            opt(tag("pure")),
-            opt(tag("async")),
-            tag("func"),
+            many0(terminated(decorator, whitespace_required)),
+            opt(terminated(tag("export"), whitespace_required)),
+            opt(terminated(tag("pure"), whitespace_required)),
+            opt(terminated(tag("async"), whitespace_required)),
+            terminated(tag("func"), whitespace_required),
             plain_identifier,
-            alt((args_parenthesized, arg_singleton)),
+            opt(type_params),
+            args_parenthesized,
             opt(type_annotation),
             tag("=>"),
             expression(0),
         ),
-        |(export, pure, asyn, keyword, mut name, mut args, mut returns, arrow, mut body)| {
+        |(
+            mut decorators,
+            export,
+            pure,
+            asyn,
+            keyword,
+            mut name,
+            mut type_params,
+            (mut args, mut args_spread),
+            mut returns,
+            arrow,
+            mut body,
+        )| {
             let src = export
                 .as_ref()
                 .unwrap_or(pure.as_ref().unwrap_or(asyn.as_ref().unwrap_or(&keyword)))
@@ -261,9 +275,7 @@ fn func_declaration(i: Slice) -> ParseResult<AST<FuncDeclaration>> {
             let mut is_pure = pure.is_some();
             let mut is_async = asyn.is_some();
             let mut platforms = PlatformSet::all(); // TODO
-            let mut decorators = vec![]; // TODO
 
-            let mut args_spread = None;
             let mut type_annotation = make_node!(
                 FuncType,
                 args.get(0)
@@ -292,50 +304,75 @@ fn func_declaration(i: Slice) -> ParseResult<AST<FuncDeclaration>> {
     )(i)
 }
 
-fn arg_singleton(i: Slice) -> ParseResult<Vec<AST<Arg>>> {
+fn arg_singleton(i: Slice) -> ParseResult<(Vec<AST<Arg>>, Option<AST<Arg>>)> {
     map(plain_identifier, |mut name| {
         let mut type_annotation = None;
         let mut optional = false;
 
-        vec![make_node!(
-            Arg,
-            name.slice().clone(),
-            name,
-            type_annotation,
-            optional
-        )]
+        (
+            vec![make_node!(
+                Arg,
+                name.slice().clone(),
+                name,
+                type_annotation,
+                optional
+            )],
+            None,
+        )
     })(i)
 }
 
-fn args_parenthesized(i: Slice) -> ParseResult<Vec<AST<Arg>>> {
+fn args_parenthesized(i: Slice) -> ParseResult<(Vec<AST<Arg>>, Option<AST<Arg>>)> {
     map(
         seq!(
             tag("("),
-            preceded(
-                whitespace,
-                separated_list0(w(tag(",")), w(seq!(plain_identifier, opt(type_annotation)))),
-            ),
+            separated_list0(w(tag(",")), w(seq!(plain_identifier, opt(type_annotation)))),
+            opt(preceded(
+                tag("..."),
+                map(
+                    seq!(plain_identifier, opt(type_annotation)),
+                    |(mut name, mut type_annotation)| {
+                        let mut optional = false;
+
+                        make_node!(
+                            Arg,
+                            name.spanning(
+                                type_annotation
+                                    .as_ref()
+                                    .map(|a| a.slice())
+                                    .unwrap_or(name.slice()),
+                            ),
+                            name,
+                            type_annotation,
+                            optional
+                        )
+                    }
+                )
+            )),
             tag(")"),
         ),
-        |(start, args, end)| {
-            args.into_iter()
-                .map(|(mut name, mut type_annotation)| {
-                    let mut optional = false;
+        |(start, args, spread, end)| {
+            (
+                args.into_iter()
+                    .map(|(mut name, mut type_annotation)| {
+                        let mut optional = false;
 
-                    make_node!(
-                        Arg,
-                        (&name).spanning(
-                            type_annotation
-                                .as_ref()
-                                .map(|a| a.slice())
-                                .unwrap_or(name.slice()),
-                        ),
-                        name,
-                        type_annotation,
-                        optional
-                    )
-                })
-                .collect()
+                        make_node!(
+                            Arg,
+                            (&name).spanning(
+                                type_annotation
+                                    .as_ref()
+                                    .map(|a| a.slice())
+                                    .unwrap_or(name.slice()),
+                            ),
+                            name,
+                            type_annotation,
+                            optional
+                        )
+                    })
+                    .collect(),
+                spread,
+            )
         },
     )(i)
 }
@@ -343,16 +380,29 @@ fn args_parenthesized(i: Slice) -> ParseResult<Vec<AST<Arg>>> {
 fn proc_declaration(i: Slice) -> ParseResult<AST<ProcDeclaration>> {
     map(
         seq!(
-            opt(tag("export")),
-            opt(tag("pure")),
-            opt(tag("async")),
-            tag("proc"),
+            many0(terminated(decorator, whitespace_required)),
+            opt(terminated(tag("export"), whitespace_required)),
+            opt(terminated(tag("pure"), whitespace_required)),
+            opt(terminated(tag("async"), whitespace_required)),
+            terminated(tag("proc"), whitespace_required),
             plain_identifier,
-            alt((args_parenthesized, arg_singleton)),
+            opt(type_params),
+            args_parenthesized,
             tag("|>"),
             statement,
         ),
-        |(export, pure, asyn, keyword, mut name, mut args, _, mut body)| {
+        |(
+            mut decorators,
+            export,
+            pure,
+            asyn,
+            keyword,
+            mut name,
+            mut type_params,
+            (mut args, mut args_spread),
+            _,
+            mut body,
+        )| {
             let src = export
                 .clone()
                 .unwrap_or(pure.clone().unwrap_or(asyn.clone().unwrap_or(keyword)))
@@ -361,9 +411,7 @@ fn proc_declaration(i: Slice) -> ParseResult<AST<ProcDeclaration>> {
             let mut is_async = asyn.is_some();
             let mut is_pure = pure.is_some();
             let mut platforms = PlatformSet::all(); // TODO
-            let mut decorators = vec![]; // TODO
 
-            let mut args_spread = None;
             let mut throws = None; // TODO
             let mut type_annotation = make_node!(
                 ProcType,
@@ -388,6 +436,66 @@ fn proc_declaration(i: Slice) -> ParseResult<AST<ProcDeclaration>> {
                 exported,
                 platforms,
                 decorators
+            )
+        },
+    )(i)
+}
+
+fn type_params(i: Slice) -> ParseResult<Vec<AST<TypeParam>>> {
+    map(
+        seq!(
+            tag("<"),
+            separated_list1(w(tag(",")), w(type_param)),
+            tag(">")
+        ),
+        |(_, params, _)| params,
+    )(i)
+}
+
+fn type_param(i: Slice) -> ParseResult<AST<TypeParam>> {
+    map(
+        tuple((
+            plain_identifier,
+            whitespace_required,
+            opt(tuple((
+                tag("extends"),
+                whitespace_required,
+                type_expression(0),
+            ))),
+        )),
+        |(mut name, _, extends)| {
+            let mut extends = extends.map(|(_, _, extends)| extends);
+
+            make_node!(
+                TypeParam,
+                name.spanning(extends.as_ref().map(|e| e.slice()).unwrap_or(name.slice())),
+                name,
+                extends
+            )
+        },
+    )(i)
+}
+
+fn decorator(i: Slice) -> ParseResult<AST<Decorator>> {
+    map(
+        tuple((
+            tag("@"),
+            plain_identifier,
+            opt(seq!(
+                tag("("),
+                separated_list0(w(tag(",")), w(expression(0))),
+                tag(")")
+            )),
+        )),
+        |(start, mut name, arguments)| {
+            let arguments_end = arguments.as_ref().map(|a| a.2.clone());
+            let mut arguments = arguments.map(|(_, arguments, _)| arguments);
+
+            make_node!(
+                Decorator,
+                start.spanning(arguments_end.as_ref().unwrap_or(name.slice())),
+                name,
+                arguments
             )
         },
     )(i)
@@ -649,7 +757,7 @@ fn type_expression_inner(l: usize, i: Slice) -> ParseResult<AST<TypeExpression>>
 fn func_type(i: Slice) -> ParseResult<AST<FuncType>> {
     map(
         seq!(args_parenthesized, tag("=>"), type_expression(0)),
-        |(mut args, _, returns)| {
+        |((mut args, mut args_spread), _, returns)| {
             // TODO: func type with 0 arguments will have weird src
             let src = args
                 .get(0)
@@ -657,7 +765,6 @@ fn func_type(i: Slice) -> ParseResult<AST<FuncType>> {
                 .unwrap_or(returns.slice().clone())
                 .spanning(&returns);
 
-            let mut args_spread = None; // TODO
             let mut is_pure = false; // TODO
             let mut is_async = false; // TODO
             let mut returns = Some(returns);
@@ -670,7 +777,7 @@ fn func_type(i: Slice) -> ParseResult<AST<FuncType>> {
 fn proc_type(i: Slice) -> ParseResult<AST<ProcType>> {
     map(
         seq!(args_parenthesized, tag("|>"), tag("{"), tag("}")),
-        |(mut args, arrow, _, end)| {
+        |((mut args, mut args_spread), arrow, _, end)| {
             // TODO: proc type with 0 arguments will have weird src
             let src = args
                 .get(0)
@@ -678,7 +785,6 @@ fn proc_type(i: Slice) -> ParseResult<AST<ProcType>> {
                 .unwrap_or(arrow)
                 .spanning(&end);
 
-            let mut args_spread = None; // TODO
             let mut is_pure = false; // TODO
             let mut is_async = false; // TODO
             let mut throws = None; // TODO
@@ -1359,7 +1465,7 @@ fn proc(i: Slice) -> ParseResult<AST<Proc>> {
             tag("|>"),
             statement,
         ),
-        |(pure, asyn, mut args, mut throws, _, mut body)| {
+        |(pure, asyn, (mut args, mut args_spread), mut throws, _, mut body)| {
             let mut is_async = asyn.is_some();
             let mut is_pure = pure.is_some();
             let src = pure
@@ -1372,7 +1478,6 @@ fn proc(i: Slice) -> ParseResult<AST<Proc>> {
                 )
                 .spanning(&body);
 
-            let mut args_spread = None; // TODO
             let mut type_annotation = make_node!(
                 ProcType,
                 src.clone(),
@@ -1398,7 +1503,7 @@ fn func(i: Slice) -> ParseResult<AST<Func>> {
             tag("=>"),
             expression(0),
         ),
-        |(pure, asyn, mut args, mut returns, _, mut body)| {
+        |(pure, asyn, (mut args, mut args_spread), mut returns, _, mut body)| {
             let mut is_async = asyn.is_some();
             let mut is_pure = pure.is_some();
             let src = pure
@@ -1411,7 +1516,6 @@ fn func(i: Slice) -> ParseResult<AST<Func>> {
                 )
                 .spanning(&body);
 
-            let mut args_spread = None; // TODO
             let mut type_annotation = make_node!(
                 FuncType,
                 src.clone(),
@@ -1698,6 +1802,10 @@ fn numeric(i: Slice) -> ParseResult<Slice> {
 
 fn whitespace(i: Slice) -> ParseResult<Slice> {
     take_while(|c| c == ' ' || c == '\n' || c == '\t' || c == '\r')(i) // TODO: comments
+}
+
+fn whitespace_required(i: Slice) -> ParseResult<Slice> {
+    take_while1(|c| c == ' ' || c == '\n' || c == '\t' || c == '\r')(i) // TODO: comments
 }
 
 fn separated_list2<TKind, O2, F, G>(

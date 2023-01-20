@@ -203,7 +203,10 @@ impl AST<Expression> {
                             .collect(),
                         args_spread: type_annotation
                             .args_spread
-                            .map(|a| a.resolve_type(ctx.into()))
+                            .as_ref()
+                            .map(|s| s.downcast().type_annotation.clone())
+                            .flatten()
+                            .map(|s| s.resolve_type(ctx.into()))
                             .map(Rc::new),
                         is_pure,
                         returns: Rc::new(
@@ -234,7 +237,10 @@ impl AST<Expression> {
                             .collect(),
                         args_spread: type_annotation
                             .args_spread
-                            .map(|a| a.resolve_type(ctx.into()))
+                            .as_ref()
+                            .map(|s| s.downcast().type_annotation.clone())
+                            .flatten()
+                            .map(|s| s.resolve_type(ctx.into()))
                             .map(Rc::new),
                         is_async,
                         is_pure,

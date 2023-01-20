@@ -131,7 +131,7 @@ where
                     &proc.body.upcast(),
                 )
             }
-            Any::Decorator(Decorator { name }) => todo!(),
+            Any::Decorator(Decorator { name, arguments }) => todo!(),
             Any::ValueDeclaration(ValueDeclaration {
                 destination,
                 value,
