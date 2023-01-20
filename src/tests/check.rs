@@ -2575,9 +2575,9 @@ fn Func_type_fail_2() {
 fn Proc_type_pass() {
     test_check(
         "
-    type Foo = (a: number, b: string) { }
-    const a: Foo = (a: number, b: string) { }
-    const b: Foo = (a: number) { }",
+    type Foo = (a: number, b: string) |> { }
+    const a: Foo = (a: number, b: string) |> { }
+    const b: Foo = (a: number) |> { }",
         false,
     );
 }
@@ -2587,8 +2587,8 @@ fn Proc_type_pass() {
 fn Proc_type_fail_1() {
     test_check(
         "
-    type Foo = (a: number, b: string) { }
-    const a: Foo = (a: number, b: string, c: boolean) { }",
+    type Foo = (a: number, b: string) |> { }
+    const a: Foo = (a: number, b: string, c: boolean) |> { }",
         true,
     );
 }
@@ -4228,8 +4228,8 @@ fn Pure_procs_pass() {
       bar();
     }
 
-    type Foo = pure (n: number) { }
-    type Bar = (n: number) { }
+    type Foo = pure (n: number) |> { }
+    type Bar = (n: number) |> { }
 
     func dfkj(fn: Foo): Bar => fn
     ",
@@ -4276,8 +4276,8 @@ fn Pure_procs_fail_2() {
 fn Pure_procs_fail_3() {
     test_check(
         "
-    type Foo = pure (n: number) { }
-    type Bar = (n: number) { }
+    type Foo = pure (n: number) |> { }
+    type Bar = (n: number) |> { }
 
     func dfkj(fn: Bar): Foo => fn
     ",
