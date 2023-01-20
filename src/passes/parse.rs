@@ -456,15 +456,15 @@ fn type_param(i: Slice) -> ParseResult<AST<TypeParam>> {
     map(
         tuple((
             plain_identifier,
-            whitespace_required,
             opt(tuple((
+                whitespace_required,
                 tag("extends"),
                 whitespace_required,
                 type_expression(0),
             ))),
         )),
-        |(mut name, _, extends)| {
-            let mut extends = extends.map(|(_, _, extends)| extends);
+        |(mut name, extends)| {
+            let mut extends = extends.map(|(_, _, _, extends)| extends);
 
             make_node!(
                 TypeParam,
@@ -1171,9 +1171,12 @@ fn invocation_accessor_chain_inner(level: usize, i: Slice) -> ParseResult<AST<Ex
                 let mut subject = next_subject;
 
                 match clause {
-                    InvocationOrPropertyAccess::InvokingWith(mut args, args_slice) => {
+                    InvocationOrPropertyAccess::InvokingWith(
+                        mut type_args,
+                        mut args,
+                        args_slice,
+                    ) => {
                         let mut spread_args = None; // TODO
-                        let mut type_args = Vec::new(); // TODO
                         let mut bubbles = false; // TODO
 
                         next_subject = make_node!(
@@ -1221,11 +1224,25 @@ fn await_or_detach(i: Slice) -> ParseResult<Option<AwaitOrDetach>> {
 fn invocation_args(i: Slice) -> ParseResult<InvocationOrPropertyAccess> {
     map(
         seq!(
+            opt(map(
+                seq!(
+                    tag("<"),
+                    separated_list0(w(tag(",")), w(type_expression(0))),
+                    tag(">")
+                ),
+                |(_, type_args, _)| type_args
+            )),
             tag("("),
             separated_list0(w(tag(",")), w(expression(0))),
             tag(")")
         ),
-        |(open, args, close)| InvocationOrPropertyAccess::InvokingWith(args, open.spanning(&close)),
+        |(type_args, open, args, close)| {
+            InvocationOrPropertyAccess::InvokingWith(
+                type_args.unwrap_or(Vec::new()),
+                args,
+                open.spanning(&close),
+            )
+        },
     )(i)
 }
 
@@ -1251,7 +1268,7 @@ fn dot_property_access(i: Slice) -> ParseResult<InvocationOrPropertyAccess> {
 
 #[derive(Debug, Clone)]
 enum InvocationOrPropertyAccess {
-    InvokingWith(Vec<AST<Expression>>, Slice),
+    InvokingWith(Vec<AST<TypeExpression>>, Vec<AST<Expression>>, Slice),
     Accessing(Property, Slice),
 }
 
