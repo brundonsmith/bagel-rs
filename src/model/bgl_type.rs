@@ -377,34 +377,81 @@ impl Type {
             }
             (
                 Type::ProcType {
-                    args: args_1,
-                    args_spread: args_spread_1,
-                    is_pure: is_pure_1,
-                    is_async: is_async_1,
-                    throws: throws_1,
+                    args: destination_args,
+                    args_spread: destination_args_spread,
+                    is_pure: destination_is_pure,
+                    is_async: destination_is_async,
+                    throws: destination_throws,
                 },
                 Type::ProcType {
-                    args: args_2,
-                    args_spread: args_spread_2,
-                    is_pure: is_pure_2,
-                    is_async: is_async_2,
-                    throws: throws_2,
+                    args: value_args,
+                    args_spread: value_args_spread,
+                    is_pure: value_is_pure,
+                    is_async: value_is_async,
+                    throws: value_throws,
                 },
-            ) => {}
+            ) => {
+                if (!*destination_is_pure || *value_is_pure)
+                    && (!*value_is_async || *destination_is_async)
+                    && value_args.iter().enumerate().all(|(index, value_arg)| {
+                        value_arg
+                            .as_ref()
+                            .map(|value_arg| {
+                                destination_args.get(index).map(|destination_arg| {
+                                    destination_arg.as_ref().map(|destination_arg| {
+                                        destination_arg.subsumes(ctx, &value_arg)
+                                    })
+                                })
+                            })
+                            .flatten()
+                            .flatten()
+                            .unwrap_or(false)
+                    })
+                    && match (destination_throws, value_throws) {
+                        (Some(destination_throws), Some(value_throws)) => {
+                            destination_throws.subsumes(ctx, &value_throws)
+                        }
+                        (None, None) => true,
+                        _ => false,
+                    }
+                {
+                    return None;
+                }
+            }
             (
                 Type::FuncType {
-                    args: args_1,
-                    args_spread: args_spread_1,
-                    is_pure: is_pure_1,
-                    returns: returns_1,
+                    args: destination_args,
+                    args_spread: destination_args_spread,
+                    is_pure: destination_is_pure,
+                    returns: destination_returns,
                 },
                 Type::FuncType {
-                    args: args_2,
-                    args_spread: args_spread_2,
-                    is_pure: is_pure_2,
-                    returns: returns_2,
+                    args: value_args,
+                    args_spread: value_args_spread,
+                    is_pure: value_is_pure,
+                    returns: value_returns,
                 },
-            ) => {}
+            ) => {
+                if (!*destination_is_pure || *value_is_pure)
+                    && value_args.iter().enumerate().all(|(index, value_arg)| {
+                        value_arg
+                            .as_ref()
+                            .map(|value_arg| {
+                                destination_args.get(index).map(|destination_arg| {
+                                    destination_arg.as_ref().map(|destination_arg| {
+                                        destination_arg.subsumes(ctx, &value_arg)
+                                    })
+                                })
+                            })
+                            .flatten()
+                            .flatten()
+                            .unwrap_or(false)
+                    })
+                    && destination_returns.subsumes(ctx, &value_returns)
+                {
+                    return None;
+                }
+            }
             (
                 Type::SpecialType {
                     kind: destination_kind,
@@ -732,6 +779,69 @@ impl Type {
                     _ => Type::PoisonedType,
                 }
             }
+            Type::ElementofType(inner) => {
+                let inner = inner.as_ref().clone().simplify(ctx, symbols_encountered);
+
+                match inner {
+                    Type::ArrayType(element) => element.as_ref().clone(),
+                    Type::TupleType(members) => Type::UnionType(
+                        members
+                            .into_iter()
+                            .map(|member| match member {
+                                ElementOrSpread::Element(element) => element,
+                                ElementOrSpread::Spread(_) => unreachable!(),
+                            })
+                            .collect(),
+                    ),
+                    _ => Type::PoisonedType,
+                }
+            }
+            Type::KeyofType(inner) => {
+                let inner = inner.as_ref().clone().simplify(ctx, symbols_encountered);
+
+                match inner {
+                    Type::RecordType {
+                        key_type,
+                        value_type: _,
+                    } => key_type.as_ref().clone(),
+                    Type::ObjectType {
+                        entries,
+                        is_interface: _,
+                    } => Type::UnionType(
+                        entries
+                            .into_iter()
+                            .map(|entry| match entry {
+                                KeyValueOrSpread::KeyValue(key, _) => key,
+                                KeyValueOrSpread::Spread(_) => unreachable!(),
+                            })
+                            .collect(),
+                    ),
+                    _ => Type::PoisonedType,
+                }
+            }
+            Type::ValueofType(inner) => {
+                let inner = inner.as_ref().clone().simplify(ctx, symbols_encountered);
+
+                match inner {
+                    Type::RecordType {
+                        key_type: _,
+                        value_type,
+                    } => value_type.as_ref().clone(),
+                    Type::ObjectType {
+                        entries,
+                        is_interface: _,
+                    } => Type::UnionType(
+                        entries
+                            .into_iter()
+                            .map(|entry| match entry {
+                                KeyValueOrSpread::KeyValue(_, value) => value,
+                                KeyValueOrSpread::Spread(_) => unreachable!(),
+                            })
+                            .collect(),
+                    ),
+                    _ => Type::PoisonedType,
+                }
+            }
             Type::ObjectType {
                 entries,
                 is_interface,
@@ -942,7 +1052,11 @@ impl Display for Type {
                 }
 
                 f.write_char('(')?;
-                for arg in args {
+                for (index, arg) in args.iter().enumerate() {
+                    if index > 0 {
+                        f.write_str(", ")?;
+                    }
+
                     if let Some(arg) = arg {
                         f.write_fmt(format_args!("{}", arg))?;
                     } else {
@@ -964,7 +1078,11 @@ impl Display for Type {
                 }
 
                 f.write_char('(')?;
-                for arg in args {
+                for (index, arg) in args.iter().enumerate() {
+                    if index > 0 {
+                        f.write_str(", ")?;
+                    }
+
                     if let Some(arg) = arg {
                         f.write_fmt(format_args!("{}", arg))?;
                     } else {
