@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use crate::model::ast::{self, *};
 
 impl<TKind> AST<TKind>
@@ -8,7 +10,25 @@ where
     pub fn resolve_symbol(&self, symbol: &str) -> Option<ASTAny> {
         match self.parent().as_ref().map(|p| p.details()) {
             Some(Any::Module(ast::Module { declarations })) => {
-                if let Some(found) = declarations.iter().find_map(|decl| {
+                let self_index = if self.try_downcast::<ValueDeclaration>().is_some() {
+                    declarations.iter().enumerate().find_map(|(index, decl)| {
+                        if self.ptr_eq::<Declaration>(decl) {
+                            Some(index)
+                        } else {
+                            None
+                        }
+                    })
+                } else {
+                    None
+                };
+
+                if let Some(found) = declarations.iter().enumerate().find_map(|(index, decl)| {
+                    if let Some(self_index) = self_index {
+                        if index >= self_index {
+                            return None;
+                        }
+                    }
+
                     match decl.downcast() {
                         Declaration::ImportAllDeclaration(ImportAllDeclaration {
                             name,
@@ -147,11 +167,10 @@ where
                 }
             }
             Some(Any::Block(Block(statements))) => {
-                let self_upcast = self.clone().upcast();
                 let self_index = statements
                     .iter()
                     .enumerate()
-                    .find(|(_, stmt)| (*stmt).clone().upcast() == self_upcast)
+                    .find(|(_, stmt)| self.ptr_eq::<Statement>(*stmt))
                     .map(|(index, _)| index)
                     .unwrap();
 
