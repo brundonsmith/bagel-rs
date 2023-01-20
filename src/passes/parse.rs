@@ -1730,9 +1730,10 @@ fn exact_string_literal(i: Slice) -> ParseResult<AST<ExactStringLiteral>> {
 
 fn string_literal_segment(i: Slice) -> ParseResult<StringLiteralSegment> {
     alt((
-        map(seq!(tag("${"), expression(0), tag("}")), |(_, expr, _)| {
-            expr.into()
-        }),
+        map(
+            tuple((tag("${"), w(expression(0)), w(tag("}")))),
+            |(_, expr, _)| expr.into(),
+        ),
         map(string_contents, |s| s.into()),
     ))(i)
 }
@@ -1782,8 +1783,13 @@ where
     preceded(whitespace, parser)
 }
 
+#[memoize]
 fn string_contents(i: Slice) -> ParseResult<Slice> {
-    escaped(take_while(|ch: char| ch != '\''), '\\', one_of("$\'n\\"))(i)
+    escaped(
+        take_while1(|ch: char| ch != '\'' && ch != '$'),
+        '\\',
+        one_of("$\'\\"),
+    )(i)
 }
 
 fn identifier_like(i: Slice) -> ParseResult<Slice> {
