@@ -645,8 +645,21 @@ impl Type {
                 match subject {
                     Type::ObjectType {
                         entries,
-                        is_interface,
-                    } => todo!(),
+                        is_interface: _,
+                    } => entries
+                        .iter()
+                        .find_map(|entry| match entry {
+                            KeyValueOrSpread::KeyValue(key, value) => {
+                                if key.subsumes(ctx.into(), &property) {
+                                    Some(value)
+                                } else {
+                                    None
+                                }
+                            }
+                            KeyValueOrSpread::Spread(_) => None,
+                        })
+                        .cloned()
+                        .unwrap_or(Type::PoisonedType),
                     Type::RecordType {
                         key_type,
                         value_type,
