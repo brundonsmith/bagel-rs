@@ -3219,7 +3219,7 @@ fn Throws_declaration_fail_2() {
       throw Error(12);
     }
 
-    type MyProc = (a: string) throws Error<string> { }
+    type MyProc = (a: string) throws Error<string> |> { }
 
     const x: MyProc = foo",
         true,
