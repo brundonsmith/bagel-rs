@@ -91,6 +91,20 @@ pub enum Type {
     AnyType,
 }
 
+impl Eq for Type {}
+
+impl PartialOrd for Type {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.order().partial_cmp(&other.order())
+    }
+}
+
+impl Ord for Type {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.order().cmp(&other.order())
+    }
+}
+
 #[memoize]
 pub fn truthiness_safe_types() -> Type {
     Type::UnionType(vec![
@@ -222,14 +236,17 @@ impl Type {
                 }
             }
             (Type::ArrayType(destination_element), Type::ArrayType(value_element)) => {
-                if ctx.dest_mutability.encompasses(ctx.val_mutability)
-                    && destination_element.subsumes(ctx, value_element)
+                if (ctx.dest_mutability == Mutability::Readonly
+                    && destination_element.subsumes(ctx, value_element))
+                    || (ctx.dest_mutability == Mutability::Mutable
+                        && ctx.val_mutability == Mutability::Mutable
+                        && destination_element == value_element)
                 {
                     return None;
                 }
             }
             (Type::ArrayType(destination_element), Type::TupleType(value_members)) => {
-                if ctx.dest_mutability.encompasses(ctx.val_mutability)
+                if ctx.dest_mutability == Mutability::Readonly
                     && value_members.iter().all(|member| match member {
                         ElementOrSpread::Element(element) => {
                             destination_element.subsumes(ctx, element)
@@ -241,11 +258,19 @@ impl Type {
                 }
             }
             (Type::TupleType(destination_members), Type::TupleType(value_members)) => {
-                if ctx.dest_mutability.encompasses(ctx.val_mutability)
-                    && destination_members
-                        .iter()
-                        .zip(value_members.iter())
-                        .all(|((destination, value))| todo!())
+                if (ctx.dest_mutability == Mutability::Readonly
+                    && destination_members.iter().zip(value_members.iter()).all(
+                        |(destination, value)| match (destination, value) {
+                            (
+                                ElementOrSpread::Element(destination_element),
+                                ElementOrSpread::Element(value_element),
+                            ) => destination_element.subsumes(ctx, value_element),
+                            _ => false,
+                        },
+                    ))
+                    || (ctx.dest_mutability == Mutability::Mutable
+                        && ctx.val_mutability == Mutability::Mutable
+                        && destination_members == value_members)
                 {
                     return None;
                 }
@@ -260,9 +285,13 @@ impl Type {
                     value_type: value_value_type,
                 },
             ) => {
-                if ctx.dest_mutability.encompasses(ctx.val_mutability)
+                if (ctx.dest_mutability == Mutability::Readonly
                     && destination_key_type.subsumes(ctx, value_key_type)
-                    && destination_value_type.subsumes(ctx, value_value_type)
+                    && destination_value_type.subsumes(ctx, value_value_type))
+                    || (ctx.dest_mutability == Mutability::Mutable
+                        && ctx.val_mutability == Mutability::Mutable
+                        && destination_key_type == value_key_type
+                        && destination_value_type == value_value_type)
                 {
                     return None;
                 }
@@ -277,7 +306,7 @@ impl Type {
                     is_interface: value_is_interface,
                 },
             ) => {
-                if ctx.dest_mutability.encompasses(ctx.val_mutability)
+                if ctx.dest_mutability == Mutability::Readonly
                     && !*value_is_interface
                     && value_entries.iter().all(|value_entry| match value_entry {
                         KeyValueOrSpread::KeyValue(key, value) => {
@@ -669,21 +698,23 @@ impl Type {
                 if members.len() == 1 {
                     members.remove(0).simplify(ctx, symbols_encountered)
                 } else {
-                    Type::UnionType(
-                        members
-                            .into_iter()
-                            .filter(|member| {
-                                if let Type::UnionType(members) = member {
-                                    if members.len() == 0 {
-                                        return false;
-                                    }
+                    let mut members: Vec<Type> = members
+                        .into_iter()
+                        .filter(|member| {
+                            if let Type::UnionType(members) = member {
+                                if members.len() == 0 {
+                                    return false;
                                 }
+                            }
 
-                                return true;
-                            })
-                            .map(|t| t.simplify(ctx, symbols_encountered))
-                            .collect(),
-                    )
+                            return true;
+                        })
+                        .map(|t| t.simplify(ctx, symbols_encountered))
+                        .collect();
+
+                    members.sort();
+
+                    Type::UnionType(members)
                 }
             }
             Type::PropertyType { subject, property } => {
@@ -1008,6 +1039,55 @@ impl Type {
                 inner: Rc::new(inner.as_ref().clone().simplify(ctx, symbols_encountered)),
             },
             _ => self,
+        }
+    }
+
+    fn order(&self) -> u8 {
+        match self {
+            Type::ElementofType(_) => 0,
+            Type::ValueofType(_) => 1,
+            Type::KeyofType(_) => 2,
+            Type::ReadonlyType(_) => 3,
+            Type::InnerType { kind: _, inner: _ } => 4,
+            Type::ReturnType(_) => 5,
+            Type::PropertyType {
+                subject: _,
+                property: _,
+            } => 6,
+            Type::NamedType(_) => 7,
+            Type::ProcType {
+                args: _,
+                args_spread: _,
+                is_pure: _,
+                is_async: _,
+                throws: _,
+            } => 8,
+            Type::FuncType {
+                args: _,
+                args_spread: _,
+                is_pure: _,
+                returns: _,
+            } => 9,
+            Type::UnionType(_) => 10,
+            Type::SpecialType { kind: _, inner: _ } => 11,
+            Type::ObjectType {
+                entries: _,
+                is_interface: _,
+            } => 12,
+            Type::RecordType {
+                key_type: _,
+                value_type: _,
+            } => 13,
+            Type::ArrayType(_) => 14,
+            Type::TupleType(_) => 15,
+            Type::RegularExpressionType => 16,
+            Type::StringType(_) => 17,
+            Type::NumberType { min: _, max: _ } => 18,
+            Type::BooleanType(_) => 19,
+            Type::NilType => 20,
+            Type::UnknownType => 21,
+            Type::PoisonedType => 22,
+            Type::AnyType => 23,
         }
     }
 }
