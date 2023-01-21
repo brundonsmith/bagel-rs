@@ -130,6 +130,19 @@ impl AST<Expression> {
                                     }
                                 }
                             }
+                            Any::TryCatch(TryCatch {
+                                try_block,
+                                error_identifier: _,
+                                catch_block: _,
+                            }) => {
+                                let try_block_throws =
+                                    try_block.clone().recast::<Statement>().throws(ctx.into());
+
+                                match try_block_throws {
+                                    Some(try_block_throws) => try_block_throws,
+                                    None => Type::PoisonedType,
+                                }
+                            }
                             _ => Type::PoisonedType,
                         }
                     } else {
@@ -247,6 +260,7 @@ impl AST<Expression> {
                         throws: type_annotation
                             .throws
                             .map(|throws| throws.resolve_type(ctx.into()))
+                            .or_else(|| body.throws(ctx))
                             .map(Rc::new),
                     }
                 }
@@ -579,6 +593,84 @@ impl AST<Declaration> {
             Declaration::TestExprDeclaration(_) => None,
             Declaration::TestBlockDeclaration(_) => None,
             Declaration::TestTypeDeclaration(_) => None,
+        }
+    }
+}
+
+impl AST<Statement> {
+    pub fn throws<'a>(&self, ctx: InferTypeContext<'a>) -> Option<Type> {
+        match self.downcast() {
+            Statement::ValueDeclaration(_) => todo!(),
+            Statement::IfElseStatement(IfElseStatement {
+                cases,
+                default_case,
+            }) => {
+                let mut all = Vec::new();
+
+                for case in cases {
+                    if let Some(throws) = case.downcast().outcome.recast::<Statement>().throws(ctx)
+                    {
+                        all.push(throws);
+                    }
+                }
+                if let Some(default_case) = default_case {
+                    if let Some(throws) = default_case.recast::<Statement>().throws(ctx) {
+                        all.push(throws);
+                    }
+                }
+
+                match all.len() {
+                    0 => None,
+                    1 => Some(all.remove(0)),
+                    _ => Some(Type::UnionType(all)),
+                }
+            }
+            Statement::ForLoop(ForLoop {
+                item_identifier: _,
+                iterator: _,
+                body,
+            }) => body.recast::<Statement>().throws(ctx),
+            Statement::WhileLoop(WhileLoop { condition: _, body }) => {
+                body.recast::<Statement>().throws(ctx)
+            }
+            Statement::Assignment(_) => None,
+            Statement::TryCatch(_) => todo!(),
+            Statement::ThrowStatement(ThrowStatement { error_expression }) => {
+                Some(error_expression.infer_type(ctx))
+            }
+            Statement::Autorun(_) => None,
+            Statement::Invocation(Invocation {
+                subject,
+                args: _,
+                spread_args: _,
+                type_args: _,
+                bubbles: _,
+                awaited_or_detached: _,
+            }) => match subject.infer_type(ctx) {
+                Type::ProcType {
+                    args: _,
+                    args_spread: _,
+                    is_pure: _,
+                    is_async: _,
+                    throws,
+                } => throws.map(|rc| rc.as_ref().clone()),
+                _ => None,
+            },
+            Statement::Block(Block(statements)) => {
+                let mut all = Vec::new();
+
+                for stmt in statements {
+                    if let Some(throws) = stmt.throws(ctx) {
+                        all.push(throws);
+                    }
+                }
+
+                match all.len() {
+                    0 => None,
+                    1 => Some(all.remove(0)),
+                    _ => Some(Type::UnionType(all)),
+                }
+            }
         }
     }
 }

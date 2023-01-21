@@ -939,16 +939,52 @@ where
                 try_block,
                 error_identifier,
                 catch_block,
-            }) => todo!(),
+            }) => {
+                try_block.check(ctx, report_error);
+                error_identifier.check(ctx, report_error);
+                catch_block.check(ctx, report_error);
+
+                if try_block
+                    .clone()
+                    .recast::<Statement>()
+                    .throws(ctx.into())
+                    .is_none()
+                {
+                    report_error(BagelError::MiscError {
+                        module_id: module_id.clone(),
+                        src: try_block.slice().clone(),
+                        message: format!(
+                            "Try/catch is redundant; try block doesn't throw anything"
+                        ),
+                    });
+                }
+            }
             Any::ThrowStatement(ThrowStatement { error_expression }) => {
                 error_expression.check(ctx, report_error);
 
+                let error_type = error_expression.infer_type(ctx.into());
+
+                // check that we're throwing an Error
                 check_subsumation(
                     &any_error(),
-                    error_expression.infer_type(ctx.into()),
+                    error_type.clone(),
                     error_expression.slice(),
                     report_error,
                 );
+
+                if let FuncOrProc::Proc(proc) = ctx.nearest_func_or_proc.as_ref().unwrap() {
+                    if let Some(throws) = proc.downcast().type_annotation.downcast().throws {
+                        // check that error type matches declared throws-type
+                        check_subsumation(
+                            &throws.resolve_type(ctx.into()),
+                            error_type,
+                            error_expression.slice(),
+                            report_error,
+                        );
+                    }
+                } else {
+                    unreachable!()
+                }
             }
             Any::Autorun(Autorun {
                 effect_block,

@@ -140,7 +140,7 @@ where
             }
             Some(Any::InlineConstGroup(InlineConstGroup {
                 declarations,
-                inner,
+                inner: _,
             })) => {
                 if let Some(found) =
                     declarations
@@ -196,6 +196,20 @@ where
                         })
                 {
                     return Some(found.clone().upcast());
+                }
+            }
+            Some(Any::TryCatch(TryCatch {
+                try_block: _,
+                error_identifier,
+                catch_block,
+            })) => {
+                if error_identifier.downcast().0.as_str() == symbol
+                    && self
+                        .clone()
+                        .upcast()
+                        .ptr_eq::<Any>(&catch_block.clone().upcast())
+                {
+                    return self.parent();
                 }
             }
             _ => {}

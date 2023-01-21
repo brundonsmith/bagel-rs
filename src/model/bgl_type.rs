@@ -492,22 +492,8 @@ impl Type {
                     inner: value_inner,
                 },
             ) => {
-                if destination_kind == value_kind {
-                    return destination_inner.subsumation_issues(ctx, value_inner);
-                }
-            }
-            (
-                Type::SpecialType {
-                    kind: destination_kind,
-                    inner: destination_inner,
-                },
-                Type::SpecialType {
-                    kind: value_kind,
-                    inner: value_inner,
-                },
-            ) => {
-                if destination_kind == value_kind {
-                    return destination_inner.subsumation_issues(ctx, value_inner);
+                if destination_kind == value_kind && destination_inner.subsumes(ctx, value_inner) {
+                    return None;
                 }
             }
             (
@@ -736,6 +722,15 @@ impl Type {
                             }
                             _ => {}
                         };
+                    }
+                    if s.as_str() == "value" {
+                        match subject {
+                            Type::SpecialType {
+                                kind: SpecialTypeKind::Error,
+                                inner,
+                            } => return inner.as_ref().clone(),
+                            _ => {}
+                        }
                     }
                 }
 
