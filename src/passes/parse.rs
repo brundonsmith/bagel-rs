@@ -388,6 +388,7 @@ fn proc_declaration(i: Slice) -> ParseResult<AST<ProcDeclaration>> {
             plain_identifier,
             opt(type_params),
             args_parenthesized,
+            opt(throws_clause),
             tag("|>"),
             statement,
         ),
@@ -400,6 +401,7 @@ fn proc_declaration(i: Slice) -> ParseResult<AST<ProcDeclaration>> {
             mut name,
             mut type_params,
             (mut args, mut args_spread),
+            mut throws,
             _,
             mut body,
         )| {
@@ -412,7 +414,6 @@ fn proc_declaration(i: Slice) -> ParseResult<AST<ProcDeclaration>> {
             let mut is_pure = pure.is_some();
             let mut platforms = PlatformSet::all(); // TODO
 
-            let mut throws = None; // TODO
             let mut type_annotation = make_node!(
                 ProcType,
                 args.get(0)
@@ -776,8 +777,14 @@ fn func_type(i: Slice) -> ParseResult<AST<FuncType>> {
 
 fn proc_type(i: Slice) -> ParseResult<AST<ProcType>> {
     map(
-        seq!(args_parenthesized, tag("|>"), tag("{"), tag("}")),
-        |((mut args, mut args_spread), arrow, _, end)| {
+        seq!(
+            args_parenthesized,
+            opt(throws_clause),
+            tag("|>"),
+            tag("{"),
+            tag("}")
+        ),
+        |((mut args, mut args_spread), mut throws, arrow, _, end)| {
             // TODO: proc type with 0 arguments will have weird src
             let src = args
                 .get(0)
@@ -787,11 +794,16 @@ fn proc_type(i: Slice) -> ParseResult<AST<ProcType>> {
 
             let mut is_pure = false; // TODO
             let mut is_async = false; // TODO
-            let mut throws = None; // TODO
 
             make_node!(ProcType, src, args, args_spread, is_pure, is_async, throws)
         },
     )(i)
+}
+
+fn throws_clause(i: Slice) -> ParseResult<AST<TypeExpression>> {
+    map(seq!(tag("throws"), type_expression(0)), |(_, throws)| {
+        throws
+    })(i)
 }
 
 fn record_type(i: Slice) -> ParseResult<AST<RecordType>> {
@@ -1475,10 +1487,7 @@ fn proc(i: Slice) -> ParseResult<AST<Proc>> {
             opt(tag("pure")),
             opt(tag("async")),
             alt((args_parenthesized, arg_singleton)),
-            opt(map(
-                seq!(tag("throws"), type_expression(0)),
-                |(_, throws)| throws
-            )),
+            opt(throws_clause),
             tag("|>"),
             statement,
         ),
