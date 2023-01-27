@@ -757,8 +757,13 @@ fn type_expression_inner(l: usize, i: Slice) -> ParseResult<AST<TypeExpression>>
 
 fn func_type(i: Slice) -> ParseResult<AST<FuncType>> {
     map(
-        seq!(args_parenthesized, tag("=>"), type_expression(0)),
-        |((mut args, mut args_spread), _, returns)| {
+        seq!(
+            opt(terminated(tag("pure"), whitespace_required)),
+            args_parenthesized,
+            tag("=>"),
+            type_expression(0)
+        ),
+        |(pure, (mut args, mut args_spread), _, returns)| {
             // TODO: func type with 0 arguments will have weird src
             let src = args
                 .get(0)
@@ -766,7 +771,7 @@ fn func_type(i: Slice) -> ParseResult<AST<FuncType>> {
                 .unwrap_or(returns.slice().clone())
                 .spanning(&returns);
 
-            let mut is_pure = false; // TODO
+            let mut is_pure = pure.is_some();
             let mut is_async = false; // TODO
             let mut returns = Some(returns);
 
@@ -778,13 +783,14 @@ fn func_type(i: Slice) -> ParseResult<AST<FuncType>> {
 fn proc_type(i: Slice) -> ParseResult<AST<ProcType>> {
     map(
         seq!(
+            opt(terminated(tag("pure"), whitespace_required)),
             args_parenthesized,
             opt(throws_clause),
             tag("|>"),
             tag("{"),
             tag("}")
         ),
-        |((mut args, mut args_spread), mut throws, arrow, _, end)| {
+        |(pure, (mut args, mut args_spread), mut throws, arrow, _, end)| {
             // TODO: proc type with 0 arguments will have weird src
             let src = args
                 .get(0)
@@ -792,7 +798,7 @@ fn proc_type(i: Slice) -> ParseResult<AST<ProcType>> {
                 .unwrap_or(arrow)
                 .spanning(&end);
 
-            let mut is_pure = false; // TODO
+            let mut is_pure = pure.is_some();
             let mut is_async = false; // TODO
 
             make_node!(ProcType, src, args, args_spread, is_pure, is_async, throws)
