@@ -106,6 +106,20 @@ where
         }
     }
 
+    pub fn contains(&self, other: &AST<Any>) -> bool {
+        let mut current = Some(other.clone());
+
+        while let Some(some_current) = current {
+            if self.ptr_eq::<Any>(&some_current) {
+                return true;
+            }
+
+            current = some_current.parent();
+        }
+
+        return false;
+    }
+
     pub fn try_downcast<TExpected>(&self) -> Option<TExpected>
     where
         TExpected: TryFrom<Any>,
@@ -506,6 +520,8 @@ pub struct GenericParamType {
     pub name: AST<PlainIdentifier>,
     pub extends: Option<AST<TypeExpression>>,
 }
+
+// TODO: Args as an AST node
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ProcType {

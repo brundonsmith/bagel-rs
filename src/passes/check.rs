@@ -63,6 +63,10 @@ where
 
         let mut check_binary_operation =
             |BinaryOperation { left, op, right }: &BinaryOperation, report_error: &mut F| {
+                left.check(ctx, report_error);
+                op.check(ctx, report_error);
+                right.check(ctx, report_error);
+
                 let module_id = &ctx.current_module.module_id.clone();
                 let subsumation_context = SubsumationContext::from(ctx);
                 let check_subsumation =
@@ -329,15 +333,51 @@ where
             Any::Parenthesis(Parenthesis(inner)) => inner.check(ctx, report_error),
             Any::LocalIdentifier(LocalIdentifier(name)) => {
                 // TODO: Make sure it isn't a type
-                if self.resolve_symbol(name.as_str()).is_none() {
-                    report_error(BagelError::MiscError {
-                        module_id: ctx.current_module.module_id.clone(),
-                        src: self.slice().clone(),
-                        message: format!(
-                            "Couldn't resolve identifier {} in this scope",
-                            blue_string(name.as_str())
-                        ),
-                    });
+
+                match self.resolve_symbol(name.as_str()) {
+                    None => {
+                        // Identifier can't be resolved
+                        report_error(BagelError::MiscError {
+                            module_id: ctx.current_module.module_id.clone(),
+                            src: self.slice().clone(),
+                            message: format!(
+                                "Couldn't resolve identifier {} in this scope",
+                                blue_string(name.as_str())
+                            ),
+                        });
+                    }
+                    Some(resolved) => {
+                        if let Some(nearest_func_or_proc) = &ctx.nearest_func_or_proc {
+                            let failure = match nearest_func_or_proc {
+                                FuncOrProc::Func(func) => {
+                                    if func.downcast().is_pure && !func.contains(&resolved) {
+                                        Some("function")
+                                    } else {
+                                        None
+                                    }
+                                }
+                                FuncOrProc::Proc(proc) => {
+                                    if proc.downcast().is_pure && !proc.contains(&resolved) {
+                                        Some("procedure")
+                                    } else {
+                                        None
+                                    }
+                                }
+                            };
+
+                            if let Some(failure) = failure {
+                                // Violation of pure func/proc boundary
+                                report_error(BagelError::MiscError {
+                                    module_id: ctx.current_module.module_id.clone(),
+                                    src: self.slice().clone(),
+                                    message: format!(
+                                        "Pure {}s can only reference identifiers declared within their own scope!",
+                                        failure,
+                                    ),
+                                });
+                            }
+                        }
+                    }
                 }
             }
             Any::NamedType(NamedType(name)) => {
