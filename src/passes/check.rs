@@ -232,28 +232,65 @@ where
                 exported,
                 platforms,
             }) => {
-                destination.check(ctx, report_error);
                 value.check(ctx, report_error);
 
-                if let DeclarationDestination::NameAndType(NameAndType {
-                    name: _,
-                    type_annotation: Some(type_annotation),
-                }) = destination
-                {
-                    check_subsumation(
-                        &type_annotation.resolve_type(ctx.into()),
-                        value.infer_type(ctx.into()),
-                        value.slice(),
-                        report_error,
-                    );
-                }
+                match destination {
+                    DeclarationDestination::NameAndType(NameAndType {
+                        name,
+                        type_annotation,
+                    }) => {
+                        name.check(ctx, report_error);
+                        type_annotation.check(ctx, report_error);
 
-                if !*is_const && matches!(destination, DeclarationDestination::Destructure(_)) {
-                    report_error(BagelError::MiscError {
-                        module_id: module_id.clone(),
-                        src: self.slice().clone(),
-                        message: format!("Can only destructure when declaring a const"),
-                    });
+                        if let Some(type_annotation) = type_annotation {
+                            check_subsumation(
+                                &type_annotation.resolve_type(ctx.into()),
+                                value.infer_type(ctx.into()),
+                                value.slice(),
+                                report_error,
+                            );
+                        }
+                    }
+                    DeclarationDestination::Destructure(Destructure {
+                        properties,
+                        spread,
+                        destructure_kind,
+                    }) => {
+                        properties.check(ctx, report_error);
+                        spread.check(ctx, report_error);
+
+                        if !*is_const {
+                            report_error(BagelError::MiscError {
+                                module_id: module_id.clone(),
+                                src: self.slice().clone(),
+                                message: format!("Can only destructure when declaring a const"),
+                            });
+                        }
+
+                        let value_type = value.infer_type(ctx.into());
+                        match destructure_kind {
+                            DestructureKind::Array => {
+                                check_subsumation(
+                                    &any_array(),
+                                    value_type,
+                                    value.slice(),
+                                    report_error,
+                                );
+
+                                // TODO: check that length matches
+                            }
+                            DestructureKind::Object => {
+                                check_subsumation(
+                                    &any_object(),
+                                    value_type,
+                                    value.slice(),
+                                    report_error,
+                                );
+
+                                // TODO: check that all properties exist
+                            }
+                        }
+                    }
                 }
             }
             Any::TestExprDeclaration(TestExprDeclaration { name, expr }) => todo!(),
@@ -428,7 +465,29 @@ where
                         properties.check(ctx, report_error);
                         spread.check(ctx, report_error);
 
-                        // TODO: Check that value is the right type and all destructured properties exist
+                        let value_type = value.infer_type(ctx.into());
+                        match destructure_kind {
+                            DestructureKind::Array => {
+                                check_subsumation(
+                                    &any_array(),
+                                    value_type,
+                                    value.slice(),
+                                    report_error,
+                                );
+
+                                // TODO: check that length matches
+                            }
+                            DestructureKind::Object => {
+                                check_subsumation(
+                                    &any_object(),
+                                    value_type,
+                                    value.slice(),
+                                    report_error,
+                                );
+
+                                // TODO: check that all properties exist
+                            }
+                        }
                     }
                 }
                 value.check(ctx, report_error);
@@ -1117,28 +1176,6 @@ where
                 element.check(ctx, report_error);
             }
             ElementOrSpread::Spread(spread) => {
-                spread.check(ctx, report_error);
-            }
-        }
-    }
-}
-
-impl Checkable for DeclarationDestination {
-    fn check<'a, F: FnMut(BagelError)>(&self, ctx: &CheckContext<'a>, report_error: &mut F) {
-        match self {
-            DeclarationDestination::NameAndType(NameAndType {
-                name,
-                type_annotation,
-            }) => {
-                name.check(ctx, report_error);
-                type_annotation.check(ctx, report_error);
-            }
-            DeclarationDestination::Destructure(Destructure {
-                properties,
-                spread,
-                destructure_kind: _,
-            }) => {
-                properties.check(ctx, report_error);
                 spread.check(ctx, report_error);
             }
         }
