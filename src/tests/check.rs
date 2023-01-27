@@ -3191,7 +3191,7 @@ fn Throws_declaration_pass() {
       throw Error(12);
     }
 
-    type MyProc = (a: string) throws Error<number> { }
+    type MyProc = (a: string) throws Error<number> |> { }
 
     const x: MyProc = foo",
         false,
