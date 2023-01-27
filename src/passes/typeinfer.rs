@@ -600,7 +600,7 @@ impl AST<Declaration> {
 impl AST<Statement> {
     pub fn throws<'a>(&self, ctx: InferTypeContext<'a>) -> Option<Type> {
         match self.downcast() {
-            Statement::ValueDeclaration(_) => todo!(),
+            Statement::ValueDeclaration(_) => None,
             Statement::IfElseStatement(IfElseStatement {
                 cases,
                 default_case,
