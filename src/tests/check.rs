@@ -2486,17 +2486,6 @@ fn Tuple_type_fail_2() {
     test_check(
         "
     type Foo = [string, number, boolean]
-    const a: Foo = ['stuff', 12, true, 'other']",
-        true,
-    );
-}
-
-#[test]
-#[allow(non_snake_case)]
-fn Tuple_type_fail_3() {
-    test_check(
-        "
-    type Foo = [string, number, boolean]
     const a: Foo = ['stuff', 12]",
         true,
     );
@@ -2504,7 +2493,7 @@ fn Tuple_type_fail_3() {
 
 #[test]
 #[allow(non_snake_case)]
-fn Tuple_type_fail_4() {
+fn Tuple_type_fail_3() {
     test_check(
         "
     type Foo = [string, number, boolean]
@@ -2516,7 +2505,7 @@ fn Tuple_type_fail_4() {
 
 #[test]
 #[allow(non_snake_case)]
-fn Tuple_type_fail_5() {
+fn Tuple_type_fail_4() {
     test_check(
         "
     type Foo = [string, number, boolean]
@@ -2527,7 +2516,7 @@ fn Tuple_type_fail_5() {
 
 #[test]
 #[allow(non_snake_case)]
-fn Tuple_type_fail_6() {
+fn Tuple_type_fail_5() {
     test_check(
         "
     type Foo = [string, number, boolean]
