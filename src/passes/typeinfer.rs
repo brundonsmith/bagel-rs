@@ -4,7 +4,7 @@ use crate::{
     model::ast::*,
     model::{
         ast::Any,
-        bgl_type::{falsy_types, truthy_types, Type},
+        bgl_type::{falsy_types, truthy_types, Mutability, Type},
         module::Module,
     },
     passes::check::CheckContext,
@@ -167,33 +167,41 @@ impl AST<Expression> {
                     tag: _,
                     segments: _,
                 }) => Type::ANY_STRING,
-                Expression::ArrayLiteral(ArrayLiteral(members)) => Type::TupleType(
-                    members
-                        .into_iter()
-                        .map(|member| match member {
-                            ElementOrSpread::Element(element) => {
-                                ElementOrSpread::Element(element.infer_type(ctx))
-                            }
-                            ElementOrSpread::Spread(spread) => {
-                                ElementOrSpread::Spread(spread.infer_type(ctx))
-                            }
-                        })
-                        .collect(),
-                ),
-                Expression::ObjectLiteral(ObjectLiteral(entries)) => Type::ObjectType {
-                    entries: entries
-                        .into_iter()
-                        .map(|entry| match entry {
-                            KeyValueOrSpread::KeyValue(key, value) => KeyValueOrSpread::KeyValue(
-                                key.infer_type(ctx),
-                                value.infer_type(ctx),
-                            ),
-                            KeyValueOrSpread::Spread(expr) => {
-                                KeyValueOrSpread::Spread(expr.infer_type(ctx))
-                            }
-                        })
-                        .collect(),
-                    is_interface: false,
+                Expression::ArrayLiteral(ArrayLiteral(members)) => Type::MutabilityType {
+                    mutability: Mutability::Literal,
+                    inner: Rc::new(Type::TupleType(
+                        members
+                            .into_iter()
+                            .map(|member| match member {
+                                ElementOrSpread::Element(element) => {
+                                    ElementOrSpread::Element(element.infer_type(ctx))
+                                }
+                                ElementOrSpread::Spread(spread) => {
+                                    ElementOrSpread::Spread(spread.infer_type(ctx))
+                                }
+                            })
+                            .collect(),
+                    )),
+                },
+                Expression::ObjectLiteral(ObjectLiteral(entries)) => Type::MutabilityType {
+                    mutability: Mutability::Literal,
+                    inner: Rc::new(Type::ObjectType {
+                        entries: entries
+                            .into_iter()
+                            .map(|entry| match entry {
+                                KeyValueOrSpread::KeyValue(key, value) => {
+                                    KeyValueOrSpread::KeyValue(
+                                        key.infer_type(ctx),
+                                        value.infer_type(ctx),
+                                    )
+                                }
+                                KeyValueOrSpread::Spread(expr) => {
+                                    KeyValueOrSpread::Spread(expr.infer_type(ctx))
+                                }
+                            })
+                            .collect(),
+                        is_interface: false,
+                    }),
                 },
                 Expression::NegationOperation(NegationOperation(_)) => Type::BooleanType(None),
                 Expression::Func(Func {

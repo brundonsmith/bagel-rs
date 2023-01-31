@@ -28,7 +28,10 @@ pub enum Type {
     ElementofType(Rc<Type>),
     ValueofType(Rc<Type>),
     KeyofType(Rc<Type>),
-    ReadonlyType(Rc<Type>),
+    MutabilityType {
+        mutability: Mutability,
+        inner: Rc<Type>,
+    },
     InnerType {
         kind: SpecialTypeKind,
         inner: Rc<Type>,
@@ -225,18 +228,18 @@ impl Type {
         }
 
         match (destination, value) {
-            (Type::ReadonlyType(inner), value) => {
-                if inner.subsumes(ctx.with_dest_mutability(Mutability::Readonly), value) {
+            (Type::MutabilityType { mutability, inner }, value) => {
+                if inner.subsumes(ctx.with_dest_mutability(*mutability), value) {
                     return None;
                 }
             }
-            (dest, Type::ReadonlyType(inner)) => {
-                if dest.subsumes(ctx.with_val_mutability(Mutability::Readonly), inner) {
+            (dest, Type::MutabilityType { mutability, inner }) => {
+                if dest.subsumes(ctx.with_val_mutability(*mutability), inner) {
                     return None;
                 }
             }
             (Type::ArrayType(destination_element), Type::ArrayType(value_element)) => {
-                if (ctx.dest_mutability == Mutability::Readonly
+                if (ctx.dest_mutability.encompasses(ctx.val_mutability)
                     && destination_element.subsumes(ctx, value_element))
                     || (ctx.dest_mutability == Mutability::Mutable
                         && ctx.val_mutability == Mutability::Mutable
@@ -246,7 +249,7 @@ impl Type {
                 }
             }
             (Type::ArrayType(destination_element), Type::TupleType(value_members)) => {
-                if ctx.dest_mutability == Mutability::Readonly
+                if ctx.dest_mutability.encompasses(ctx.val_mutability)
                     && value_members.iter().all(|member| match member {
                         ElementOrSpread::Element(element) => {
                             destination_element.subsumes(ctx, element)
@@ -258,7 +261,7 @@ impl Type {
                 }
             }
             (Type::TupleType(destination_members), Type::TupleType(value_members)) => {
-                if (ctx.dest_mutability == Mutability::Readonly
+                if (ctx.dest_mutability.encompasses(ctx.val_mutability)
                     && destination_members.iter().zip(value_members.iter()).all(
                         |(destination, value)| match (destination, value) {
                             (
@@ -861,6 +864,7 @@ impl Type {
             }
             Type::ElementofType(inner) => {
                 let inner = inner.as_ref().clone().simplify(ctx, symbols_encountered);
+                println!("Type::ElementofType -> {:?}", inner);
 
                 match inner {
                     Type::ArrayType(element) => element.as_ref().clone(),
@@ -1042,7 +1046,10 @@ impl Type {
             Type::ElementofType(_) => 0,
             Type::ValueofType(_) => 1,
             Type::KeyofType(_) => 2,
-            Type::ReadonlyType(_) => 3,
+            Type::MutabilityType {
+                mutability: _,
+                inner: _,
+            } => 3,
             Type::InnerType { kind: _, inner: _ } => 4,
             Type::ReturnType(_) => 5,
             Type::PropertyType {
@@ -1170,7 +1177,13 @@ impl Display for Type {
             Type::ElementofType(inner) => f.write_fmt(format_args!("elementof {}", inner)),
             Type::ValueofType(inner) => f.write_fmt(format_args!("valueof {}", inner)),
             Type::KeyofType(inner) => f.write_fmt(format_args!("keyof {}", inner)),
-            Type::ReadonlyType(inner) => f.write_fmt(format_args!("readonly {}", inner)),
+            Type::MutabilityType { mutability, inner } => {
+                if let Some(mutability) = mutability.display_name() {
+                    f.write_str(mutability)?;
+                    f.write_char(' ')?;
+                }
+                inner.fmt(f)
+            }
             Type::InnerType { kind, inner } => todo!(),
             Type::ReturnType(inner) => todo!(),
             Type::PropertyType { subject, property } => {
@@ -1359,10 +1372,19 @@ impl Mutability {
 
     pub fn encompasses(self, other: Mutability) -> bool {
         match self {
-            Mutability::Constant => other == Mutability::Constant,
+            Mutability::Constant => other == Mutability::Constant || other == Mutability::Literal,
             Mutability::Readonly => true,
-            Mutability::Mutable => other == Mutability::Mutable || other == Mutability::Literal,
+            Mutability::Mutable => other == Mutability::Literal,
             Mutability::Literal => other == Mutability::Literal,
+        }
+    }
+
+    pub fn display_name(self) -> Option<&'static str> {
+        match self {
+            Mutability::Constant => Some("const"),
+            Mutability::Readonly => Some("readonly"),
+            Mutability::Mutable => None,
+            Mutability::Literal => None,
         }
     }
 }

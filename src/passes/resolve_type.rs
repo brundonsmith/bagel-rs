@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use crate::model::{
     ast::*,
-    bgl_type::{SubsumationContext, Type},
+    bgl_type::{Mutability, SubsumationContext, Type},
     module::{Module, ModulesStore},
 };
 
@@ -15,7 +15,10 @@ impl AST<TypeExpression> {
                 let inner = Rc::new(inner.resolve_type(ctx));
 
                 match kind {
-                    ModifierTypeKind::Readonly => Type::ReadonlyType(inner),
+                    ModifierTypeKind::Readonly => Type::MutabilityType {
+                        mutability: Mutability::Readonly,
+                        inner,
+                    },
                     ModifierTypeKind::Keyof => Type::KeyofType(inner),
                     ModifierTypeKind::Valueof => Type::ValueofType(inner),
                     ModifierTypeKind::Elementof => Type::ElementofType(inner),

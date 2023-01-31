@@ -3,7 +3,7 @@ use crate::{
         ast::*,
         bgl_type::{
             any_array, any_error, any_iterator, any_object, any_plan, string_template_safe_types,
-            truthiness_safe_types, SubsumationContext, Type,
+            truthiness_safe_types, Mutability, SubsumationContext, Type,
         },
         errors::blue_string,
         slice::Slice,
@@ -15,8 +15,8 @@ use crate::{
     },
     DEBUG_MODE,
 };
-use std::fmt::Debug;
 use std::time::SystemTime;
+use std::{fmt::Debug, rc::Rc};
 
 use super::typeinfer::binary_operation_type;
 
@@ -243,8 +243,13 @@ where
                         type_annotation.check(ctx, report_error);
 
                         if let Some(type_annotation) = type_annotation {
+                            let type_annotation = Type::MutabilityType {
+                                mutability: Mutability::Constant,
+                                inner: Rc::new(type_annotation.resolve_type(ctx.into())),
+                            };
+
                             check_subsumation(
-                                &type_annotation.resolve_type(ctx.into()),
+                                &type_annotation,
                                 value.infer_type(ctx.into()),
                                 value.slice(),
                                 report_error,
@@ -830,72 +835,32 @@ where
             Any::SpecialType(SpecialType { kind: _, inner }) => {
                 inner.check(ctx, report_error);
             }
-            Any::ModifierType(ModifierType { kind, inner }) => match kind {
-                ModifierTypeKind::Readonly => {}
-                ModifierTypeKind::Keyof => {
+            Any::ModifierType(ModifierType { kind, inner }) => {
+                let expected_type = match kind {
+                    ModifierTypeKind::Readonly => None,
+                    ModifierTypeKind::Keyof => Some(any_object()),
+                    ModifierTypeKind::Valueof => Some(any_object()),
+                    ModifierTypeKind::Elementof => Some(any_array()),
+                };
+
+                if let Some(expected_type) = expected_type {
                     let inner_type = inner.resolve_type(ctx.into());
 
-                    match inner_type {
-                        Type::RecordType {
-                            key_type: _,
-                            value_type: _,
-                        } => {}
-                        Type::ObjectType {
-                            entries: _,
-                            is_interface: _,
-                        } => {}
-                        _ => report_error(BagelError::MiscError {
+                    if !expected_type.subsumes(ctx.into(), &inner_type) {
+                        let kind_str: &str = kind.into();
+
+                        report_error(BagelError::MiscError {
                             module_id: ctx.current_module.module_id.clone(),
                             src: self.slice().clone(),
                             message: format!(
                                 "Cannot apply {} to {}",
-                                blue_string("keyof"),
+                                blue_string(kind_str),
                                 blue_string(&inner_type)
                             ),
-                        }),
+                        });
                     }
                 }
-                ModifierTypeKind::Valueof => {
-                    let inner_type = inner.resolve_type(ctx.into());
-
-                    match inner_type {
-                        Type::RecordType {
-                            key_type: _,
-                            value_type: _,
-                        } => {}
-                        Type::ObjectType {
-                            entries: _,
-                            is_interface: _,
-                        } => {}
-                        _ => report_error(BagelError::MiscError {
-                            module_id: ctx.current_module.module_id.clone(),
-                            src: self.slice().clone(),
-                            message: format!(
-                                "Cannot apply {} to {}",
-                                blue_string("valueof"),
-                                blue_string(&inner_type)
-                            ),
-                        }),
-                    }
-                }
-                ModifierTypeKind::Elementof => {
-                    let inner_type = inner.resolve_type(ctx.into());
-
-                    match inner_type {
-                        Type::ArrayType(_) => {}
-                        Type::TupleType(_) => {}
-                        _ => report_error(BagelError::MiscError {
-                            module_id: ctx.current_module.module_id.clone(),
-                            src: self.slice().clone(),
-                            message: format!(
-                                "Cannot apply {} to {}",
-                                blue_string("keyof"),
-                                blue_string(&inner_type)
-                            ),
-                        }),
-                    }
-                }
-            },
+            }
             Any::TypeofType(TypeofType(expr)) => expr.check(ctx, report_error),
             Any::PropertyType(PropertyType {
                 subject,
