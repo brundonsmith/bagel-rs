@@ -262,6 +262,7 @@ impl Type {
             }
             (Type::TupleType(destination_members), Type::TupleType(value_members)) => {
                 if (ctx.dest_mutability.encompasses(ctx.val_mutability)
+                    && value_members.len() >= destination_members.len()
                     && destination_members.iter().zip(value_members.iter()).all(
                         |(destination, value)| match (destination, value) {
                             (
