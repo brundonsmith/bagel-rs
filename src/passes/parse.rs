@@ -14,7 +14,7 @@ use nom::{
     branch::alt,
     bytes::complete::{escaped, tag, take_while, take_while1},
     character::complete::{char, one_of},
-    combinator::{complete, map, opt},
+    combinator::{complete, map, opt, verify},
     error::ErrorKind,
     multi::{many0, many1, separated_list0, separated_list1},
     sequence::{pair, preceded, terminated, tuple},
@@ -22,6 +22,8 @@ use nom::{
 };
 use std::str::FromStr;
 use std::{rc::Rc, time::SystemTime};
+
+use super::compile::INT;
 
 macro_rules! seq {
     ($( $s:expr ),* $(,)?) => {
@@ -1231,11 +1233,7 @@ fn invocation_accessor_chain_inner(level: usize, i: Slice) -> ParseResult<AST<Ex
 
 fn await_or_detach(i: Slice) -> ParseResult<Option<AwaitOrDetach>> {
     map(opt(alt((tag("await"), tag("detach")))), |keyword| {
-        keyword.map(|s: Slice| match s.as_str() {
-            "await" => AwaitOrDetach::Await,
-            "detach" => AwaitOrDetach::Detach,
-            _ => unreachable!(),
-        })
+        keyword.map(|s: Slice| s.as_str().try_into().unwrap())
     })(i)
 }
 
@@ -1825,14 +1823,30 @@ fn string_contents(i: Slice) -> ParseResult<Slice> {
 }
 
 fn identifier_like(i: Slice) -> ParseResult<Slice> {
-    map(
-        tuple((
-            take_while1(|ch: char| ch.is_alphabetic() || ch == '_' || ch == '$'),
-            take_while(|ch: char| ch.is_alphanumeric() || ch == '_' || ch == '$'),
-        )),
-        |(a, b): (Slice, Slice)| a.spanning(&b),
+    verify(
+        map(
+            tuple((
+                take_while1(|ch: char| ch.is_alphabetic() || ch == '_' || ch == '$'),
+                take_while(|ch: char| ch.is_alphanumeric() || ch == '_' || ch == '$'),
+            )),
+            |(a, b): (Slice, Slice)| a.spanning(&b),
+        ),
+        |s| is_valid_identifier(s.as_str()),
     )(i)
 }
+
+pub fn is_valid_identifier(s: &str) -> bool {
+    !s.starts_with(INT) && 
+    s.char_indices().all(|(index, ch)| 
+        if index == 0 {
+            ch.is_alphabetic() 
+        } else {
+            ch.is_alphanumeric()
+        } || ch == '_' || ch == '$') && 
+    !RESERVED_IDENTIFIERS.contains(&s)
+}
+
+const RESERVED_IDENTIFIERS: [&'static str; 0] = [];
 
 fn numeric(i: Slice) -> ParseResult<Slice> {
     take_while1(|c: char| c.is_numeric())(i)

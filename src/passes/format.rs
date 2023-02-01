@@ -152,7 +152,10 @@ where
                 right.format(f, opts)
             }
             Any::BinaryOperator(BinaryOperator(op)) => f.write_str(op.into()),
-            Any::NegationOperation(NegationOperation(_)) => todo!(),
+            Any::NegationOperation(NegationOperation(inner)) => {
+                f.write_char('!')?;
+                inner.format(f, opts)
+            }
             Any::Parenthesis(Parenthesis(inner)) => {
                 f.write_char('(')?;
                 inner.format(f, opts)?;
@@ -186,7 +189,21 @@ where
                 is_pure,
                 body,
             }) => todo!(),
-            Any::Block(Block(_)) => todo!(),
+            Any::Block(Block(statements)) => {
+                f.write_str("{\n")?;
+                for stmt in statements {
+                    stmt.format(f, opts)?;
+                    match stmt.downcast() {
+                        Statement::Invocation(_) => f.write_char(';')?,
+                        Statement::Assignment(_) => f.write_char(';')?,
+                        Statement::ValueDeclaration(_) => f.write_char(';')?,
+                        Statement::ThrowStatement(_) => f.write_char(';')?,
+                        _ => {}
+                    };
+                    f.write_char('\n')?;
+                }
+                f.write_char('}')
+            }
             Any::JavascriptEscape(JavascriptEscape(_)) => todo!(),
             Any::RangeExpression(RangeExpression { start, end }) => {
                 start.format(f, opts)?;
@@ -204,18 +221,101 @@ where
                 type_args,
                 bubbles,
                 awaited_or_detached,
-            }) => todo!(),
+            }) => {
+                if let Some(awaited_or_detached) = awaited_or_detached {
+                    f.write_str(awaited_or_detached.into())?;
+                }
+
+                subject.format(f, opts)?;
+
+                if type_args.len() > 0 {
+                    f.write_char('<')?;
+                    for (index, arg) in type_args.iter().enumerate() {
+                        if index > 0 {
+                            f.write_str(", ")?;
+                        }
+
+                        arg.format(f, opts)?;
+                    }
+                    f.write_char('>')?;
+                }
+
+                f.write_char('(')?;
+                for (index, arg) in args.iter().enumerate() {
+                    if index > 0 {
+                        f.write_str(", ")?;
+                    }
+
+                    arg.format(f, opts)?;
+                }
+                if let Some(spread_args) = spread_args {
+                    if args.len() > 0 {
+                        f.write_str(", ")?;
+                    }
+
+                    spread_args.format(f, opts)?;
+                }
+                f.write_char(')')?;
+
+                if *bubbles {
+                    f.write_char('?')?;
+                }
+
+                Ok(())
+            }
             Any::PropertyAccessor(PropertyAccessor {
                 subject,
                 property,
                 optional,
-            }) => todo!(),
+            }) => {
+                subject.format(f, opts)?;
+
+                match property {
+                    Property::Expression(expr) => {
+                        if *optional {
+                            f.write_str("?.")?;
+                        }
+
+                        f.write_char('[')?;
+                        expr.format(f, opts)?;
+                        f.write_char(']')
+                    }
+                    Property::PlainIdentifier(ident) => {
+                        if *optional {
+                            f.write_str("?")?;
+                        }
+
+                        f.write_char('.')?;
+                        ident.format(f, opts)
+                    }
+                }
+            }
             Any::IfElseExpression(IfElseExpression {
                 cases,
                 default_case,
-            }) => todo!(),
+            }) => {
+                for (index, case) in cases.iter().enumerate() {
+                    if index > 0 {
+                        f.write_str(" else ")?;
+                    }
+
+                    case.format(f, opts)?;
+                }
+
+                if let Some(default_case) = default_case {
+                    f.write_str(" else { ")?;
+                    default_case.format(f, opts)?;
+                    f.write_str(" }")?;
+                }
+
+                Ok(())
+            }
             Any::IfElseExpressionCase(IfElseExpressionCase { condition, outcome }) => {
-                todo!()
+                f.write_str("if ")?;
+                condition.format(f, opts)?;
+                f.write_str(" { ")?;
+                outcome.format(f, opts)?;
+                f.write_str(" }")
             }
             Any::SwitchExpression(SwitchExpression {
                 value,
@@ -249,8 +349,11 @@ where
 
                 Ok(())
             }
-            Any::MaybeType(MaybeType(_)) => todo!(),
-            Any::NamedType(NamedType(_)) => todo!(),
+            Any::MaybeType(MaybeType(inner)) => {
+                inner.format(f, opts)?;
+                f.write_char('?')
+            }
+            Any::NamedType(NamedType(name)) => name.format(f, opts),
             Any::GenericParamType(GenericParamType { name, extends }) => todo!(),
             Any::ProcType(ProcType {
                 args,
@@ -331,9 +434,16 @@ where
             Any::NumberType(_) => f.write_str("number"),
             Any::BooleanType(_) => f.write_str("boolean"),
             Any::NilType(_) => f.write_str("nil"),
-            Any::ParenthesizedType(ParenthesizedType(_)) => todo!(),
-            Any::TypeofType(TypeofType(_)) => todo!(),
-            Any::UnknownType(_) => todo!(),
+            Any::UnknownType(_) => f.write_str("unknown"),
+            Any::ParenthesizedType(ParenthesizedType(inner)) => {
+                f.write_char('(')?;
+                inner.format(f, opts)?;
+                f.write_char(')')
+            }
+            Any::TypeofType(TypeofType(inner)) => {
+                f.write_str("typeof ")?;
+                inner.format(f, opts)
+            }
             Any::RegularExpressionType(_) => todo!(),
             Any::PropertyType(PropertyType {
                 subject,
@@ -355,7 +465,15 @@ where
                 target,
                 value,
                 operator,
-            }) => todo!(),
+            }) => {
+                target.format(f, opts)?;
+                f.write_char(' ')?;
+                if let Some(operator) = operator {
+                    operator.format(f, opts)?;
+                }
+                f.write_str("= ")?;
+                value.format(f, opts)
+            }
             Any::TryCatch(TryCatch {
                 try_block,
                 error_identifier,

@@ -866,9 +866,11 @@ pub enum RegularExpressionFlag {
     Y,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
 pub enum AwaitOrDetach {
+    #[strum(serialize = "await")]
     Await,
+    #[strum(serialize = "detach")]
     Detach,
 }
 
