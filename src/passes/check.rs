@@ -3,7 +3,7 @@ use crate::{
         ast::*,
         bgl_type::{
             any_array, any_error, any_iterator, any_object, any_plan, string_template_safe_types,
-            truthiness_safe_types, Mutability, SubsumationContext, Type,
+            Mutability, SubsumationContext, Type,
         },
         errors::blue_string,
         slice::Slice,
@@ -243,9 +243,11 @@ where
                         type_annotation.check(ctx, report_error);
 
                         if let Some(type_annotation) = type_annotation {
-                            let type_annotation = Type::MutabilityType {
-                                mutability: Mutability::Constant,
-                                inner: Rc::new(type_annotation.resolve_type(ctx.into())),
+                            let type_annotation = type_annotation.resolve_type(ctx.into());
+                            let type_annotation = if *is_const {
+                                type_annotation.with_mutability(Mutability::Constant)
+                            } else {
+                                type_annotation
                             };
 
                             check_subsumation(
@@ -366,7 +368,7 @@ where
                 inner.check(ctx, report_error);
 
                 check_subsumation(
-                    &truthiness_safe_types(),
+                    &Type::ANY_BOOLEAN,
                     inner.infer_type(ctx.into()),
                     inner.slice(),
                     report_error,
@@ -705,7 +707,7 @@ where
                 outcome.check(ctx, report_error);
 
                 check_subsumation(
-                    &truthiness_safe_types(),
+                    &Type::ANY_BOOLEAN,
                     condition.infer_type(ctx.into()),
                     condition.slice(),
                     report_error,
@@ -881,7 +883,7 @@ where
                 outcome.check(ctx, report_error);
 
                 check_subsumation(
-                    &truthiness_safe_types(),
+                    &Type::ANY_BOOLEAN,
                     condition.infer_type(ctx.into()),
                     condition.slice(),
                     report_error,
@@ -908,7 +910,7 @@ where
                 body.check(ctx, report_error);
 
                 check_subsumation(
-                    &truthiness_safe_types(),
+                    &Type::ANY_BOOLEAN,
                     condition.infer_type(ctx.into()),
                     condition.slice(),
                     report_error,

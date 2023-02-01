@@ -15,8 +15,8 @@ use crate::{
 
 use super::{
     ast::{
-        Any, ElementOrSpread, KeyValueOrSpread, LocalIdentifier, SpecialTypeKind, TypeDeclaration,
-        AST,
+        Any, ElementOrSpread, KeyValueOrSpread, LocalIdentifier, ModifierTypeKind, SpecialTypeKind,
+        TypeDeclaration, AST,
     },
     module::Module,
     slice::Slice,
@@ -24,12 +24,8 @@ use super::{
 
 #[derive(Clone, Debug, PartialEq, EnumVariantType)]
 pub enum Type {
-    // meta types
-    ElementofType(Rc<Type>),
-    ValueofType(Rc<Type>),
-    KeyofType(Rc<Type>),
-    MutabilityType {
-        mutability: Mutability,
+    ModifierType {
+        kind: ModifierTypeKind,
         inner: Rc<Type>,
     },
     InnerType {
@@ -43,7 +39,10 @@ pub enum Type {
         // optional: bool,
     },
 
-    NamedType(AST<LocalIdentifier>),
+    NamedType {
+        mutability: Mutability,
+        name: AST<LocalIdentifier>,
+    },
 
     // procs/funcs
     ProcType {
@@ -68,15 +67,23 @@ pub enum Type {
         inner: Rc<Type>,
     },
     ObjectType {
+        mutability: Mutability,
         entries: Vec<KeyValueOrSpread<Type>>,
         is_interface: bool,
     },
     RecordType {
+        mutability: Mutability,
         key_type: Rc<Type>,
         value_type: Rc<Type>,
     },
-    ArrayType(Rc<Type>),
-    TupleType(Vec<ElementOrSpread<Type>>),
+    ArrayType {
+        mutability: Mutability,
+        element_type: Rc<Type>,
+    },
+    TupleType {
+        mutability: Mutability,
+        members: Vec<ElementOrSpread<Type>>,
+    },
 
     // promitives
     RegularExpressionType, // TODO: Number of match groups?
@@ -89,7 +96,7 @@ pub enum Type {
     NilType,
 
     // special signifiers
-    UnknownType,
+    UnknownType(Mutability),
     PoisonedType,
     AnyType,
 }
@@ -109,50 +116,22 @@ impl Ord for Type {
 }
 
 #[memoize]
-pub fn truthiness_safe_types() -> Type {
-    Type::UnionType(vec![
-        Type::ANY_BOOLEAN,
-        Type::NilType,
-        // RECORD_OF_ANY,
-        any_array(),
-        any_iterator(),
-        any_plan(),
-        // PROC,
-        // FUNC
-    ])
-}
-
-#[memoize]
-pub fn falsy_types() -> Type {
-    Type::UnionType(vec![Type::BooleanType(Some(false)), Type::NilType])
-}
-
-#[memoize]
-pub fn truthy_types() -> Type {
-    Type::UnionType(vec![
-        Type::BooleanType(Some(true)),
-        // RECORD_OF_ANY,
-        any_array(),
-        any_iterator(),
-        any_plan(),
-        // PROC,
-        // FUNC
-    ])
-}
-
-#[memoize]
 pub fn string_template_safe_types() -> Type {
     Type::UnionType(vec![Type::ANY_STRING, Type::ANY_NUMBER, Type::ANY_BOOLEAN])
 }
 
 #[memoize]
 pub fn any_array() -> Type {
-    Type::ArrayType(Rc::new(Type::AnyType))
+    Type::ArrayType {
+        mutability: Mutability::Readonly,
+        element_type: Rc::new(Type::AnyType),
+    }
 }
 
 #[memoize]
 pub fn any_object() -> Type {
     Type::RecordType {
+        mutability: Mutability::Readonly,
         key_type: Rc::new(Type::AnyType),
         value_type: Rc::new(Type::AnyType),
     }
@@ -220,36 +199,35 @@ impl Type {
             return None;
         }
 
-        if ctx.dest_mutability.is_mutable() && !ctx.val_mutability.is_mutable() {
-            return Some(SubsumationIssue::Mutability(
-                destination.clone(),
-                value.clone(),
-            ));
-        }
-
         match (destination, value) {
-            (Type::MutabilityType { mutability, inner }, value) => {
-                if inner.subsumes(ctx.with_dest_mutability(*mutability), value) {
-                    return None;
-                }
-            }
-            (dest, Type::MutabilityType { mutability, inner }) => {
-                if dest.subsumes(ctx.with_val_mutability(*mutability), inner) {
-                    return None;
-                }
-            }
-            (Type::ArrayType(destination_element), Type::ArrayType(value_element)) => {
-                if (ctx.dest_mutability.encompasses(ctx.val_mutability)
-                    && destination_element.subsumes(ctx, value_element))
-                    || (ctx.dest_mutability == Mutability::Mutable
-                        && ctx.val_mutability == Mutability::Mutable
-                        && destination_element == value_element)
+            (
+                Type::ArrayType {
+                    mutability: destination_mutability,
+                    element_type: destination_element,
+                },
+                Type::ArrayType {
+                    mutability: value_mutability,
+                    element_type: value_element,
+                },
+            ) => {
+                if destination_mutability
+                    .encompasses(*value_mutability, || destination_element == value_element)
+                    && destination_element.subsumes(ctx, value_element)
                 {
                     return None;
                 }
             }
-            (Type::ArrayType(destination_element), Type::TupleType(value_members)) => {
-                if ctx.dest_mutability.encompasses(ctx.val_mutability)
+            (
+                Type::ArrayType {
+                    mutability: destination_mutability,
+                    element_type: destination_element,
+                },
+                Type::TupleType {
+                    mutability: value_mutability,
+                    members: value_members,
+                },
+            ) => {
+                if destination_mutability.encompasses(*value_mutability, || false)
                     && value_members.iter().all(|member| match member {
                         ElementOrSpread::Element(element) => {
                             destination_element.subsumes(ctx, element)
@@ -260,8 +238,18 @@ impl Type {
                     return None;
                 }
             }
-            (Type::TupleType(destination_members), Type::TupleType(value_members)) => {
-                if (ctx.dest_mutability.encompasses(ctx.val_mutability)
+            (
+                Type::TupleType {
+                    mutability: destination_mutability,
+                    members: destination_members,
+                },
+                Type::TupleType {
+                    mutability: value_mutability,
+                    members: value_members,
+                },
+            ) => {
+                if destination_mutability
+                    .encompasses(*value_mutability, || destination_members == value_members)
                     && value_members.len() >= destination_members.len()
                     && destination_members.iter().zip(value_members.iter()).all(
                         |(destination, value)| match (destination, value) {
@@ -271,46 +259,45 @@ impl Type {
                             ) => destination_element.subsumes(ctx, value_element),
                             _ => false,
                         },
-                    ))
-                    || (ctx.dest_mutability == Mutability::Mutable
-                        && ctx.val_mutability == Mutability::Mutable
-                        && destination_members == value_members)
+                    )
                 {
                     return None;
                 }
             }
             (
                 Type::RecordType {
+                    mutability: destination_mutability,
                     key_type: destination_key_type,
                     value_type: destination_value_type,
                 },
                 Type::RecordType {
+                    mutability: value_mutability,
                     key_type: value_key_type,
                     value_type: value_value_type,
                 },
             ) => {
-                if (ctx.dest_mutability == Mutability::Readonly
-                    && destination_key_type.subsumes(ctx, value_key_type)
-                    && destination_value_type.subsumes(ctx, value_value_type))
-                    || (ctx.dest_mutability == Mutability::Mutable
-                        && ctx.val_mutability == Mutability::Mutable
-                        && destination_key_type == value_key_type
-                        && destination_value_type == value_value_type)
+                if destination_mutability.encompasses(*value_mutability, || {
+                    destination_key_type == value_key_type
+                        && destination_value_type == value_value_type
+                }) && destination_key_type.subsumes(ctx, value_key_type)
+                    && destination_value_type.subsumes(ctx, value_value_type)
                 {
                     return None;
                 }
             }
             (
                 Type::RecordType {
+                    mutability: destination_mutability,
                     key_type: destination_key_type,
                     value_type: destination_value_type,
                 },
                 Type::ObjectType {
+                    mutability: value_mutability,
                     entries: value_entries,
                     is_interface: value_is_interface,
                 },
             ) => {
-                if ctx.dest_mutability == Mutability::Readonly
+                if *destination_mutability == Mutability::Readonly
                     && !*value_is_interface
                     && value_entries.iter().all(|value_entry| match value_entry {
                         KeyValueOrSpread::KeyValue(key, value) => {
@@ -325,17 +312,18 @@ impl Type {
             }
             (
                 Type::ObjectType {
+                    mutability: destination_mutability,
                     entries: destination_entries,
                     is_interface: destination_is_interface,
                 },
                 Type::ObjectType {
+                    mutability: value_mutability,
                     entries: value_entries,
                     is_interface: value_is_interface,
                 },
             ) => {
-                if ctx.dest_mutability.encompasses(ctx.val_mutability)
-                    && (*destination_is_interface || !*value_is_interface)
-                    && destination_entries
+                let properties_match =
+                    destination_entries
                         .iter()
                         .all(|destination_entry| match destination_entry {
                             KeyValueOrSpread::KeyValue(destination_key, destination_value) => {
@@ -350,7 +338,11 @@ impl Type {
                             KeyValueOrSpread::Spread(destination_spread) => {
                                 destination_spread.subsumes(ctx, value)
                             }
-                        })
+                        });
+
+                if destination_mutability.encompasses(*value_mutability, || properties_match)
+                    && (*destination_is_interface || !*value_is_interface)
+                    && properties_match
                 {
                     return None;
                 }
@@ -513,7 +505,7 @@ impl Type {
                 }
                 .subsumation_issues(ctx, value_inner)
             }
-            (Type::UnknownType, _) => {
+            (Type::UnknownType(destination_mutability), value) => {
                 return None;
             }
             (Type::AnyType, _) => {
@@ -658,11 +650,12 @@ impl Type {
 
     fn simplify<'a>(self, ctx: ResolveContext<'a>, symbols_encountered: &Vec<Slice>) -> Type {
         match self {
-            Type::NamedType(name) => {
+            Type::NamedType { mutability, name } => {
                 let name_slice = name.downcast().0;
 
                 if symbols_encountered.contains(&name_slice) {
-                    Type::NamedType(name)
+                    // encountered cycle, bail out here to avoid infinite loop
+                    Type::NamedType { mutability, name }
                 } else {
                     let symbols_encountered = symbols_encountered
                         .iter()
@@ -682,6 +675,7 @@ impl Type {
                         })
                         .unwrap_or(Type::PoisonedType)
                         .simplify(ctx, symbols_encountered)
+                        .with_mutability(mutability)
                 }
             }
             Type::UnionType(mut members) => {
@@ -711,13 +705,20 @@ impl Type {
                 let subject = subject.as_ref().clone().simplify(ctx, symbols_encountered);
                 let property = property.as_ref().clone().simplify(ctx, symbols_encountered);
 
+                println!("subject: {:?}", subject);
+
+                // specific named properties
                 if let Type::StringType(Some(s)) = &property {
                     if s.as_str() == "length" {
                         match subject {
-                            Type::ArrayType(_) => return Type::ANY_NUMBER,
-                            Type::TupleType(members) => {
-                                return Type::exact_number(members.len() as i32)
-                            }
+                            Type::ArrayType {
+                                mutability: _,
+                                element_type: _,
+                            } => return Type::ANY_NUMBER,
+                            Type::TupleType {
+                                mutability: _,
+                                members,
+                            } => return Type::exact_number(members.len() as i32),
                             Type::StringType(string) => {
                                 return match string {
                                     Some(string) => Type::exact_number(string.len() as i32),
@@ -740,6 +741,7 @@ impl Type {
 
                 match subject {
                     Type::ObjectType {
+                        mutability,
                         entries,
                         is_interface: _,
                     } => entries
@@ -755,8 +757,10 @@ impl Type {
                             KeyValueOrSpread::Spread(_) => None,
                         })
                         .cloned()
-                        .unwrap_or(Type::PoisonedType),
+                        .unwrap_or(Type::PoisonedType)
+                        .with_mutability(mutability),
                     Type::RecordType {
+                        mutability,
                         key_type,
                         value_type,
                     } => {
@@ -766,46 +770,48 @@ impl Type {
                             Type::PoisonedType
                         }
                     }
-                    Type::TupleType(members) => {
-                        if let Type::NumberType { min, max } = property {
-                            let len = members.len() as i32;
-                            let min = min.unwrap_or(0);
-                            let max = max.unwrap_or(len - 1);
+                    Type::TupleType {
+                        mutability,
+                        members,
+                    } => if let Type::NumberType { min, max } = property {
+                        let len = members.len() as i32;
+                        let min = min.unwrap_or(0);
+                        let max = max.unwrap_or(len - 1);
 
-                            if min == max {
-                                if min >= 0 && max < len {
-                                    members
-                                        .get(min as usize)
-                                        .map(|member| match member {
-                                            ElementOrSpread::Element(element) => element,
-                                            ElementOrSpread::Spread(_) => unreachable!(),
-                                        })
-                                        .cloned()
-                                        .unwrap_or(Type::PoisonedType)
-                                } else {
-                                    Type::PoisonedType
-                                }
-                            } else {
-                                let mut members_type: Vec<Type> = members
-                                    [(min as usize).max(0)..(max as usize).min(members.len() - 1)]
-                                    .iter()
+                        if min == max {
+                            if min >= 0 && max < len {
+                                members
+                                    .get(min as usize)
                                     .map(|member| match member {
                                         ElementOrSpread::Element(element) => element,
                                         ElementOrSpread::Spread(_) => unreachable!(),
                                     })
                                     .cloned()
-                                    .collect();
-
-                                if min < 0 || max > len - 1 {
-                                    members_type.push(Type::NilType);
-                                }
-
-                                Type::UnionType(members_type)
+                                    .unwrap_or(Type::PoisonedType)
+                            } else {
+                                Type::PoisonedType
                             }
                         } else {
-                            Type::PoisonedType
+                            let mut members_type: Vec<Type> = members
+                                [(min as usize).max(0)..(max as usize).min(members.len() - 1)]
+                                .iter()
+                                .map(|member| match member {
+                                    ElementOrSpread::Element(element) => element,
+                                    ElementOrSpread::Spread(_) => unreachable!(),
+                                })
+                                .cloned()
+                                .collect();
+
+                            if min < 0 || max > len - 1 {
+                                members_type.push(Type::NilType);
+                            }
+
+                            Type::UnionType(members_type)
                         }
+                    } else {
+                        Type::PoisonedType
                     }
+                    .with_mutability(mutability),
                     Type::StringType(Some(string)) => {
                         if let Type::NumberType { min, max } = property {
                             let len = string.len() as i32;
@@ -853,9 +859,16 @@ impl Type {
                             Type::PoisonedType
                         }
                     }
-                    Type::ArrayType(element) => {
+                    Type::ArrayType {
+                        mutability,
+                        element_type,
+                    } => {
                         if let Type::NumberType { min: _, max: _ } = property {
-                            element.as_ref().clone().union(Type::NilType)
+                            element_type
+                                .as_ref()
+                                .clone()
+                                .union(Type::NilType)
+                                .with_mutability(mutability)
                         } else {
                             Type::PoisonedType
                         }
@@ -863,68 +876,75 @@ impl Type {
                     _ => Type::PoisonedType,
                 }
             }
-            Type::ElementofType(inner) => {
-                let inner = inner.as_ref().clone().simplify(ctx, symbols_encountered);
-                println!("Type::ElementofType -> {:?}", inner);
-
-                match inner {
-                    Type::ArrayType(element) => element.as_ref().clone(),
-                    Type::TupleType(members) => Type::UnionType(
-                        members
-                            .into_iter()
-                            .map(|member| match member {
-                                ElementOrSpread::Element(element) => element,
-                                ElementOrSpread::Spread(_) => unreachable!(),
-                            })
-                            .collect(),
-                    ),
-                    _ => Type::PoisonedType,
-                }
-            }
-            Type::KeyofType(inner) => {
+            Type::ModifierType { kind, inner } => {
                 let inner = inner.as_ref().clone().simplify(ctx, symbols_encountered);
 
-                match inner {
-                    Type::RecordType {
-                        key_type,
-                        value_type: _,
-                    } => key_type.as_ref().clone(),
-                    Type::ObjectType {
-                        entries,
-                        is_interface: _,
-                    } => Type::UnionType(
-                        entries
-                            .into_iter()
-                            .map(|entry| match entry {
-                                KeyValueOrSpread::KeyValue(key, _) => key,
-                                KeyValueOrSpread::Spread(_) => unreachable!(),
-                            })
-                            .collect(),
-                    ),
-                    _ => Type::PoisonedType,
-                }
-            }
-            Type::ValueofType(inner) => {
-                let inner = inner.as_ref().clone().simplify(ctx, symbols_encountered);
-
-                match inner {
-                    Type::RecordType {
-                        key_type: _,
-                        value_type,
-                    } => value_type.as_ref().clone(),
-                    Type::ObjectType {
-                        entries,
-                        is_interface: _,
-                    } => Type::UnionType(
-                        entries
-                            .into_iter()
-                            .map(|entry| match entry {
-                                KeyValueOrSpread::KeyValue(_, value) => value,
-                                KeyValueOrSpread::Spread(_) => unreachable!(),
-                            })
-                            .collect(),
-                    ),
-                    _ => Type::PoisonedType,
+                match kind {
+                    ModifierTypeKind::Readonly => inner.with_mutability(Mutability::Readonly),
+                    ModifierTypeKind::Keyof => match inner {
+                        Type::RecordType {
+                            mutability,
+                            key_type,
+                            value_type: _,
+                        } => key_type.as_ref().clone().with_mutability(mutability),
+                        Type::ObjectType {
+                            mutability,
+                            entries,
+                            is_interface: _,
+                        } => Type::UnionType(
+                            entries
+                                .into_iter()
+                                .map(|entry| match entry {
+                                    KeyValueOrSpread::KeyValue(key, _) => key,
+                                    KeyValueOrSpread::Spread(_) => unreachable!(),
+                                })
+                                .collect(),
+                        )
+                        .with_mutability(mutability),
+                        _ => Type::PoisonedType,
+                    },
+                    ModifierTypeKind::Valueof => match inner {
+                        Type::RecordType {
+                            mutability,
+                            key_type: _,
+                            value_type,
+                        } => value_type.as_ref().clone().with_mutability(mutability),
+                        Type::ObjectType {
+                            mutability,
+                            entries,
+                            is_interface: _,
+                        } => Type::UnionType(
+                            entries
+                                .into_iter()
+                                .map(|entry| match entry {
+                                    KeyValueOrSpread::KeyValue(_, value) => value,
+                                    KeyValueOrSpread::Spread(_) => unreachable!(),
+                                })
+                                .collect(),
+                        )
+                        .with_mutability(mutability),
+                        _ => Type::PoisonedType,
+                    },
+                    ModifierTypeKind::Elementof => match inner {
+                        Type::ArrayType {
+                            mutability,
+                            element_type,
+                        } => element_type.as_ref().clone().with_mutability(mutability),
+                        Type::TupleType {
+                            mutability,
+                            members,
+                        } => Type::UnionType(
+                            members
+                                .into_iter()
+                                .map(|member| match member {
+                                    ElementOrSpread::Element(element) => element,
+                                    ElementOrSpread::Spread(_) => unreachable!(),
+                                })
+                                .collect(),
+                        )
+                        .with_mutability(mutability),
+                        _ => Type::PoisonedType,
+                    },
                 }
             }
             Type::InnerType { kind, inner } => {
@@ -946,6 +966,7 @@ impl Type {
                 }
             }
             Type::ObjectType {
+                mutability,
                 entries,
                 is_interface,
             } => {
@@ -962,6 +983,7 @@ impl Type {
                         KeyValueOrSpread::Spread(spread) => {
                             match spread.simplify(ctx, symbols_encountered) {
                                 Type::ObjectType {
+                                    mutability,
                                     mut entries,
                                     is_interface: _,
                                 } => flattened_entries.append(&mut entries),
@@ -972,11 +994,15 @@ impl Type {
                 }
 
                 Type::ObjectType {
+                    mutability,
                     entries: flattened_entries,
                     is_interface,
                 }
             }
-            Type::TupleType(members) => {
+            Type::TupleType {
+                mutability,
+                members,
+            } => {
                 let mut simplified_members = Vec::new();
                 let mut is_array = false;
 
@@ -989,7 +1015,10 @@ impl Type {
                             let spread = spread.simplify(ctx, symbols_encountered);
 
                             match spread {
-                                Type::TupleType(spread_members) => {
+                                Type::TupleType {
+                                    mutability: _,
+                                    members: spread_members,
+                                } => {
                                     for spread_member in spread_members {
                                         match spread_member {
                                             ElementOrSpread::Element(element) => {
@@ -999,7 +1028,10 @@ impl Type {
                                         }
                                     }
                                 }
-                                Type::ArrayType(spread_element) => {
+                                Type::ArrayType {
+                                    mutability: _,
+                                    element_type: spread_element,
+                                } => {
                                     is_array = true;
                                     simplified_members.push(spread_element.as_ref().clone());
                                 }
@@ -1010,19 +1042,25 @@ impl Type {
                 }
 
                 match is_array {
-                    true => Type::ArrayType(Rc::new(Type::UnionType(simplified_members))),
-                    false => Type::TupleType(
-                        simplified_members
+                    true => Type::ArrayType {
+                        mutability,
+                        element_type: Rc::new(Type::UnionType(simplified_members)),
+                    },
+                    false => Type::TupleType {
+                        mutability,
+                        members: simplified_members
                             .into_iter()
                             .map(ElementOrSpread::Element)
                             .collect(),
-                    ),
+                    },
                 }
             }
             Type::RecordType {
+                mutability,
                 key_type,
                 value_type,
             } => Type::RecordType {
+                mutability,
                 key_type: Rc::new(key_type.as_ref().clone().simplify(ctx, symbols_encountered)),
                 value_type: Rc::new(
                     value_type
@@ -1031,9 +1069,18 @@ impl Type {
                         .simplify(ctx, symbols_encountered),
                 ),
             },
-            Type::ArrayType(element) => Type::ArrayType(Rc::new(
-                element.as_ref().clone().simplify(ctx, symbols_encountered),
-            )),
+            Type::ArrayType {
+                mutability,
+                element_type,
+            } => Type::ArrayType {
+                mutability,
+                element_type: Rc::new(
+                    element_type
+                        .as_ref()
+                        .clone()
+                        .simplify(ctx, symbols_encountered),
+                ),
+            },
             Type::SpecialType { kind, inner } => Type::SpecialType {
                 kind,
                 inner: Rc::new(inner.as_ref().clone().simplify(ctx, symbols_encountered)),
@@ -1044,20 +1091,17 @@ impl Type {
 
     fn order(&self) -> u8 {
         match self {
-            Type::ElementofType(_) => 0,
-            Type::ValueofType(_) => 1,
-            Type::KeyofType(_) => 2,
-            Type::MutabilityType {
-                mutability: _,
-                inner: _,
-            } => 3,
+            Type::ModifierType { kind: _, inner: _ } => 3,
             Type::InnerType { kind: _, inner: _ } => 4,
             Type::ReturnType(_) => 5,
             Type::PropertyType {
                 subject: _,
                 property: _,
             } => 6,
-            Type::NamedType(_) => 7,
+            Type::NamedType {
+                mutability: _,
+                name: _,
+            } => 7,
             Type::ProcType {
                 args: _,
                 args_spread: _,
@@ -1074,23 +1118,104 @@ impl Type {
             Type::UnionType(_) => 10,
             Type::SpecialType { kind: _, inner: _ } => 11,
             Type::ObjectType {
+                mutability: _,
                 entries: _,
                 is_interface: _,
             } => 12,
             Type::RecordType {
+                mutability: _,
                 key_type: _,
                 value_type: _,
             } => 13,
-            Type::ArrayType(_) => 14,
-            Type::TupleType(_) => 15,
+            Type::ArrayType {
+                mutability: _,
+                element_type: _,
+            } => 14,
+            Type::TupleType {
+                mutability: _,
+                members: _,
+            } => 15,
             Type::RegularExpressionType => 16,
             Type::StringType(_) => 17,
             Type::NumberType { min: _, max: _ } => 18,
             Type::BooleanType(_) => 19,
             Type::NilType => 20,
-            Type::UnknownType => 21,
+            Type::UnknownType(_) => 21,
             Type::PoisonedType => 22,
             Type::AnyType => 23,
+        }
+    }
+
+    pub fn with_mutability(self, new_mutability: Mutability) -> Self {
+        match self {
+            // actually have mutability
+            Type::UnknownType(mutability) => Type::UnknownType(mutability.or(new_mutability)),
+            Type::NamedType { mutability, name } => Type::NamedType {
+                mutability: mutability.or(new_mutability),
+                name,
+            },
+            Type::ObjectType {
+                mutability,
+                entries,
+                is_interface,
+            } => Type::ObjectType {
+                mutability: mutability.or(new_mutability),
+                entries,
+                is_interface,
+            },
+            Type::RecordType {
+                mutability,
+                key_type,
+                value_type,
+            } => Type::RecordType {
+                mutability: mutability.or(new_mutability),
+                key_type,
+                value_type,
+            },
+            Type::ArrayType {
+                mutability,
+                element_type,
+            } => Type::ArrayType {
+                mutability: mutability.or(new_mutability),
+                element_type,
+            },
+            Type::TupleType {
+                mutability,
+                members,
+            } => Type::TupleType {
+                mutability: mutability.or(new_mutability),
+                members,
+            },
+
+            // recursive
+            Type::ModifierType { kind, inner } => Type::ModifierType {
+                kind,
+                inner: Rc::new(inner.as_ref().clone().with_mutability(new_mutability)),
+            },
+            Type::ReturnType(inner) => Type::ReturnType(Rc::new(
+                inner.as_ref().clone().with_mutability(new_mutability),
+            )),
+            Type::UnionType(members) => Type::UnionType(
+                members
+                    .into_iter()
+                    .map(|m| m.with_mutability(new_mutability))
+                    .collect(),
+            ),
+            // Type::PropertyType { subject, property } => todo!(),
+            // Type::ProcType {
+            //     args,
+            //     args_spread,
+            //     is_pure,
+            //     is_async,
+            //     throws,
+            // } => todo!(),
+            // Type::FuncType {
+            //     args,
+            //     args_spread,
+            //     is_pure,
+            //     returns,
+            // } => todo!(),
+            _ => self,
         }
     }
 }
@@ -1099,8 +1224,6 @@ impl Type {
 pub struct SubsumationContext<'a> {
     pub modules: &'a ModulesStore,
     pub current_module: &'a Module,
-    pub dest_mutability: Mutability,
-    pub val_mutability: Mutability,
 }
 
 impl<'a> From<&CheckContext<'a>> for SubsumationContext<'a> {
@@ -1114,8 +1237,6 @@ impl<'a> From<&CheckContext<'a>> for SubsumationContext<'a> {
         Self {
             modules,
             current_module,
-            dest_mutability: Mutability::Mutable,
-            val_mutability: Mutability::Mutable,
         }
     }
 }
@@ -1130,8 +1251,6 @@ impl<'a> From<InferTypeContext<'a>> for SubsumationContext<'a> {
         Self {
             modules,
             current_module,
-            dest_mutability: Mutability::Mutable,
-            val_mutability: Mutability::Mutable,
         }
     }
 }
@@ -1146,28 +1265,6 @@ impl<'a> From<ResolveContext<'a>> for SubsumationContext<'a> {
         Self {
             modules,
             current_module,
-            dest_mutability: Mutability::Mutable,
-            val_mutability: Mutability::Mutable,
-        }
-    }
-}
-
-impl<'a> SubsumationContext<'a> {
-    pub fn with_dest_mutability(self, dest_mutability: Mutability) -> Self {
-        Self {
-            modules: self.modules,
-            current_module: self.current_module,
-            dest_mutability,
-            val_mutability: self.val_mutability,
-        }
-    }
-
-    pub fn with_val_mutability(self, val_mutability: Mutability) -> Self {
-        Self {
-            modules: self.modules,
-            current_module: self.current_module,
-            dest_mutability: self.dest_mutability,
-            val_mutability,
         }
     }
 }
@@ -1175,14 +1272,9 @@ impl<'a> SubsumationContext<'a> {
 impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Type::ElementofType(inner) => f.write_fmt(format_args!("elementof {}", inner)),
-            Type::ValueofType(inner) => f.write_fmt(format_args!("valueof {}", inner)),
-            Type::KeyofType(inner) => f.write_fmt(format_args!("keyof {}", inner)),
-            Type::MutabilityType { mutability, inner } => {
-                if let Some(mutability) = mutability.display_name() {
-                    f.write_str(mutability)?;
-                    f.write_char(' ')?;
-                }
+            Type::ModifierType { kind, inner } => {
+                f.write_str(kind.into())?;
+                f.write_char(' ')?;
                 inner.fmt(f)
             }
             Type::InnerType { kind, inner } => todo!(),
@@ -1195,7 +1287,10 @@ impl Display for Type {
                 }
             }
 
-            Type::NamedType(name) => f.write_str(name.downcast().0.as_str()),
+            Type::NamedType {
+                mutability: _,
+                name,
+            } => f.write_str(name.downcast().0.as_str()),
 
             Type::ProcType {
                 args,
@@ -1273,9 +1368,11 @@ impl Display for Type {
                 f.write_fmt(format_args!("{}<{}>", kind, inner))
             }
             Type::ObjectType {
+                mutability,
                 entries,
                 is_interface,
             } => {
+                f.write_str(mutability.display_prefix())?;
                 f.write_char('{')?;
                 for (index, entry) in entries.iter().enumerate() {
                     if index > 0 {
@@ -1294,17 +1391,31 @@ impl Display for Type {
                 f.write_char('}')
             }
             Type::RecordType {
+                mutability,
                 key_type,
                 value_type,
-            } => f.write_fmt(format_args!("{{[{}]: {}}}", key_type, value_type)),
-            Type::ArrayType(element) => {
-                if matches!(element.as_ref(), Type::UnionType(_)) {
-                    f.write_fmt(format_args!("({})[]", element))
+            } => {
+                f.write_str(mutability.display_prefix())?;
+                f.write_fmt(format_args!("{{[{}]: {}}}", key_type, value_type))
+            }
+            Type::ArrayType {
+                mutability,
+                element_type,
+            } => {
+                f.write_str(mutability.display_prefix())?;
+
+                if matches!(element_type.as_ref(), Type::UnionType(_)) {
+                    f.write_fmt(format_args!("({})[]", element_type))
                 } else {
-                    f.write_fmt(format_args!("{}[]", element))
+                    f.write_fmt(format_args!("{}[]", element_type))
                 }
             }
-            Type::TupleType(members) => {
+            Type::TupleType {
+                mutability,
+                members,
+            } => {
+                f.write_str(mutability.display_prefix())?;
+
                 f.write_char('[')?;
                 for (index, member) in members.iter().enumerate() {
                     if index > 0 {
@@ -1346,7 +1457,10 @@ impl Display for Type {
                 None => "boolean",
             }),
             Type::NilType => f.write_str("nil"),
-            Type::UnknownType => f.write_str("unknown"),
+            Type::UnknownType(mutability) => {
+                f.write_str(mutability.display_prefix())?;
+                f.write_str("unknown")
+            }
             Type::PoisonedType => f.write_str("unknown"),
             Type::AnyType => f.write_str("any"),
         }
@@ -1362,30 +1476,31 @@ pub enum Mutability {
 }
 
 impl Mutability {
-    pub fn is_mutable(self) -> bool {
-        match self {
-            Mutability::Constant => false,
-            Mutability::Readonly => false,
-            Mutability::Mutable => true,
-            Mutability::Literal => true,
+    pub fn encompasses<F: Fn() -> bool>(self, other: Mutability, exactly_equal: F) -> bool {
+        match (self, other) {
+            (Mutability::Readonly, _) => true,
+            (_, Mutability::Literal) => true,
+            (Mutability::Mutable, Mutability::Mutable) => exactly_equal(),
+            (Mutability::Constant, Mutability::Constant) => true,
+            _ => false,
         }
     }
 
-    pub fn encompasses(self, other: Mutability) -> bool {
+    pub fn or(self, other: Mutability) -> Mutability {
         match self {
-            Mutability::Constant => other == Mutability::Constant || other == Mutability::Literal,
-            Mutability::Readonly => true,
-            Mutability::Mutable => other == Mutability::Literal,
-            Mutability::Literal => other == Mutability::Literal,
+            Mutability::Constant => self,
+            Mutability::Readonly => self,
+            Mutability::Mutable => other,
+            Mutability::Literal => other,
         }
     }
 
-    pub fn display_name(self) -> Option<&'static str> {
+    pub fn display_prefix(&self) -> &'static str {
         match self {
-            Mutability::Constant => Some("const"),
-            Mutability::Readonly => Some("readonly"),
-            Mutability::Mutable => None,
-            Mutability::Literal => None,
+            Mutability::Constant => "const ",
+            Mutability::Readonly => "readonly ",
+            Mutability::Mutable => "",
+            Mutability::Literal => "",
         }
     }
 }

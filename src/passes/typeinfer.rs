@@ -4,7 +4,7 @@ use crate::{
     model::ast::*,
     model::{
         ast::Any,
-        bgl_type::{falsy_types, truthy_types, Mutability, Type},
+        bgl_type::{Mutability, Type},
         module::Module,
     },
     passes::check::CheckContext,
@@ -167,41 +167,35 @@ impl AST<Expression> {
                     tag: _,
                     segments: _,
                 }) => Type::ANY_STRING,
-                Expression::ArrayLiteral(ArrayLiteral(members)) => Type::MutabilityType {
+                Expression::ArrayLiteral(ArrayLiteral(members)) => Type::TupleType {
                     mutability: Mutability::Literal,
-                    inner: Rc::new(Type::TupleType(
-                        members
-                            .into_iter()
-                            .map(|member| match member {
-                                ElementOrSpread::Element(element) => {
-                                    ElementOrSpread::Element(element.infer_type(ctx))
-                                }
-                                ElementOrSpread::Spread(spread) => {
-                                    ElementOrSpread::Spread(spread.infer_type(ctx))
-                                }
-                            })
-                            .collect(),
-                    )),
+                    members: members
+                        .into_iter()
+                        .map(|member| match member {
+                            ElementOrSpread::Element(element) => {
+                                ElementOrSpread::Element(element.infer_type(ctx))
+                            }
+                            ElementOrSpread::Spread(spread) => {
+                                ElementOrSpread::Spread(spread.infer_type(ctx))
+                            }
+                        })
+                        .collect(),
                 },
-                Expression::ObjectLiteral(ObjectLiteral(entries)) => Type::MutabilityType {
+                Expression::ObjectLiteral(ObjectLiteral(entries)) => Type::ObjectType {
                     mutability: Mutability::Literal,
-                    inner: Rc::new(Type::ObjectType {
-                        entries: entries
-                            .into_iter()
-                            .map(|entry| match entry {
-                                KeyValueOrSpread::KeyValue(key, value) => {
-                                    KeyValueOrSpread::KeyValue(
-                                        key.infer_type(ctx),
-                                        value.infer_type(ctx),
-                                    )
-                                }
-                                KeyValueOrSpread::Spread(expr) => {
-                                    KeyValueOrSpread::Spread(expr.infer_type(ctx))
-                                }
-                            })
-                            .collect(),
-                        is_interface: false,
-                    }),
+                    entries: entries
+                        .into_iter()
+                        .map(|entry| match entry {
+                            KeyValueOrSpread::KeyValue(key, value) => KeyValueOrSpread::KeyValue(
+                                key.infer_type(ctx),
+                                value.infer_type(ctx),
+                            ),
+                            KeyValueOrSpread::Spread(expr) => {
+                                KeyValueOrSpread::Spread(expr.infer_type(ctx))
+                            }
+                        })
+                        .collect(),
+                    is_interface: false,
                 },
                 Expression::NegationOperation(NegationOperation(_)) => Type::BooleanType(None),
                 Expression::Func(Func {
@@ -315,6 +309,19 @@ impl AST<Expression> {
                 }) => {
                     // TODO: optional
 
+                    println!(
+                        "{}",
+                        Type::PropertyType {
+                            subject: Rc::new(subject.infer_type(ctx)),
+                            property: Rc::new(match property.clone() {
+                                Property::Expression(expr) => expr.infer_type(ctx.into()),
+                                Property::PlainIdentifier(ident) => {
+                                    Type::StringType(Some(ident.downcast().0.clone()))
+                                }
+                            }),
+                        }
+                    );
+
                     Type::PropertyType {
                         subject: Rc::new(subject.infer_type(ctx)),
                         property: Rc::new(match property {
@@ -388,11 +395,11 @@ pub fn binary_operation_type<'a>(
         BinaryOperatorOp::NullishCoalescing => todo!(),
         BinaryOperatorOp::Or => left
             .infer_type(ctx)
-            .narrow(ctx.into(), &truthy_types())
+            .narrow(ctx.into(), &Type::BooleanType(Some(true)))
             .union(right.infer_type(ctx)),
         BinaryOperatorOp::And => left
             .infer_type(ctx)
-            .narrow(ctx.into(), &falsy_types())
+            .narrow(ctx.into(), &Type::BooleanType(Some(false)))
             .union(right.infer_type(ctx)),
         BinaryOperatorOp::Equals => Type::ANY_BOOLEAN,
         BinaryOperatorOp::NotEquals => Type::ANY_BOOLEAN,
@@ -418,7 +425,7 @@ pub fn binary_operation_type<'a>(
                 } else if Type::ANY_STRING.subsumes(ctx.into(), &right_type) {
                     Type::ANY_STRING
                 } else {
-                    Type::UnknownType
+                    Type::UnknownType(Mutability::Mutable)
                 }
             } else if Type::ANY_STRING.subsumes(ctx.into(), &left_type) {
                 if Type::ANY_NUMBER.subsumes(ctx.into(), &right_type)
@@ -426,10 +433,10 @@ pub fn binary_operation_type<'a>(
                 {
                     Type::ANY_STRING
                 } else {
-                    Type::UnknownType
+                    Type::UnknownType(Mutability::Mutable)
                 }
             } else {
-                Type::UnknownType
+                Type::UnknownType(Mutability::Mutable)
             }
         }
         BinaryOperatorOp::Minus => {

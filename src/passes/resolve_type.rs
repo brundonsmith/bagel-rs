@@ -11,19 +11,10 @@ use super::{check::CheckContext, typeinfer::InferTypeContext};
 impl AST<TypeExpression> {
     pub fn resolve_type<'a>(&self, ctx: ResolveContext<'a>) -> Type {
         match self.downcast() {
-            TypeExpression::ModifierType(ModifierType { kind, inner }) => {
-                let inner = Rc::new(inner.resolve_type(ctx));
-
-                match kind {
-                    ModifierTypeKind::Readonly => Type::MutabilityType {
-                        mutability: Mutability::Readonly,
-                        inner,
-                    },
-                    ModifierTypeKind::Keyof => Type::KeyofType(inner),
-                    ModifierTypeKind::Valueof => Type::ValueofType(inner),
-                    ModifierTypeKind::Elementof => Type::ElementofType(inner),
-                }
-            }
+            TypeExpression::ModifierType(ModifierType { kind, inner }) => Type::ModifierType {
+                kind,
+                inner: Rc::new(inner.resolve_type(ctx)),
+            },
             TypeExpression::GenericParamType(GenericParamType { name, extends }) => todo!(),
             TypeExpression::GenericType(GenericType { type_params, inner }) => todo!(),
             TypeExpression::BoundGenericType(BoundGenericType { type_args, generic }) => todo!(),
@@ -90,6 +81,7 @@ impl AST<TypeExpression> {
                 entries,
                 is_interface,
             }) => Type::ObjectType {
+                mutability: Mutability::Mutable,
                 entries: entries
                     .into_iter()
                     .map(|entry| match entry {
@@ -110,19 +102,25 @@ impl AST<TypeExpression> {
             TypeExpression::MaybeType(MaybeType(inner)) => {
                 inner.resolve_type(ctx).union(Type::NilType)
             }
-            TypeExpression::NamedType(NamedType(name)) => Type::NamedType(name.clone()),
+            TypeExpression::NamedType(NamedType(name)) => Type::NamedType {
+                mutability: Mutability::Mutable,
+                name: name.clone(),
+            },
             TypeExpression::RecordType(RecordType {
                 key_type,
                 value_type,
             }) => Type::RecordType {
+                mutability: Mutability::Mutable,
                 key_type: Rc::new(key_type.resolve_type(ctx)),
                 value_type: Rc::new(value_type.resolve_type(ctx)),
             },
-            TypeExpression::ArrayType(ArrayType(element)) => {
-                Type::ArrayType(Rc::new(element.resolve_type(ctx)))
-            }
-            TypeExpression::TupleType(TupleType(members)) => Type::TupleType(
-                members
+            TypeExpression::ArrayType(ArrayType(element)) => Type::ArrayType {
+                mutability: Mutability::Mutable,
+                element_type: Rc::new(element.resolve_type(ctx)),
+            },
+            TypeExpression::TupleType(TupleType(members)) => Type::TupleType {
+                mutability: Mutability::Mutable,
+                members: members
                     .iter()
                     .map(|x| match x {
                         ElementOrSpread::Element(element) => {
@@ -133,7 +131,7 @@ impl AST<TypeExpression> {
                         }
                     })
                     .collect(),
-            ),
+            },
             TypeExpression::StringLiteralType(StringLiteralType(value)) => {
                 Type::StringType(Some(value.clone()))
             }
@@ -159,7 +157,7 @@ impl AST<TypeExpression> {
             TypeExpression::NumberType(_) => Type::ANY_NUMBER,
             TypeExpression::BooleanType(_) => Type::ANY_BOOLEAN,
             TypeExpression::NilType(_) => Type::NilType,
-            TypeExpression::UnknownType(_) => Type::UnknownType,
+            TypeExpression::UnknownType(_) => Type::UnknownType(Mutability::Mutable),
         }
     }
 }
@@ -204,8 +202,6 @@ impl<'a> From<SubsumationContext<'a>> for ResolveContext<'a> {
         SubsumationContext {
             modules,
             current_module,
-            dest_mutability: _,
-            val_mutability: _,
         }: SubsumationContext<'a>,
     ) -> Self {
         Self {
