@@ -648,7 +648,7 @@ impl Type {
         }
     }
 
-    fn simplify<'a>(self, ctx: ResolveContext<'a>, symbols_encountered: &Vec<Slice>) -> Type {
+    pub fn simplify<'a>(self, ctx: ResolveContext<'a>, symbols_encountered: &Vec<Slice>) -> Type {
         match self {
             Type::NamedType { mutability, name } => {
                 let name_slice = name.downcast().0;

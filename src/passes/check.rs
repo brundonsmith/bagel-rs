@@ -951,10 +951,53 @@ where
                             (false, None) // invalid, but skip reporting error
                         }
                     }
-                    Any::PropertyAccessor(_) => {
-                        // TODO: Check that subject is mutable
-                        // TODO: Can't be an optional property access
-                        todo!()
+                    Any::PropertyAccessor(PropertyAccessor {
+                        subject,
+                        property: _,
+                        optional,
+                    }) => {
+                        if *optional {
+                            (
+                                true,
+                                Some("?. can't be used on the left side of an assignment"),
+                            )
+                        } else {
+                            let subject_type = subject
+                                .infer_type(ctx.into())
+                                .simplify(ctx.into(), &Vec::new());
+
+                            let mutability = match subject_type {
+                                Type::ObjectType {
+                                    mutability,
+                                    entries: _,
+                                    is_interface: _,
+                                } => Some(mutability),
+                                Type::RecordType {
+                                    mutability,
+                                    key_type: _,
+                                    value_type: _,
+                                } => Some(mutability),
+                                Type::ArrayType {
+                                    mutability,
+                                    element_type: _,
+                                } => Some(mutability),
+                                Type::TupleType {
+                                    mutability,
+                                    members: _,
+                                } => Some(mutability),
+                                _ => None,
+                            };
+
+                            if let Some(mutability) = mutability {
+                                match mutability {
+                                    Mutability::Constant => (true, Some("")),
+                                    Mutability::Readonly => (true, Some("")),
+                                    _ => (false, None),
+                                }
+                            } else {
+                                (false, None)
+                            }
+                        }
                     }
                     _ => (true, None),
                 };
@@ -999,6 +1042,8 @@ where
                             );
                         }
                     }
+
+                    // TODO: Check that proeprty exists?
                 }
             }
             Any::TryCatch(TryCatch {
