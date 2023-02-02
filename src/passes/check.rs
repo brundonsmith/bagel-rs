@@ -234,108 +234,14 @@ where
             }) => {
                 value.check(ctx, report_error);
 
-                match destination {
-                    DeclarationDestination::NameAndType(NameAndType {
-                        name,
-                        type_annotation,
-                    }) => {
-                        name.check(ctx, report_error);
-                        type_annotation.check(ctx, report_error);
-
-                        if let Some(type_annotation) = type_annotation {
-                            let type_annotation = type_annotation.resolve_type(ctx.into());
-                            let type_annotation = if *is_const {
-                                type_annotation.with_mutability(Mutability::Constant)
-                            } else {
-                                type_annotation
-                            };
-
-                            check_subsumation(
-                                &type_annotation,
-                                value.infer_type(ctx.into()),
-                                value.slice(),
-                                report_error,
-                            );
-                        }
-                    }
-                    DeclarationDestination::Destructure(Destructure {
-                        properties,
-                        spread,
-                        destructure_kind,
-                    }) => {
-                        properties.check(ctx, report_error);
-                        spread.check(ctx, report_error);
-
-                        if !*is_const {
-                            report_error(BagelError::MiscError {
-                                module_id: module_id.clone(),
-                                src: self.slice().clone(),
-                                message: format!("Can only destructure when declaring a const"),
-                            });
-                        }
-
-                        let value_type = value.infer_type(ctx.into());
-                        match destructure_kind {
-                            DestructureKind::Array => {
-                                check_subsumation(
-                                    &any_array(),
-                                    value_type.clone(),
-                                    value.slice(),
-                                    report_error,
-                                );
-
-                                for (index, property) in properties.iter().enumerate() {
-                                    let property_type = value_type.get_property(
-                                        ctx.into(),
-                                        &Vec::new(),
-                                        &Type::exact_number(index as i32),
-                                    );
-
-                                    if property_type.is_none() {
-                                        report_error(BagelError::MiscError {
-                                            module_id: ctx.current_module.module_id.clone(),
-                                            src: property.slice().clone(),
-                                            message: format!(
-                                                "There is no element {} on type {}",
-                                                blue_string(index),
-                                                blue_string(&value_type)
-                                            ),
-                                        });
-                                    }
-                                }
-                            }
-                            DestructureKind::Object => {
-                                check_subsumation(
-                                    &any_object(),
-                                    value_type.clone(),
-                                    value.slice(),
-                                    report_error,
-                                );
-
-                                for property in properties {
-                                    let name = property.downcast().0.clone();
-                                    let property_type = value_type.get_property(
-                                        ctx.into(),
-                                        &Vec::new(),
-                                        &Type::StringType(Some(name.clone())),
-                                    );
-
-                                    if property_type.is_none() {
-                                        report_error(BagelError::MiscError {
-                                            module_id: ctx.current_module.module_id.clone(),
-                                            src: property.slice().clone(),
-                                            message: format!(
-                                                "Property {} does not exist on type {}",
-                                                blue_string(name.as_str()),
-                                                blue_string(&value_type)
-                                            ),
-                                        });
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+                check_declaration_destination(
+                    ctx,
+                    report_error,
+                    self.slice().clone(),
+                    destination,
+                    value.clone(),
+                    *is_const,
+                );
             }
             Any::TestExprDeclaration(TestExprDeclaration { name, expr }) => todo!(),
             Any::TestBlockDeclaration(TestBlockDeclaration { name, block }) => todo!(),
@@ -484,57 +390,16 @@ where
                 inner.check(ctx, report_error);
             }
             Any::InlineDeclaration(InlineDeclaration { destination, value }) => {
-                match destination {
-                    DeclarationDestination::NameAndType(NameAndType {
-                        name,
-                        type_annotation,
-                    }) => {
-                        name.check(ctx, report_error);
-                        type_annotation.check(ctx, report_error);
-
-                        if let Some(type_annotation) = type_annotation {
-                            check_subsumation(
-                                &type_annotation.resolve_type(ctx.into()),
-                                value.infer_type(ctx.into()),
-                                value.slice(),
-                                report_error,
-                            );
-                        }
-                    }
-                    DeclarationDestination::Destructure(Destructure {
-                        properties,
-                        spread,
-                        destructure_kind,
-                    }) => {
-                        properties.check(ctx, report_error);
-                        spread.check(ctx, report_error);
-
-                        let value_type = value.infer_type(ctx.into());
-                        match destructure_kind {
-                            DestructureKind::Array => {
-                                check_subsumation(
-                                    &any_array(),
-                                    value_type,
-                                    value.slice(),
-                                    report_error,
-                                );
-
-                                // TODO: check that length matches
-                            }
-                            DestructureKind::Object => {
-                                check_subsumation(
-                                    &any_object(),
-                                    value_type,
-                                    value.slice(),
-                                    report_error,
-                                );
-
-                                // TODO: check that all properties exist
-                            }
-                        }
-                    }
-                }
                 value.check(ctx, report_error);
+
+                check_declaration_destination(
+                    ctx,
+                    report_error,
+                    self.slice().clone(),
+                    destination,
+                    value.clone(),
+                    true,
+                );
             }
             Any::Func(Func {
                 type_annotation,
@@ -1182,6 +1047,133 @@ where
             Any::BooleanType(_) => {}
             Any::NilType(_) => {}
             Any::UnknownType(_) => {}
+        }
+    }
+}
+
+fn check_declaration_destination<'a, F: FnMut(BagelError)>(
+    ctx: &CheckContext<'a>,
+    report_error: &mut F,
+    self_slice: Slice,
+    destination: &DeclarationDestination,
+    value: AST<Expression>,
+    is_const: bool,
+) {
+    let module_id = &ctx.current_module.module_id.clone();
+    let subsumation_context = SubsumationContext::from(ctx);
+    let check_subsumation =
+        |destination: &Type, value: Type, slice: &Slice, report_error: &mut F| {
+            let issues = destination.subsumation_issues(subsumation_context, &value);
+
+            if let Some(issues) = issues {
+                report_error(BagelError::AssignmentError {
+                    module_id: module_id.clone(),
+                    src: slice.clone(),
+                    issues,
+                });
+            }
+        };
+
+    match destination {
+        DeclarationDestination::NameAndType(NameAndType {
+            name,
+            type_annotation,
+        }) => {
+            name.check(ctx, report_error);
+            type_annotation.check(ctx, report_error);
+
+            if let Some(type_annotation) = type_annotation {
+                let type_annotation = type_annotation.resolve_type(ctx.into());
+                let type_annotation = if is_const {
+                    type_annotation.with_mutability(Mutability::Constant)
+                } else {
+                    type_annotation
+                };
+
+                check_subsumation(
+                    &type_annotation,
+                    value.infer_type(ctx.into()),
+                    value.slice(),
+                    report_error,
+                );
+            }
+        }
+        DeclarationDestination::Destructure(Destructure {
+            properties,
+            spread,
+            destructure_kind,
+        }) => {
+            properties.check(ctx, report_error);
+            spread.check(ctx, report_error);
+
+            if !is_const {
+                report_error(BagelError::MiscError {
+                    module_id: module_id.clone(),
+                    src: self_slice,
+                    message: format!("Can only destructure when declaring a const"),
+                });
+            }
+
+            let value_type = value.infer_type(ctx.into());
+            match destructure_kind {
+                DestructureKind::Array => {
+                    check_subsumation(
+                        &any_array(),
+                        value_type.clone(),
+                        value.slice(),
+                        report_error,
+                    );
+
+                    for (index, property) in properties.iter().enumerate() {
+                        let property_type = value_type.get_property(
+                            ctx.into(),
+                            &Vec::new(),
+                            &Type::exact_number(index as i32),
+                        );
+
+                        if property_type.is_none() {
+                            report_error(BagelError::MiscError {
+                                module_id: ctx.current_module.module_id.clone(),
+                                src: property.slice().clone(),
+                                message: format!(
+                                    "There is no element {} on type {}",
+                                    blue_string(index),
+                                    blue_string(&value_type)
+                                ),
+                            });
+                        }
+                    }
+                }
+                DestructureKind::Object => {
+                    check_subsumation(
+                        &any_object(),
+                        value_type.clone(),
+                        value.slice(),
+                        report_error,
+                    );
+
+                    for property in properties {
+                        let name = property.downcast().0.clone();
+                        let property_type = value_type.get_property(
+                            ctx.into(),
+                            &Vec::new(),
+                            &Type::StringType(Some(name.clone())),
+                        );
+
+                        if property_type.is_none() {
+                            report_error(BagelError::MiscError {
+                                module_id: ctx.current_module.module_id.clone(),
+                                src: property.slice().clone(),
+                                message: format!(
+                                    "Property {} does not exist on type {}",
+                                    blue_string(name.as_str()),
+                                    blue_string(&value_type)
+                                ),
+                            });
+                        }
+                    }
+                }
+            }
         }
     }
 }
