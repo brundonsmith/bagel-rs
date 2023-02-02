@@ -279,22 +279,59 @@ where
                             DestructureKind::Array => {
                                 check_subsumation(
                                     &any_array(),
-                                    value_type,
+                                    value_type.clone(),
                                     value.slice(),
                                     report_error,
                                 );
 
-                                // TODO: check that length matches
+                                for (index, property) in properties.iter().enumerate() {
+                                    let property_type = value_type.get_property(
+                                        ctx.into(),
+                                        &Vec::new(),
+                                        &Type::exact_number(index as i32),
+                                    );
+
+                                    if property_type.is_none() {
+                                        report_error(BagelError::MiscError {
+                                            module_id: ctx.current_module.module_id.clone(),
+                                            src: property.slice().clone(),
+                                            message: format!(
+                                                "There is no element {} on type {}",
+                                                blue_string(index),
+                                                blue_string(&value_type)
+                                            ),
+                                        });
+                                    }
+                                }
                             }
                             DestructureKind::Object => {
                                 check_subsumation(
                                     &any_object(),
-                                    value_type,
+                                    value_type.clone(),
                                     value.slice(),
                                     report_error,
                                 );
 
-                                // TODO: check that all properties exist
+                                for property in properties {
+                                    let name = property.downcast().0.clone();
+                                    let property_type = value_type.get_property(
+                                        ctx.into(),
+                                        &Vec::new(),
+                                        &Type::StringType(Some(name.clone())),
+                                    );
+
+                                    if property_type.is_none() {
+                                        report_error(BagelError::MiscError {
+                                            module_id: ctx.current_module.module_id.clone(),
+                                            src: property.slice().clone(),
+                                            message: format!(
+                                                "Property {} does not exist on type {}",
+                                                blue_string(name.as_str()),
+                                                blue_string(&value_type)
+                                            ),
+                                        });
+                                    }
+                                }
                             }
                         }
                     }
@@ -683,17 +720,27 @@ where
                 // TODO: detect unnecessary optional
                 // TODO: detect valid optional
 
-                // if subject_type.indexed(&property_type).is_none() {
-                //     report_error(BagelError::MiscError {
-                //         module_id: ctx.current_module.module_id.clone(),
-                //         src: property_slice,
-                //         message: format!(
-                //             "{} cannot be used to index type {}",
-                //             blue_string(&property_type),
-                //             blue_string(&subject_type)
-                //         ),
-                //     })
-                // }
+                if subject_type
+                    .get_property(ctx.into(), &Vec::new(), &property_type)
+                    .is_none()
+                {
+                    report_error(BagelError::MiscError {
+                        module_id: ctx.current_module.module_id.clone(),
+                        src: property_slice,
+                        message: match property {
+                            Property::Expression(_) => format!(
+                                "{} cannot be used to index type {}",
+                                blue_string(&property_type),
+                                blue_string(&subject_type)
+                            ),
+                            Property::PlainIdentifier(ident) => format!(
+                                "Property {} does not exist on type {}",
+                                blue_string(&ident),
+                                blue_string(&subject_type)
+                            ),
+                        },
+                    });
+                }
             }
             Any::IfElseExpression(IfElseExpression {
                 cases,

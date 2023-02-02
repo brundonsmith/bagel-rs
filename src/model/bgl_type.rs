@@ -701,179 +701,9 @@ impl Type {
                     Type::UnionType(members)
                 }
             }
-            Type::PropertyType { subject, property } => {
-                let subject = subject.as_ref().clone().simplify(ctx, symbols_encountered);
-                let property = property.as_ref().clone().simplify(ctx, symbols_encountered);
-
-                // specific named properties
-                if let Type::StringType(Some(s)) = &property {
-                    if s.as_str() == "length" {
-                        match subject {
-                            Type::ArrayType {
-                                mutability: _,
-                                element_type: _,
-                            } => return Type::ANY_NUMBER,
-                            Type::TupleType {
-                                mutability: _,
-                                members,
-                            } => return Type::exact_number(members.len() as i32),
-                            Type::StringType(string) => {
-                                return match string {
-                                    Some(string) => Type::exact_number(string.len() as i32),
-                                    None => Type::ANY_NUMBER,
-                                }
-                            }
-                            _ => {}
-                        };
-                    }
-                    if s.as_str() == "value" {
-                        match subject {
-                            Type::SpecialType {
-                                kind: SpecialTypeKind::Error,
-                                inner,
-                            } => return inner.as_ref().clone(),
-                            _ => {}
-                        }
-                    }
-                }
-
-                match subject {
-                    Type::ObjectType {
-                        mutability,
-                        entries,
-                        is_interface: _,
-                    } => entries
-                        .iter()
-                        .find_map(|entry| match entry {
-                            KeyValueOrSpread::KeyValue(key, value) => {
-                                if key.subsumes(ctx.into(), &property) {
-                                    Some(value)
-                                } else {
-                                    None
-                                }
-                            }
-                            KeyValueOrSpread::Spread(_) => None,
-                        })
-                        .cloned()
-                        .unwrap_or(Type::PoisonedType)
-                        .with_mutability(mutability),
-                    Type::RecordType {
-                        mutability,
-                        key_type,
-                        value_type,
-                    } => {
-                        if key_type.subsumes(ctx.into(), &property) {
-                            value_type.as_ref().clone()
-                        } else {
-                            Type::PoisonedType
-                        }
-                    }
-                    Type::TupleType {
-                        mutability,
-                        members,
-                    } => if let Type::NumberType { min, max } = property {
-                        let len = members.len() as i32;
-                        let min = min.unwrap_or(0);
-                        let max = max.unwrap_or(len - 1);
-
-                        if min == max {
-                            if min >= 0 && max < len {
-                                members
-                                    .get(min as usize)
-                                    .map(|member| match member {
-                                        ElementOrSpread::Element(element) => element,
-                                        ElementOrSpread::Spread(_) => unreachable!(),
-                                    })
-                                    .cloned()
-                                    .unwrap_or(Type::PoisonedType)
-                            } else {
-                                Type::PoisonedType
-                            }
-                        } else {
-                            let mut members_type: Vec<Type> = members
-                                [(min as usize).max(0)..(max as usize).min(members.len() - 1)]
-                                .iter()
-                                .map(|member| match member {
-                                    ElementOrSpread::Element(element) => element,
-                                    ElementOrSpread::Spread(_) => unreachable!(),
-                                })
-                                .cloned()
-                                .collect();
-
-                            if min < 0 || max > len - 1 {
-                                members_type.push(Type::NilType);
-                            }
-
-                            Type::UnionType(members_type)
-                        }
-                    } else {
-                        Type::PoisonedType
-                    }
-                    .with_mutability(mutability),
-                    Type::StringType(Some(string)) => {
-                        if let Type::NumberType { min, max } = property {
-                            let len = string.len() as i32;
-                            let min = min.unwrap_or(0);
-                            let max = max.unwrap_or(len - 1);
-
-                            if min == max {
-                                if min >= 0 && max < len {
-                                    Type::StringType(Some(
-                                        string
-                                            .clone()
-                                            .slice_range(min as usize, Some(min as usize + 1)),
-                                    ))
-                                } else {
-                                    Type::PoisonedType
-                                }
-                            } else {
-                                let mut members_type: Vec<Type> = string
-                                    .clone()
-                                    .as_str()
-                                    .char_indices()
-                                    .skip((min as usize).max(0))
-                                    .take((max as usize).min(string.len() - 1))
-                                    .map(move |(index, _)| {
-                                        Type::StringType(Some(
-                                            string.clone().slice_range(index, Some(index + 1)),
-                                        ))
-                                    })
-                                    .collect();
-
-                                if min < 0 || max > len - 1 {
-                                    members_type.push(Type::NilType);
-                                }
-
-                                Type::UnionType(members_type)
-                            }
-                        } else {
-                            Type::PoisonedType
-                        }
-                    }
-                    Type::StringType(None) => {
-                        if let Type::NumberType { min: _, max: _ } = property {
-                            Type::ANY_STRING.union(Type::NilType)
-                        } else {
-                            Type::PoisonedType
-                        }
-                    }
-                    Type::ArrayType {
-                        mutability,
-                        element_type,
-                    } => {
-                        if let Type::NumberType { min: _, max: _ } = property {
-                            element_type
-                                .as_ref()
-                                .clone()
-                                .union(Type::NilType)
-                                .with_mutability(mutability)
-                        } else {
-                            Type::PoisonedType
-                        }
-                    }
-                    _ => Type::PoisonedType,
-                }
-            }
+            Type::PropertyType { subject, property } => subject
+                .get_property(ctx, symbols_encountered, property.as_ref())
+                .unwrap_or(Type::PoisonedType),
             Type::ModifierType { kind, inner } => {
                 let inner = inner.as_ref().clone().simplify(ctx, symbols_encountered);
 
@@ -1214,6 +1044,185 @@ impl Type {
             //     returns,
             // } => todo!(),
             _ => self,
+        }
+    }
+
+    pub fn get_property<'a>(
+        &self,
+        ctx: ResolveContext<'a>,
+        symbols_encountered: &Vec<Slice>,
+        property: &Type,
+    ) -> Option<Type> {
+        let subject = self.clone().simplify(ctx, symbols_encountered);
+        let property = property.clone().simplify(ctx, symbols_encountered);
+
+        // specific named properties
+        if let Type::StringType(Some(s)) = &property {
+            if s.as_str() == "length" {
+                match subject {
+                    Type::ArrayType {
+                        mutability: _,
+                        element_type: _,
+                    } => return Some(Type::ANY_NUMBER),
+                    Type::TupleType {
+                        mutability: _,
+                        members,
+                    } => return Some(Type::exact_number(members.len() as i32)),
+                    Type::StringType(string) => {
+                        return match string {
+                            Some(string) => Some(Type::exact_number(string.len() as i32)),
+                            None => Some(Type::ANY_NUMBER),
+                        }
+                    }
+                    _ => {}
+                };
+            }
+            if s.as_str() == "value" {
+                match subject {
+                    Type::SpecialType {
+                        kind: SpecialTypeKind::Error,
+                        inner,
+                    } => return Some(inner.as_ref().clone()),
+                    _ => {}
+                }
+            }
+        }
+
+        match subject {
+            Type::ObjectType {
+                mutability,
+                entries,
+                is_interface: _,
+            } => entries
+                .iter()
+                .find_map(|entry| match entry {
+                    KeyValueOrSpread::KeyValue(key, value) => {
+                        if key.subsumes(ctx.into(), &property) {
+                            Some(value)
+                        } else {
+                            None
+                        }
+                    }
+                    KeyValueOrSpread::Spread(_) => None,
+                })
+                .cloned()
+                .map(|t| t.with_mutability(mutability)),
+            Type::RecordType {
+                mutability,
+                key_type,
+                value_type,
+            } => {
+                if key_type.subsumes(ctx.into(), &property) {
+                    Some(value_type.as_ref().clone())
+                } else {
+                    None
+                }
+            }
+            Type::TupleType {
+                mutability,
+                members,
+            } => if let Type::NumberType { min, max } = property {
+                let len = members.len() as i32;
+                let min = min.unwrap_or(0);
+                let max = max.unwrap_or(len - 1);
+
+                if min == max {
+                    if min >= 0 && max < len {
+                        members
+                            .get(min as usize)
+                            .map(|member| match member {
+                                ElementOrSpread::Element(element) => element,
+                                ElementOrSpread::Spread(_) => unreachable!(),
+                            })
+                            .cloned()
+                    } else {
+                        None
+                    }
+                } else {
+                    let mut members_type: Vec<Type> = members
+                        [(min as usize).max(0)..(max as usize).min(members.len() - 1)]
+                        .iter()
+                        .map(|member| match member {
+                            ElementOrSpread::Element(element) => element,
+                            ElementOrSpread::Spread(_) => unreachable!(),
+                        })
+                        .cloned()
+                        .collect();
+
+                    if min < 0 || max > len - 1 {
+                        members_type.push(Type::NilType);
+                    }
+
+                    Some(Type::UnionType(members_type))
+                }
+            } else {
+                None
+            }
+            .map(|t| t.with_mutability(mutability)),
+            Type::StringType(Some(string)) => {
+                if let Type::NumberType { min, max } = property {
+                    let len = string.len() as i32;
+                    let min = min.unwrap_or(0);
+                    let max = max.unwrap_or(len - 1);
+
+                    if min == max {
+                        if min >= 0 && max < len {
+                            Some(Type::StringType(Some(
+                                string
+                                    .clone()
+                                    .slice_range(min as usize, Some(min as usize + 1)),
+                            )))
+                        } else {
+                            None
+                        }
+                    } else {
+                        let mut members_type: Vec<Type> = string
+                            .clone()
+                            .as_str()
+                            .char_indices()
+                            .skip((min as usize).max(0))
+                            .take((max as usize).min(string.len() - 1))
+                            .map(move |(index, _)| {
+                                Type::StringType(Some(
+                                    string.clone().slice_range(index, Some(index + 1)),
+                                ))
+                            })
+                            .collect();
+
+                        if min < 0 || max > len - 1 {
+                            members_type.push(Type::NilType);
+                        }
+
+                        Some(Type::UnionType(members_type))
+                    }
+                } else {
+                    None
+                }
+            }
+            Type::StringType(None) => {
+                if let Type::NumberType { min: _, max: _ } = property {
+                    Some(Type::ANY_STRING.union(Type::NilType))
+                } else {
+                    None
+                }
+            }
+            Type::ArrayType {
+                mutability,
+                element_type,
+            } => {
+                if let Type::NumberType { min: _, max: _ } = property {
+                    Some(
+                        element_type
+                            .as_ref()
+                            .clone()
+                            .union(Type::NilType)
+                            .with_mutability(mutability),
+                    )
+                } else {
+                    None
+                }
+            }
+            _ => None,
         }
     }
 }
