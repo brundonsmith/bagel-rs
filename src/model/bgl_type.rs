@@ -678,32 +678,59 @@ impl Type {
                         .with_mutability(mutability)
                 }
             }
-            Type::UnionType(mut members) => {
+            Type::UnionType(members) => {
+                let members: Vec<Type> = members
+                    .into_iter()
+                    .map(|t| t.simplify(ctx, symbols_encountered))
+                    .map(|member| -> Box<dyn Iterator<Item = Type>> {
+                        // flatten nested union types
+                        if let Type::UnionType(members) = member {
+                            Box::new(members.into_iter())
+                        } else {
+                            Box::new(std::iter::once(member))
+                        }
+                    })
+                    .flatten()
+                    .collect();
+
+                // remove any redundant members of the union
+                let mut indexes_to_delete = Vec::new();
+                for (a_index, a) in members.iter().enumerate() {
+                    for (b_index, b) in members.iter().enumerate() {
+                        if a_index != b_index
+                            && b.subsumes(ctx.into(), a)
+                            && !indexes_to_delete.contains(&b_index)
+                            && !matches!(b, Type::UnknownType(_))
+                        {
+                            indexes_to_delete.push(a_index);
+                        }
+                    }
+                }
+
+                let mut members: Vec<Type> = members
+                    .into_iter()
+                    .enumerate()
+                    .filter_map(|(index, member)| {
+                        if indexes_to_delete.contains(&index) {
+                            None
+                        } else {
+                            Some(member)
+                        }
+                    })
+                    .collect();
+
+                members.sort();
+
                 if members.len() == 1 {
-                    members.remove(0).simplify(ctx, symbols_encountered)
+                    members.remove(0)
                 } else {
-                    let mut members: Vec<Type> = members
-                        .into_iter()
-                        .filter(|member| {
-                            if let Type::UnionType(members) = member {
-                                if members.len() == 0 {
-                                    return false;
-                                }
-                            }
-
-                            return true;
-                        })
-                        .map(|t| t.simplify(ctx, symbols_encountered))
-                        .collect();
-
-                    members.sort();
-
                     Type::UnionType(members)
                 }
             }
             Type::PropertyType { subject, property } => subject
                 .get_property(ctx, symbols_encountered, property.as_ref())
-                .unwrap_or(Type::PoisonedType),
+                .unwrap_or(Type::PoisonedType)
+                .simplify(ctx, symbols_encountered),
             Type::ModifierType { kind, inner } => {
                 let inner = inner.as_ref().clone().simplify(ctx, symbols_encountered);
 
