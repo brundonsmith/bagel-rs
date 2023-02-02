@@ -1054,6 +1054,25 @@ impl Type {
         property: &Type,
     ) -> Option<Type> {
         let subject = self.clone().simplify(ctx, symbols_encountered);
+
+        if let Type::UnionType(members) = subject {
+            let property_type_members: Vec<Option<Type>> = members
+                .into_iter()
+                .map(|member| member.get_property(ctx, symbols_encountered, property))
+                .collect();
+
+            if property_type_members.iter().any(|member| member.is_some()) {
+                return Some(Type::UnionType(
+                    property_type_members
+                        .into_iter()
+                        .map(|member| member.unwrap_or(Type::NilType))
+                        .collect(),
+                ));
+            } else {
+                return None;
+            }
+        }
+
         let property = property.clone().simplify(ctx, symbols_encountered);
 
         // specific named properties
