@@ -705,8 +705,6 @@ impl Type {
                 let subject = subject.as_ref().clone().simplify(ctx, symbols_encountered);
                 let property = property.as_ref().clone().simplify(ctx, symbols_encountered);
 
-                println!("subject: {:?}", subject);
-
                 // specific named properties
                 if let Type::StringType(Some(s)) = &property {
                     if s.as_str() == "length" {
