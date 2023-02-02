@@ -188,8 +188,8 @@ impl Type {
         ctx: SubsumationContext<'a>,
         value: &Self,
     ) -> Option<SubsumationIssue> {
-        let destination = &self.clone().simplify(ctx.into(), &Vec::new());
-        let value = &value.clone().simplify(ctx.into(), &Vec::new());
+        let destination = &self.clone().simplify(ctx.into());
+        let value = &value.clone().simplify(ctx.into());
 
         // println!("-------------");
         // println!("destination: {}", destination);
@@ -648,21 +648,28 @@ impl Type {
         }
     }
 
-    pub fn simplify<'a>(self, ctx: ResolveContext<'a>, symbols_encountered: &Vec<Slice>) -> Type {
+    pub fn simplify<'a>(self, ctx: SubsumationContext<'a>) -> Type {
         match self {
             Type::NamedType { mutability, name } => {
                 let name_slice = name.downcast().0;
 
-                if symbols_encountered.contains(&name_slice) {
+                if ctx.symbols_encountered.contains(&name_slice) {
                     // encountered cycle, bail out here to avoid infinite loop
                     Type::NamedType { mutability, name }
                 } else {
-                    let symbols_encountered = symbols_encountered
+                    // add current symbol to symbols_encountered
+                    let symbols_encountered: Vec<Slice> = ctx
+                        .symbols_encountered
                         .iter()
                         .map(Slice::clone)
                         .chain(std::iter::once(name_slice.clone()))
                         .collect();
                     let symbols_encountered = &symbols_encountered;
+                    let ctx = SubsumationContext {
+                        modules: ctx.modules,
+                        current_module: ctx.current_module,
+                        symbols_encountered,
+                    };
 
                     name.resolve_symbol(name_slice.as_str())
                         .map(|resolved| match resolved.details() {
@@ -670,18 +677,18 @@ impl Type {
                                 name: _,
                                 declared_type,
                                 exported: _,
-                            }) => declared_type.resolve_type(ctx),
+                            }) => declared_type.resolve_type(ctx.into()),
                             _ => Type::PoisonedType,
                         })
                         .unwrap_or(Type::PoisonedType)
-                        .simplify(ctx, symbols_encountered)
+                        .simplify(ctx)
                         .with_mutability(mutability)
                 }
             }
             Type::UnionType(members) => {
                 let members: Vec<Type> = members
                     .into_iter()
-                    .map(|t| t.simplify(ctx, symbols_encountered))
+                    .map(|t| t.simplify(ctx))
                     .map(|member| -> Box<dyn Iterator<Item = Type>> {
                         // flatten nested union types
                         if let Type::UnionType(members) = member {
@@ -728,11 +735,11 @@ impl Type {
                 }
             }
             Type::PropertyType { subject, property } => subject
-                .get_property(ctx, symbols_encountered, property.as_ref())
+                .get_property(ctx, property.as_ref())
                 .unwrap_or(Type::PoisonedType)
-                .simplify(ctx, symbols_encountered),
+                .simplify(ctx),
             Type::ModifierType { kind, inner } => {
-                let inner = inner.as_ref().clone().simplify(ctx, symbols_encountered);
+                let inner = inner.as_ref().clone().simplify(ctx);
 
                 match kind {
                     ModifierTypeKind::Readonly => inner.with_mutability(Mutability::Readonly),
@@ -803,7 +810,7 @@ impl Type {
                 }
             }
             Type::InnerType { kind, inner } => {
-                let inner = inner.as_ref().clone().simplify(ctx, symbols_encountered);
+                let inner = inner.as_ref().clone().simplify(ctx);
 
                 match inner {
                     Type::SpecialType {
@@ -829,22 +836,17 @@ impl Type {
 
                 for entry in entries {
                     match entry {
-                        KeyValueOrSpread::KeyValue(key, value) => {
-                            flattened_entries.push(KeyValueOrSpread::KeyValue(
-                                key.simplify(ctx, symbols_encountered),
-                                value.simplify(ctx, symbols_encountered),
-                            ))
-                        }
-                        KeyValueOrSpread::Spread(spread) => {
-                            match spread.simplify(ctx, symbols_encountered) {
-                                Type::ObjectType {
-                                    mutability,
-                                    mut entries,
-                                    is_interface: _,
-                                } => flattened_entries.append(&mut entries),
-                                spread => flattened_entries.push(KeyValueOrSpread::Spread(spread)),
-                            }
-                        }
+                        KeyValueOrSpread::KeyValue(key, value) => flattened_entries.push(
+                            KeyValueOrSpread::KeyValue(key.simplify(ctx), value.simplify(ctx)),
+                        ),
+                        KeyValueOrSpread::Spread(spread) => match spread.simplify(ctx) {
+                            Type::ObjectType {
+                                mutability,
+                                mut entries,
+                                is_interface: _,
+                            } => flattened_entries.append(&mut entries),
+                            spread => flattened_entries.push(KeyValueOrSpread::Spread(spread)),
+                        },
                     };
                 }
 
@@ -864,10 +866,10 @@ impl Type {
                 for member in members.into_iter() {
                     match member {
                         ElementOrSpread::Element(element) => {
-                            simplified_members.push(element.simplify(ctx, symbols_encountered));
+                            simplified_members.push(element.simplify(ctx));
                         }
                         ElementOrSpread::Spread(spread) => {
-                            let spread = spread.simplify(ctx, symbols_encountered);
+                            let spread = spread.simplify(ctx);
 
                             match spread {
                                 Type::TupleType {
@@ -916,29 +918,19 @@ impl Type {
                 value_type,
             } => Type::RecordType {
                 mutability,
-                key_type: Rc::new(key_type.as_ref().clone().simplify(ctx, symbols_encountered)),
-                value_type: Rc::new(
-                    value_type
-                        .as_ref()
-                        .clone()
-                        .simplify(ctx, symbols_encountered),
-                ),
+                key_type: Rc::new(key_type.as_ref().clone().simplify(ctx)),
+                value_type: Rc::new(value_type.as_ref().clone().simplify(ctx)),
             },
             Type::ArrayType {
                 mutability,
                 element_type,
             } => Type::ArrayType {
                 mutability,
-                element_type: Rc::new(
-                    element_type
-                        .as_ref()
-                        .clone()
-                        .simplify(ctx, symbols_encountered),
-                ),
+                element_type: Rc::new(element_type.as_ref().clone().simplify(ctx)),
             },
             Type::SpecialType { kind, inner } => Type::SpecialType {
                 kind,
-                inner: Rc::new(inner.as_ref().clone().simplify(ctx, symbols_encountered)),
+                inner: Rc::new(inner.as_ref().clone().simplify(ctx)),
             },
             _ => self,
         }
@@ -1074,18 +1066,13 @@ impl Type {
         }
     }
 
-    pub fn get_property<'a>(
-        &self,
-        ctx: ResolveContext<'a>,
-        symbols_encountered: &Vec<Slice>,
-        property: &Type,
-    ) -> Option<Type> {
-        let subject = self.clone().simplify(ctx, symbols_encountered);
+    pub fn get_property<'a>(&self, ctx: SubsumationContext<'a>, property: &Type) -> Option<Type> {
+        let subject = self.clone().simplify(ctx);
 
         if let Type::UnionType(members) = subject {
             let property_type_members: Vec<Option<Type>> = members
                 .into_iter()
-                .map(|member| member.get_property(ctx, symbols_encountered, property))
+                .map(|member| member.get_property(ctx, property))
                 .collect();
 
             if property_type_members.iter().any(|member| member.is_some()) {
@@ -1100,7 +1087,7 @@ impl Type {
             }
         }
 
-        let property = property.clone().simplify(ctx, symbols_encountered);
+        let property = property.clone().simplify(ctx);
 
         // specific named properties
         if let Type::StringType(Some(s)) = &property {
@@ -1277,6 +1264,7 @@ impl Type {
 pub struct SubsumationContext<'a> {
     pub modules: &'a ModulesStore,
     pub current_module: &'a Module,
+    pub symbols_encountered: &'a Vec<Slice>,
 }
 
 impl<'a> From<&CheckContext<'a>> for SubsumationContext<'a> {
@@ -1290,6 +1278,7 @@ impl<'a> From<&CheckContext<'a>> for SubsumationContext<'a> {
         Self {
             modules,
             current_module,
+            symbols_encountered: NO_SYMBOLS_ENCOUNTERED,
         }
     }
 }
@@ -1304,6 +1293,7 @@ impl<'a> From<InferTypeContext<'a>> for SubsumationContext<'a> {
         Self {
             modules,
             current_module,
+            symbols_encountered: NO_SYMBOLS_ENCOUNTERED,
         }
     }
 }
@@ -1318,9 +1308,12 @@ impl<'a> From<ResolveContext<'a>> for SubsumationContext<'a> {
         Self {
             modules,
             current_module,
+            symbols_encountered: NO_SYMBOLS_ENCOUNTERED,
         }
     }
 }
+
+const NO_SYMBOLS_ENCOUNTERED: &'static Vec<Slice> = &Vec::new();
 
 impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

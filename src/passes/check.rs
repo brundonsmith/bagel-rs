@@ -586,7 +586,7 @@ where
                 // TODO: detect valid optional
 
                 if subject_type
-                    .get_property(ctx.into(), &Vec::new(), &property_type)
+                    .get_property(ctx.into(), &property_type)
                     .is_none()
                 {
                     report_error(BagelError::MiscError {
@@ -874,9 +874,7 @@ where
                                 Some("?. can't be used on the left side of an assignment"),
                             )
                         } else {
-                            let subject_type = subject
-                                .infer_type(ctx.into())
-                                .simplify(ctx.into(), &Vec::new());
+                            let subject_type = subject.infer_type(ctx.into()).simplify(ctx.into());
 
                             let mutability = match subject_type {
                                 Type::ObjectType {
@@ -1125,11 +1123,8 @@ fn check_declaration_destination<'a, F: FnMut(BagelError)>(
                     );
 
                     for (index, property) in properties.iter().enumerate() {
-                        let property_type = value_type.get_property(
-                            ctx.into(),
-                            &Vec::new(),
-                            &Type::exact_number(index as i32),
-                        );
+                        let property_type =
+                            value_type.get_property(ctx.into(), &Type::exact_number(index as i32));
 
                         if property_type.is_none() {
                             report_error(BagelError::MiscError {
@@ -1154,11 +1149,8 @@ fn check_declaration_destination<'a, F: FnMut(BagelError)>(
 
                     for property in properties {
                         let name = property.downcast().0.clone();
-                        let property_type = value_type.get_property(
-                            ctx.into(),
-                            &Vec::new(),
-                            &Type::StringType(Some(name.clone())),
-                        );
+                        let property_type = value_type
+                            .get_property(ctx.into(), &Type::StringType(Some(name.clone())));
 
                         if property_type.is_none() {
                             report_error(BagelError::MiscError {

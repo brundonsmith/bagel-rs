@@ -202,6 +202,7 @@ impl<'a> From<SubsumationContext<'a>> for ResolveContext<'a> {
         SubsumationContext {
             modules,
             current_module,
+            symbols_encountered: _,
         }: SubsumationContext<'a>,
     ) -> Self {
         Self {
