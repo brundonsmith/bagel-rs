@@ -188,8 +188,8 @@ impl Type {
         ctx: SubsumationContext<'a>,
         value: &Self,
     ) -> Option<SubsumationIssue> {
-        let destination = &self.clone().simplify(ctx.into());
-        let value = &value.clone().simplify(ctx.into());
+        let destination = &self.clone().simplify(ctx);
+        let value = &value.clone().simplify(ctx);
 
         // println!("-------------");
         // println!("destination: {}", destination);
@@ -661,7 +661,7 @@ impl Type {
                     let symbols_encountered: Vec<Slice> = ctx
                         .symbols_encountered
                         .iter()
-                        .map(Slice::clone)
+                        .cloned()
                         .chain(std::iter::once(name_slice.clone()))
                         .collect();
                     let symbols_encountered = &symbols_encountered;
@@ -705,7 +705,7 @@ impl Type {
                 for (a_index, a) in members.iter().enumerate() {
                     for (b_index, b) in members.iter().enumerate() {
                         if a_index != b_index
-                            && b.subsumes(ctx.into(), a)
+                            && b.subsumes(ctx, a)
                             && !indexes_to_delete.contains(&b_index)
                             && !matches!(b, Type::UnknownType(_))
                         {
@@ -1130,7 +1130,7 @@ impl Type {
                 .iter()
                 .find_map(|entry| match entry {
                     KeyValueOrSpread::KeyValue(key, value) => {
-                        if key.subsumes(ctx.into(), &property) {
+                        if key.subsumes(ctx, &property) {
                             Some(value)
                         } else {
                             None
@@ -1145,7 +1145,7 @@ impl Type {
                 key_type,
                 value_type,
             } => {
-                if key_type.subsumes(ctx.into(), &property) {
+                if key_type.subsumes(ctx, &property) {
                     Some(value_type.as_ref().clone())
                 } else {
                     None
