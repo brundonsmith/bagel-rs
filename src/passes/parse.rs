@@ -1211,12 +1211,10 @@ fn invocation_accessor_chain_inner(level: usize, i: Slice) -> ParseResult<AST<Ex
                         )
                         .recast::<Expression>();
                     }
-                    InvocationOrPropertyAccess::Accessing(mut property, indexer_slice) => {
-                        let mut optional = false;
-
+                    InvocationOrPropertyAccess::Accessing { mut property, mut optional, slice } => {
                         next_subject = make_node!(
                             PropertyAccessor,
-                            subject.spanning(&indexer_slice),
+                            subject.spanning(&slice),
                             subject,
                             property,
                             optional,
@@ -1264,28 +1262,29 @@ fn invocation_args(i: Slice) -> ParseResult<InvocationOrPropertyAccess> {
 
 fn indexer_expression(i: Slice) -> ParseResult<InvocationOrPropertyAccess> {
     map(
-        seq!(tag("["), expression(0), tag("]")),
-        |(open, property, close)| {
-            InvocationOrPropertyAccess::Accessing(
-                Property::Expression(property),
-                open.spanning(&close),
-            )
+        tuple((opt(tag("?.")), tag("["), w(expression(0)), w(tag("]")))),
+        |(question_dot, open, property, close)| {
+            InvocationOrPropertyAccess::Accessing {
+                property: Property::Expression(property),
+                optional: question_dot.is_some(),
+                slice: question_dot.as_ref().unwrap_or(&open).clone().spanning(&close),
+            }
         },
     )(i)
 }
 
 fn dot_property_access(i: Slice) -> ParseResult<InvocationOrPropertyAccess> {
-    map(seq!(tag("."), plain_identifier), |(dot, property)| {
-        let src = dot.spanning(&property);
+    map(tuple((opt(tag("?")), tag("."), plain_identifier)), |(question, dot, property)| {
+        let src = question.as_ref().unwrap_or(&dot).clone().spanning(&property);
 
-        InvocationOrPropertyAccess::Accessing(Property::PlainIdentifier(property), src)
+        InvocationOrPropertyAccess::Accessing { property: Property::PlainIdentifier(property), optional: question.is_some(), slice: src }
     })(i)
 }
 
 #[derive(Debug, Clone)]
 enum InvocationOrPropertyAccess {
     InvokingWith(Vec<AST<TypeExpression>>, Vec<AST<Expression>>, Slice),
-    Accessing(Property, Slice),
+    Accessing { property: Property, optional: bool, slice: Slice },
 }
 
 macro_rules! parse_binary_operation {
