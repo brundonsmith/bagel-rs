@@ -3,13 +3,11 @@ use std::{
     rc::Rc,
 };
 
-use boa::string;
 use enum_variant_type::EnumVariantType;
 use memoize::memoize;
 
 use crate::{
     passes::{check::CheckContext, resolve_type::ResolveContext, typeinfer::InferTypeContext},
-    utils::Loggable,
     ModulesStore,
 };
 

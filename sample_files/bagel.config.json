@@ -1,0 +1,7 @@
+{
+    "platforms": [
+        "deno",
+        "node"
+    ],
+    "checker_rule_overrides": []
+}

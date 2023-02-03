@@ -6,7 +6,6 @@ use crate::{
         errors::ParseError,
         module::ModuleID,
     },
-    utils::Loggable,
     DEBUG_MODE,
 };
 use memoize::memoize;

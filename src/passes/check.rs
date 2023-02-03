@@ -15,8 +15,8 @@ use crate::{
     },
     DEBUG_MODE,
 };
+use std::fmt::Debug;
 use std::time::SystemTime;
-use std::{fmt::Debug, rc::Rc};
 
 use super::typeinfer::binary_operation_type;
 
