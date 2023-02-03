@@ -10,11 +10,23 @@ pub enum Command {
     /// Initialize a new Bagel project in the current directory
     Init,
 
+    Transpile {
+        /// File or project directory
+        #[arg()]
+        target: String,
+
+        #[arg(long)]
+        watch: bool,
+
+        #[arg(long)]
+        clean: bool,
+    },
+
     /// Bundle into a single JS file
     Build {
         /// Entry file or project directory
         #[arg()]
-        target: String,
+        target: Option<String>,
 
         #[arg(long)]
         watch: bool,
@@ -27,7 +39,7 @@ pub enum Command {
     Run {
         /// Entry file or project directory
         #[arg()]
-        target: String,
+        target: Option<String>,
 
         /// Run using NodeJS
         #[arg(long)]
@@ -45,23 +57,11 @@ pub enum Command {
         clean: bool,
     },
 
-    Transpile {
-        /// File or project directory
-        #[arg()]
-        target: String,
-
-        #[arg(long)]
-        watch: bool,
-
-        #[arg(long)]
-        clean: bool,
-    },
-
     /// Typecheck and lint Bagel files
     Check {
         /// File or project directory
         #[arg()]
-        target: String,
+        target: Option<String>,
 
         #[arg(long)]
         watch: bool,
@@ -74,7 +74,7 @@ pub enum Command {
     Test {
         /// File or project directory
         #[arg()]
-        target: String,
+        target: Option<String>,
 
         /// Pattern for filtering tests by name
         #[arg()]
@@ -90,7 +90,7 @@ pub enum Command {
     Clean {
         /// File or project directory
         #[arg()]
-        target: String,
+        target: Option<String>,
     },
     // /// Reformat Bagel code
     // Format {

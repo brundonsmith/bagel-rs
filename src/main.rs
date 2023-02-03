@@ -2,6 +2,7 @@
 #![macro_use]
 
 mod cli;
+mod config;
 mod model;
 mod passes;
 mod tests;
@@ -12,6 +13,7 @@ use std::{collections::HashMap, ffi::OsStr, ops::Add, path::PathBuf, process::Ex
 use clap::{command, Parser};
 use cli::Command;
 use colored::Color;
+use config::BagelConfig;
 use glob::glob;
 use model::{
     errors::blue_string,
@@ -31,12 +33,33 @@ struct Args {
 }
 
 fn main() -> ExitCode {
+    let current_dir = std::env::current_dir().unwrap();
+    let index_path = current_dir.join("index.bgl");
+    let config_path = current_dir.join("bagel.config.json");
+
     let args = Args::parse();
+    let config: Option<BagelConfig> = if config_path.exists() {
+        let parsed = serde_json::from_str(&std::fs::read_to_string(&config_path).unwrap());
+
+        match parsed {
+            Ok(parsed) => parsed,
+            Err(err) => {
+                println!(
+                    "{} Reading {}:\n  {}",
+                    cli_label("Failed", Color::Red),
+                    blue_string(config_path.to_string_lossy()),
+                    err.to_string()
+                );
+                return ExitCode::FAILURE;
+            }
+        }
+    } else {
+        None
+    };
 
     match args.command {
         Command::New { dir } => {
-            let project_path = std::env::current_dir().unwrap().join(dir);
-            let index_path = project_path.clone().join("index.bgl");
+            let project_path = current_dir.join(dir);
 
             if project_path.exists() {
                 println!(
@@ -56,8 +79,6 @@ fn main() -> ExitCode {
             }
         }
         Command::Init => {
-            let index_path = std::env::current_dir().unwrap().join("index.bgl");
-
             if index_path.exists() {
                 println!(
                     "{} Can't initialize Bagel project here because one already exists",
@@ -72,12 +93,40 @@ fn main() -> ExitCode {
                 );
             }
         }
+        Command::Transpile {
+            target,
+            watch,
+            clean,
+        } => {
+            let modules_store = load_and_parse(get_all_entrypoints(target.as_str()), clean);
+            let errors = gather_errors(&modules_store);
+            print_error_results(&errors);
+
+            if errors.values().any(|errors| errors.len() > 0) {
+                return ExitCode::FAILURE;
+            }
+
+            // if no errors,
+            //  transpile
+        }
         Command::Build {
             target,
             watch,
             clean,
         } => {
-            let bundle_path = bundle(target.as_str(), watch, clean);
+            let entry_path = if let Some(target) = target {
+                target
+            } else if let Some(config) = config {
+                config.main
+            } else {
+                println!(
+                    "{} No entry module specified, and current directory doesn't have a {}",
+                    cli_label("Failed", Color::Red),
+                    blue_string("bagel.config.json"),
+                );
+                return ExitCode::FAILURE;
+            };
+            let bundle_path = bundle(entry_path.as_str(), watch, clean);
 
             if bundle_path.is_err() {
                 return ExitCode::FAILURE;
@@ -90,7 +139,19 @@ fn main() -> ExitCode {
             bun,
             clean,
         } => {
-            let bundle_path = bundle(target.as_str(), false, clean);
+            let entry_path = if let Some(target) = target {
+                target
+            } else if let Some(config) = config {
+                config.main
+            } else {
+                println!(
+                    "{} No entry module specified, and current directory doesn't have a {}",
+                    cli_label("Failed", Color::Red),
+                    blue_string("bagel.config.json"),
+                );
+                return ExitCode::FAILURE;
+            };
+            let bundle_path = bundle(entry_path.as_str(), false, clean);
 
             match bundle_path {
                 Ok(bundle_path) => {
@@ -140,28 +201,24 @@ fn main() -> ExitCode {
                 Err(_) => return ExitCode::FAILURE,
             }
         }
-        Command::Transpile {
-            target,
-            watch,
-            clean,
-        } => {
-            let modules_store = load_and_parse(get_all_entrypoints(target.as_str()), clean);
-            let errors = gather_errors(&modules_store);
-            print_error_results(&errors);
-
-            if errors.values().any(|errors| errors.len() > 0) {
-                return ExitCode::FAILURE;
-            }
-
-            // if no errors,
-            //  transpile
-        }
         Command::Check {
             target,
             watch,
             clean,
         } => {
-            let modules_store = load_and_parse(get_all_entrypoints(target.as_str()), clean);
+            let modules_store = if let Some(target) = target {
+                load_and_parse(get_all_entrypoints(target.as_str()), clean)
+            } else if let Some(config) = config {
+                load_and_parse(std::iter::once(config.main.into()), clean)
+            } else {
+                println!(
+                    "{} No module or directory specified, and current directory doesn't have a {}",
+                    cli_label("Failed", Color::Red),
+                    blue_string("bagel.config.json"),
+                );
+                return ExitCode::FAILURE;
+            };
+
             let errors = gather_errors(&modules_store);
             print_error_results(&errors);
 
@@ -216,10 +273,10 @@ fn pretty_size(bytes: u64) -> String {
     }
 }
 
-fn bundle(target: &str, watch: bool, clean: bool) -> Result<PathBuf, ()> {
-    let entrypoint = get_single_entrypoint(target);
+fn bundle(entrypoint: &str, watch: bool, clean: bool) -> Result<PathBuf, ()> {
+    let entrypoint_path_buf = get_single_entrypoint(entrypoint);
 
-    match entrypoint {
+    match entrypoint_path_buf {
         Ok(entrypoint) => {
             let modules_store = load_and_parse(std::iter::once(entrypoint.clone()), clean);
             let errors = gather_errors(&modules_store);
@@ -249,7 +306,7 @@ fn bundle(target: &str, watch: bool, clean: bool) -> Result<PathBuf, ()> {
                 SingleEntrypointError::NotFound => println!(
                     "{} Couldn't find module {}",
                     cli_label("Failed", Color::Red),
-                    blue_string(target)
+                    blue_string(entrypoint)
                 ),
                 SingleEntrypointError::Multi => println!(
                     "{} This command expects a single bagel module",
