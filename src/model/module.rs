@@ -190,6 +190,13 @@ impl ModuleID {
             }
             ModuleID::Artificial(_) => unreachable!(),
         }
+        .map(|raw_string| {
+            if raw_string.contains('\r') {
+                raw_string.chars().filter(|c| *c != '\r').collect()
+            } else {
+                raw_string
+            }
+        })
     }
 
     pub fn imported(&self, imported: &str) -> Option<ModuleID> {
