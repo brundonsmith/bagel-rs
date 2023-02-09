@@ -123,7 +123,11 @@ where
 
                 // todo!("Check for name duplicates");
             }
-            Any::ImportAllDeclaration(ImportAllDeclaration { name, path }) => {
+            Any::ImportAllDeclaration(ImportAllDeclaration {
+                platforms,
+                name,
+                path,
+            }) => {
                 name.check(ctx, report_error);
                 path.check(ctx, report_error);
 
@@ -142,44 +146,77 @@ where
                     });
                 }
             }
-            Any::ImportDeclaration(ImportDeclaration { imports, path }) => {
+            Any::ImportDeclaration(ImportDeclaration {
+                platforms,
+                imports,
+                path,
+            }) => {
                 imports.check(ctx, report_error);
                 path.check(ctx, report_error);
 
                 let path_name = path.downcast();
                 let path_name = path_name.value.as_str();
+                let path_extension = path_name.split('.').last();
+                let is_js_file = path_extension
+                    .map(|ext| JS_FILE_EXTENSIONS.contains(&ext))
+                    .unwrap_or(false);
 
-                let imported_module = ctx.modules.import_raw(module_id, path_name);
+                match platforms {
+                    Some(_) => {
+                        if !is_js_file {
+                            report_error(BagelError::MiscError {
+                                module_id: ctx.current_module.module_id.clone(),
+                                src: self.slice().clone(),
+                                message: format!(
+                                    "Can only specify valid platforms for an imported module if it's a JavaScript file"
+                                ),
+                            });
+                        }
+                    }
+                    None => {
+                        if is_js_file {
+                            report_error(BagelError::MiscError {
+                                module_id: ctx.current_module.module_id.clone(),
+                                src: self.slice().clone(),
+                                message: format!(
+                                    "Imports of JavaScript files must specify which platforms they can be used on, eg. [node, browser]"
+                                ),
+                            });
+                        } else {
+                            let imported_module = ctx.modules.import_raw(module_id, path_name);
 
-                match imported_module {
-                    None => report_error(BagelError::MiscError {
-                        module_id: ctx.current_module.module_id.clone(),
-                        src: path.slice().clone(),
-                        message: format!(
-                            "Couldn't find module {} from module {}",
-                            blue_string(path_name),
-                            blue_string(module_id)
-                        ),
-                    }),
-                    Some(Err(_)) => {}
-                    Some(Ok(imported_module)) => {
-                        for item in imports {
-                            let item_downcast = item.downcast();
-                            let item_name = item_downcast.name.downcast();
-                            let item_name = item_name.0.as_str();
-
-                            let decl = imported_module.get_declaration(item_name, true);
-
-                            if decl.is_none() {
-                                report_error(BagelError::MiscError {
+                            match imported_module {
+                                None => report_error(BagelError::MiscError {
                                     module_id: ctx.current_module.module_id.clone(),
-                                    src: item.slice().clone(),
+                                    src: path.slice().clone(),
                                     message: format!(
-                                        "No exported member named {} found in module {}",
-                                        blue_string(item_name),
-                                        blue_string(&imported_module.module_id)
+                                        "Couldn't find module {} from module {}",
+                                        blue_string(path_name),
+                                        blue_string(module_id)
                                     ),
-                                })
+                                }),
+                                Some(Err(_)) => {}
+                                Some(Ok(imported_module)) => {
+                                    for item in imports {
+                                        let item_downcast = item.downcast();
+                                        let item_name = item_downcast.name.downcast();
+                                        let item_name = item_name.0.as_str();
+
+                                        let decl = imported_module.get_declaration(item_name, true);
+
+                                        if decl.is_none() {
+                                            report_error(BagelError::MiscError {
+                                                module_id: ctx.current_module.module_id.clone(),
+                                                src: item.slice().clone(),
+                                                message: format!(
+                                                    "No exported member named {} found in module {}",
+                                                    blue_string(item_name),
+                                                    blue_string(&imported_module.module_id)
+                                                ),
+                                            })
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -243,13 +280,36 @@ where
                     *is_const,
                 );
             }
-            Any::TestExprDeclaration(TestExprDeclaration { name, expr }) => todo!(),
-            Any::TestBlockDeclaration(TestBlockDeclaration { name, block }) => todo!(),
+            Any::TestExprDeclaration(TestExprDeclaration {
+                platforms,
+                name,
+                expr,
+            }) => todo!(),
+            Any::TestBlockDeclaration(TestBlockDeclaration {
+                platforms,
+                name,
+                block,
+            }) => todo!(),
             Any::TestTypeDeclaration(TestTypeDeclaration {
                 name,
                 destination_type,
                 value_type,
             }) => todo!(),
+            Any::DeclarationPlatforms(DeclarationPlatforms { platforms }) => {
+                for platform in platforms {
+                    if !VALID_PLATFORMS.contains(&platform.downcast().0.as_str()) {
+                        report_error(BagelError::MiscError {
+                            module_id: module_id.clone(),
+                            src: platform.slice().clone(),
+                            message: format!(
+                                "{} is not one of the valid platforms ({})",
+                                blue_string(platform.downcast().0.as_str()),
+                                VALID_PLATFORMS.join(", ")
+                            ),
+                        });
+                    }
+                }
+            }
             Any::StringLiteral(StringLiteral { tag: _, segments }) => {
                 for segment in segments {
                     match segment {
@@ -335,7 +395,8 @@ where
                     }
                     Some(resolved) => {
                         if let Some(nearest_func_or_proc) = &ctx.nearest_func_or_proc {
-                            let failure = match nearest_func_or_proc {
+                            // Violation of pure func/proc boundary
+                            let purity_failure = match nearest_func_or_proc {
                                 FuncOrProc::Func(func) => {
                                     if func.downcast().is_pure && !func.contains(&resolved) {
                                         Some("function")
@@ -352,8 +413,7 @@ where
                                 }
                             };
 
-                            if let Some(failure) = failure {
-                                // Violation of pure func/proc boundary
+                            if let Some(failure) = purity_failure {
                                 report_error(BagelError::MiscError {
                                     module_id: ctx.current_module.module_id.clone(),
                                     src: self.slice().clone(),
@@ -363,6 +423,92 @@ where
                                     ),
                                 });
                             }
+
+                            // Violation of platform-specific constraints
+                            if let Some(decl) = resolved
+                                .find_parent(|p| p.try_downcast::<ImportDeclaration>().is_some())
+                            {
+                                if let Some(import_platforms) =
+                                    decl.try_downcast::<ImportDeclaration>().unwrap().platforms
+                                {
+                                    let allowed_platforms = match self
+                                        .clone()
+                                        .upcast()
+                                        .find_parent(|p| {
+                                            p.try_downcast::<FuncDeclaration>().is_some()
+                                                || p.try_downcast::<ProcDeclaration>().is_some()
+                                        })
+                                        .map(|p| p.downcast())
+                                    {
+                                        Some(Any::FuncDeclaration(FuncDeclaration {
+                                            platforms,
+                                            name: _,
+                                            func: _,
+                                            exported: _,
+                                            decorators: _,
+                                        })) => platforms,
+                                        Some(Any::ProcDeclaration(ProcDeclaration {
+                                            platforms,
+                                            name: _,
+                                            proc: _,
+                                            exported: _,
+                                            decorators: _,
+                                        })) => platforms,
+                                        Some(Any::ValueDeclaration(ValueDeclaration {
+                                            platforms,
+                                            value: _,
+                                            exported: _,
+                                            destination: _,
+                                            is_const: _,
+                                        })) => platforms,
+                                        _ => None,
+                                    };
+
+                                    if let Some(allowed_platforms) = allowed_platforms {
+                                        let import_platforms: PlatformSet =
+                                            (&import_platforms).try_into().unwrap();
+                                        let allowed_platforms: PlatformSet =
+                                            (&allowed_platforms).try_into().unwrap();
+
+                                        // platform mismatch
+                                        if !import_platforms.subset_of(allowed_platforms) {
+                                            report_error(
+                                                BagelError::MiscError {
+                                                    module_id: module_id.clone(),
+                                                    src: self.slice().clone(),
+                                                    message: format!(
+                                                        "Identifier {} is tagged as being specific to platforms {}, so it can't be referenced from within this declaration, which is tagged for platforms {}", 
+                                                        blue_string(name.as_str()),
+                                                        blue_string(import_platforms),
+                                                        blue_string(allowed_platforms)
+                                                    ),
+                                                }
+                                            );
+                                        }
+                                    } else {
+                                        // can only reference platform-specific imports from platform-specific declarations
+                                        report_error(BagelError::MiscError {
+                                            module_id: module_id.clone(),
+                                            src: self.slice().clone(),
+                                            message: format!(
+                                                "Identifier {} was imported from a JavaScript file, so it can only be referenced from within platform-specific Bagel declarations", 
+                                                blue_string(name.as_str())
+                                            ),
+                                        });
+                                    }
+                                } else if name.as_str() == JS_GLOBAL_IDENTIFIER {
+                                    report_error(BagelError::MiscError {
+                                        module_id: module_id.clone(),
+                                        src: self.slice().clone(),
+                                        message: format!(
+                                            "{} can only be referenced from within platform-specific Bagel declarations", 
+                                            blue_string(JS_GLOBAL_IDENTIFIER)
+                                        ),
+                                    });
+                                }
+                            }
+
+                            // if we access a platform-specific import or a JS global from outside of a platform-specific context
                         }
                     }
                 }
@@ -371,7 +517,9 @@ where
                 // TODO: Make sure it isn't an expression
                 let name = name.downcast();
                 let name_str = name.0.as_str();
-                if self.resolve_symbol(name_str).is_none() {
+                if name.0.as_str() != JS_GLOBAL_IDENTIFIER
+                    && self.resolve_symbol(name_str).is_none()
+                {
                     report_error(BagelError::MiscError {
                         module_id: ctx.current_module.module_id.clone(),
                         src: self.slice().clone(),

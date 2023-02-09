@@ -1,5 +1,5 @@
 use crate::model::slice::Slice;
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::marker::PhantomData;
 use std::{
     cell::RefCell,
@@ -267,12 +267,14 @@ pub struct Module {
 // --- Declarations ---
 #[derive(Debug, Clone, PartialEq)]
 pub struct ImportAllDeclaration {
+    pub platforms: Option<AST<DeclarationPlatforms>>,
     pub name: AST<PlainIdentifier>,
     pub path: AST<ExactStringLiteral>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ImportDeclaration {
+    pub platforms: Option<AST<DeclarationPlatforms>>,
     pub imports: Vec<AST<ImportItem>>,
     pub path: AST<ExactStringLiteral>,
 }
@@ -292,19 +294,19 @@ pub struct TypeDeclaration {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FuncDeclaration {
+    pub platforms: Option<AST<DeclarationPlatforms>>,
     pub name: AST<PlainIdentifier>,
     pub func: AST<Func>,
     pub exported: bool,
-    pub platforms: PlatformSet,
     pub decorators: Vec<AST<Decorator>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ProcDeclaration {
+    pub platforms: Option<AST<DeclarationPlatforms>>,
     pub name: AST<PlainIdentifier>,
     pub proc: AST<Proc>,
     pub exported: bool,
-    pub platforms: PlatformSet,
     pub decorators: Vec<AST<Decorator>>,
 }
 
@@ -316,21 +318,23 @@ pub struct Decorator {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ValueDeclaration {
+    pub platforms: Option<AST<DeclarationPlatforms>>,
     pub destination: DeclarationDestination,
     pub value: AST<Expression>,
     pub is_const: bool,
     pub exported: bool,
-    pub platforms: PlatformSet,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TestExprDeclaration {
+    pub platforms: Option<AST<DeclarationPlatforms>>,
     pub name: AST<ExactStringLiteral>,
     pub expr: AST<Expression>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TestBlockDeclaration {
+    pub platforms: Option<AST<DeclarationPlatforms>>,
     pub name: AST<ExactStringLiteral>,
     pub block: AST<Block>,
 }
@@ -341,6 +345,35 @@ pub struct TestTypeDeclaration {
     pub destination_type: AST<TypeExpression>,
     pub value_type: AST<TypeExpression>,
 }
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DeclarationPlatforms {
+    pub platforms: Vec<AST<PlainIdentifier>>,
+}
+
+impl TryFrom<&AST<DeclarationPlatforms>> for PlatformSet {
+    type Error = ();
+
+    fn try_from(value: &AST<DeclarationPlatforms>) -> Result<Self, Self::Error> {
+        let mut set = PlatformSet::new();
+
+        for platform in value.downcast().platforms {
+            match platform.downcast().0.as_str() {
+                "deno" => set.deno = true,
+                "node" => set.node = true,
+                "bun" => set.bun = true,
+                "browser" => set.browser = true,
+                _ => return Err(()),
+            }
+        }
+
+        Ok(set)
+    }
+}
+
+pub const JS_GLOBAL_IDENTIFIER: &str = "jsGlobal";
+pub const JS_FILE_EXTENSIONS: [&str; 2] = ["js", "ts"];
+pub const VALID_PLATFORMS: [&str; 4] = ["deno", "node", "bun", "browser"];
 
 // --- Expressions ---
 #[derive(Debug, Clone, PartialEq)]
@@ -913,13 +946,68 @@ pub struct PlatformSet {
 }
 
 impl PlatformSet {
-    pub fn all() -> Self {
+    pub fn new() -> Self {
         PlatformSet {
-            node: true,
-            deno: true,
-            bun: true,
-            browser: true,
+            node: false,
+            deno: false,
+            bun: false,
+            browser: false,
         }
+    }
+
+    pub fn subset_of(self, other: PlatformSet) -> bool {
+        (self.node == false || other.node == true)
+            && (self.deno == false || other.deno == true)
+            && (self.bun == false || other.bun == true)
+            && (self.browser == false || other.browser == true)
+    }
+}
+
+impl Display for PlatformSet {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut first = true;
+
+        if self.node {
+            if !first {
+                f.write_str(", ")?;
+            }
+
+            f.write_str("node")?;
+
+            first = true;
+        }
+
+        if self.deno {
+            if !first {
+                f.write_str(", ")?;
+            }
+
+            f.write_str("deno")?;
+
+            first = true;
+        }
+
+        if self.bun {
+            if !first {
+                f.write_str(", ")?;
+            }
+
+            f.write_str("bun")?;
+
+            first = true;
+        }
+
+        if self.browser {
+            if !first {
+                f.write_str(", ")?;
+            }
+
+            f.write_str("browser")?;
+
+            first = true;
+        }
+
+        Ok(())
     }
 }
 
@@ -1022,6 +1110,7 @@ union_type! {
         | TestExprDeclaration
         | TestBlockDeclaration
         | TestTypeDeclaration
+        | DeclarationPlatforms
         | NilLiteral
         | BooleanLiteral
         | NumberLiteral
@@ -1175,3 +1264,19 @@ union_subtype!(
         | Invocation
         | Block
 );
+
+impl AST<Any> {
+    pub fn find_parent<F: Fn(&AST<Any>) -> bool>(&self, f: F) -> Option<AST<Any>> {
+        let mut current: Option<AST<Any>> = self.parent();
+
+        while let Some(parent) = current {
+            if f(&parent) {
+                return Some(parent.clone());
+            }
+
+            current = parent.parent();
+        }
+
+        return None;
+    }
+}

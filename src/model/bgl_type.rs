@@ -1505,7 +1505,7 @@ impl Display for Type {
                 f.write_str(mutability.display_prefix())?;
                 f.write_str("unknown")
             }
-            Type::PoisonedType => f.write_str("unknown"),
+            Type::PoisonedType => f.write_str("poisoned"),
             Type::AnyType => f.write_str("any"),
         }
     }

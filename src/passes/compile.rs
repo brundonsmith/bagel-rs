@@ -29,7 +29,11 @@ where
 
                 Ok(())
             }
-            Any::ImportAllDeclaration(ImportAllDeclaration { name, path }) => {
+            Any::ImportAllDeclaration(ImportAllDeclaration {
+                platforms,
+                name,
+                path,
+            }) => {
                 //             import { a, b as otherb } from \"./foo.bgl.ts\";
                 //   import * as bar from \"./bar.bgl.ts\";
                 f.write_str("import * as ")?;
@@ -38,7 +42,11 @@ where
                 f.write_str(path.downcast().value.as_str())?; // TODO: Get the correct path for the current build mode
                 f.write_str("\"")
             }
-            Any::ImportDeclaration(ImportDeclaration { imports, path }) => {
+            Any::ImportDeclaration(ImportDeclaration {
+                platforms,
+                imports,
+                path,
+            }) => {
                 f.write_str("import { ")?;
                 for (index, import) in imports.iter().enumerate() {
                     if index > 0 {
@@ -155,8 +163,16 @@ where
 
                 Ok(())
             }
-            Any::TestExprDeclaration(TestExprDeclaration { name, expr }) => todo!(),
-            Any::TestBlockDeclaration(TestBlockDeclaration { name, block }) => todo!(),
+            Any::TestExprDeclaration(TestExprDeclaration {
+                platforms,
+                name,
+                expr,
+            }) => todo!(),
+            Any::TestBlockDeclaration(TestBlockDeclaration {
+                platforms,
+                name,
+                block,
+            }) => todo!(),
             Any::TestTypeDeclaration(TestTypeDeclaration {
                 name,
                 destination_type,
@@ -684,6 +700,7 @@ where
                 until,
             }) => todo!(),
             Any::PlainIdentifier(PlainIdentifier(name)) => f.write_str(name.as_str()),
+            Any::DeclarationPlatforms(_) => Ok(()),
         }
     }
 }

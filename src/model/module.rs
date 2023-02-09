@@ -50,12 +50,15 @@ impl ModulesStore {
                     .iter()
                     .filter_map(|decl| match decl.downcast() {
                         Declaration::ImportAllDeclaration(ImportAllDeclaration {
+                            platforms: _,
                             name: _,
                             path,
                         }) => Some(path.downcast().value.as_str().to_owned()),
-                        Declaration::ImportDeclaration(ImportDeclaration { imports: _, path }) => {
-                            Some(path.downcast().value.as_str().to_owned())
-                        }
+                        Declaration::ImportDeclaration(ImportDeclaration {
+                            platforms: _,
+                            imports: _,
+                            path,
+                        }) => Some(path.downcast().value.as_str().to_owned()),
                         _ => None,
                     });
 

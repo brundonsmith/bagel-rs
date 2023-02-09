@@ -29,6 +29,7 @@ where
 
                     match decl.downcast() {
                         Declaration::ImportAllDeclaration(ImportAllDeclaration {
+                            platforms,
                             name,
                             path: _,
                         }) => {
@@ -36,7 +37,11 @@ where
                                 return Some(decl.clone());
                             }
                         }
-                        Declaration::ImportDeclaration(ImportDeclaration { imports, path: _ }) => {
+                        Declaration::ImportDeclaration(ImportDeclaration {
+                            platforms,
+                            imports,
+                            path: _,
+                        }) => {
                             if imports.iter().any(|item| {
                                 let item = item.downcast();
 

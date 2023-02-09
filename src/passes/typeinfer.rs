@@ -26,10 +26,18 @@ impl AST<Expression> {
 
                     if let Some(resolved) = resolved {
                         match resolved.details() {
-                            Any::ImportAllDeclaration(ImportAllDeclaration { name, path }) => {
+                            Any::ImportAllDeclaration(ImportAllDeclaration {
+                                platforms,
+                                name,
+                                path,
+                            }) => {
                                 todo!()
                             }
-                            Any::ImportDeclaration(ImportDeclaration { imports: _, path }) => ctx
+                            Any::ImportDeclaration(ImportDeclaration {
+                                platforms,
+                                imports: _,
+                                path,
+                            }) => ctx
                                 .modules
                                 .import(
                                     &ctx.current_module.module_id,

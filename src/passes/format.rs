@@ -39,8 +39,16 @@ where
 
                 Ok(())
             }
-            Any::ImportAllDeclaration(ImportAllDeclaration { name, path }) => todo!(),
-            Any::ImportDeclaration(ImportDeclaration { imports, path }) => todo!(),
+            Any::ImportAllDeclaration(ImportAllDeclaration {
+                platforms,
+                name,
+                path,
+            }) => todo!(),
+            Any::ImportDeclaration(ImportDeclaration {
+                platforms,
+                imports,
+                path,
+            }) => todo!(),
             Any::ImportItem(ImportItem { name, alias }) => todo!(),
             Any::TypeDeclaration(TypeDeclaration {
                 name,
@@ -78,13 +86,32 @@ where
                 f.write_str(" = ")?;
                 value.format(f, opts)
             }
-            Any::TestExprDeclaration(TestExprDeclaration { name, expr }) => todo!(),
-            Any::TestBlockDeclaration(TestBlockDeclaration { name, block }) => todo!(),
+            Any::TestExprDeclaration(TestExprDeclaration {
+                platforms,
+                name,
+                expr,
+            }) => todo!(),
+            Any::TestBlockDeclaration(TestBlockDeclaration {
+                platforms,
+                name,
+                block,
+            }) => todo!(),
             Any::TestTypeDeclaration(TestTypeDeclaration {
                 name,
                 destination_type,
                 value_type,
             }) => todo!(),
+            Any::DeclarationPlatforms(DeclarationPlatforms { platforms }) => {
+                f.write_char('[')?;
+                for (index, platform) in platforms.iter().enumerate() {
+                    if index > 0 {
+                        f.write_str(", ")?;
+                    }
+
+                    platform.format(f, opts)?;
+                }
+                f.write_char(']')
+            }
             Any::NilLiteral(_) => f.write_str("nil"),
             Any::BooleanLiteral(BooleanLiteral(value)) => f.write_str(match value {
                 true => "true",

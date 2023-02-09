@@ -169,13 +169,20 @@ fn declaration(i: Slice) -> ParseResult<AST<Declaration>> {
 fn import_all_declaration(i: Slice) -> ParseResult<AST<ImportAllDeclaration>> {
     map(
         seq!(
+            opt(declaration_platforms),
             tag("import"),
             exact_string_literal,
             tag("as"),
             plain_identifier,
         ),
-        |(start, mut path, _, mut name)| {
-            make_node!(ImportAllDeclaration, start.spanning(&name), path, name)
+        |(mut platforms, start, mut path, _, mut name)| {
+            make_node!(
+                ImportAllDeclaration,
+                start.spanning(&name),
+                platforms,
+                path,
+                name
+            )
         },
     )(i)
 }
@@ -183,6 +190,7 @@ fn import_all_declaration(i: Slice) -> ParseResult<AST<ImportAllDeclaration>> {
 fn import_declaration(i: Slice) -> ParseResult<AST<ImportDeclaration>> {
     map(
         seq!(
+            opt(declaration_platforms),
             tag("from"),
             exact_string_literal,
             tag("import"),
@@ -193,8 +201,14 @@ fn import_declaration(i: Slice) -> ParseResult<AST<ImportDeclaration>> {
             ),
             tag("}"),
         ),
-        |(start, mut path, _, _, mut imports, end)| {
-            make_node!(ImportDeclaration, start.spanning(&end), path, imports)
+        |(mut platforms, start, mut path, _, _, mut imports, end)| {
+            make_node!(
+                ImportDeclaration,
+                start.spanning(&end),
+                platforms,
+                path,
+                imports
+            )
         },
     )(i)
 }
@@ -242,6 +256,7 @@ fn type_declaration(i: Slice) -> ParseResult<AST<TypeDeclaration>> {
 fn func_declaration(i: Slice) -> ParseResult<AST<FuncDeclaration>> {
     map(
         seq!(
+            opt(declaration_platforms),
             many0(terminated(decorator, whitespace_required)),
             opt(terminated(tag("export"), whitespace_required)),
             opt(terminated(tag("pure"), whitespace_required)),
@@ -255,6 +270,7 @@ fn func_declaration(i: Slice) -> ParseResult<AST<FuncDeclaration>> {
             expression(0),
         ),
         |(
+            mut platforms,
             mut decorators,
             export,
             pure,
@@ -275,7 +291,6 @@ fn func_declaration(i: Slice) -> ParseResult<AST<FuncDeclaration>> {
             let mut exported = export.is_some();
             let mut is_pure = pure.is_some();
             let mut is_async = asyn.is_some();
-            let mut platforms = PlatformSet::all(); // TODO
 
             let mut type_annotation = make_node!(
                 FuncType,
@@ -381,6 +396,7 @@ fn args_parenthesized(i: Slice) -> ParseResult<(Vec<AST<Arg>>, Option<AST<Arg>>)
 fn proc_declaration(i: Slice) -> ParseResult<AST<ProcDeclaration>> {
     map(
         seq!(
+            opt(declaration_platforms),
             many0(terminated(decorator, whitespace_required)),
             opt(terminated(tag("export"), whitespace_required)),
             opt(terminated(tag("pure"), whitespace_required)),
@@ -394,6 +410,7 @@ fn proc_declaration(i: Slice) -> ParseResult<AST<ProcDeclaration>> {
             statement,
         ),
         |(
+            mut platforms,
             mut decorators,
             export,
             pure,
@@ -413,7 +430,6 @@ fn proc_declaration(i: Slice) -> ParseResult<AST<ProcDeclaration>> {
             let mut exported = export.is_some();
             let mut is_async = asyn.is_some();
             let mut is_pure = pure.is_some();
-            let mut platforms = PlatformSet::all(); // TODO
 
             let mut type_annotation = make_node!(
                 ProcType,
@@ -513,26 +529,26 @@ fn block(i: Slice) -> ParseResult<AST<Block>> {
 fn value_declaration(i: Slice) -> ParseResult<AST<ValueDeclaration>> {
     map(
         seq!(
+            opt(declaration_platforms),
             opt(tag("export")),
             alt((tag("const"), tag("let"))),
             declaration_destination,
             tag("="),
             expression(0),
         ),
-        |(export, keyword, mut destination, _, mut value)| {
+        |(mut platforms, export, keyword, mut destination, _, mut value)| {
             let mut exported = export.is_some();
             let mut is_const = keyword.as_str() == "const";
-            let mut platforms = PlatformSet::all(); // TODO
             let src = export.unwrap_or(keyword).spanning(&value);
 
             make_node!(
                 ValueDeclaration,
                 src,
+                platforms,
                 destination,
                 value,
                 is_const,
-                exported,
-                platforms
+                exported
             )
         },
     )(i)
@@ -541,29 +557,61 @@ fn value_declaration(i: Slice) -> ParseResult<AST<ValueDeclaration>> {
 fn test_expr_declaration(i: Slice) -> ParseResult<AST<TestExprDeclaration>> {
     map(
         seq!(
+            opt(declaration_platforms),
             tag("test"),
             tag("expr"),
             exact_string_literal,
             tag("=>"),
             expression(0),
         ),
-        |(start, _, mut name, _, mut expr)| {
-            make_node!(TestExprDeclaration, start.spanning(&expr), name, expr)
+        |(mut platforms, start, _, mut name, _, mut expr)| {
+            make_node!(
+                TestExprDeclaration,
+                start.spanning(&expr),
+                platforms,
+                name,
+                expr
+            )
         },
     )(i)
 }
 
 fn test_block_declaration(i: Slice) -> ParseResult<AST<TestBlockDeclaration>> {
     map(
-        seq!(tag("test"), tag("block"), exact_string_literal, block),
-        |(start, _, mut name, mut block)| {
-            make_node!(TestBlockDeclaration, start.spanning(&block), name, block)
+        seq!(
+            opt(declaration_platforms),
+            tag("test"),
+            tag("block"),
+            exact_string_literal,
+            block
+        ),
+        |(mut platforms, start, _, mut name, mut block)| {
+            make_node!(
+                TestBlockDeclaration,
+                start.spanning(&block),
+                platforms,
+                name,
+                block
+            )
         },
     )(i)
 }
 
 fn test_type_declaration(i: Slice) -> ParseResult<AST<TestTypeDeclaration>> {
     todo!()
+}
+
+fn declaration_platforms(i: Slice) -> ParseResult<AST<DeclarationPlatforms>> {
+    map(
+        seq!(
+            tag("["),
+            separated_list0(w(tag(",")), w(plain_identifier)),
+            tag("]"),
+        ),
+        |(start, mut platforms, end)| {
+            make_node!(DeclarationPlatforms, start.spanning(&end), platforms)
+        },
+    )(i)
 }
 
 fn type_annotation(i: Slice) -> ParseResult<AST<TypeExpression>> {
@@ -1210,7 +1258,11 @@ fn invocation_accessor_chain_inner(level: usize, i: Slice) -> ParseResult<AST<Ex
                         )
                         .recast::<Expression>();
                     }
-                    InvocationOrPropertyAccess::Accessing { mut property, mut optional, slice } => {
+                    InvocationOrPropertyAccess::Accessing {
+                        mut property,
+                        mut optional,
+                        slice,
+                    } => {
                         next_subject = make_node!(
                             PropertyAccessor,
                             subject.spanning(&slice),
@@ -1262,28 +1314,45 @@ fn invocation_args(i: Slice) -> ParseResult<InvocationOrPropertyAccess> {
 fn indexer_expression(i: Slice) -> ParseResult<InvocationOrPropertyAccess> {
     map(
         tuple((opt(tag("?.")), tag("["), w(expression(0)), w(tag("]")))),
-        |(question_dot, open, property, close)| {
-            InvocationOrPropertyAccess::Accessing {
-                property: Property::Expression(property),
-                optional: question_dot.is_some(),
-                slice: question_dot.as_ref().unwrap_or(&open).clone().spanning(&close),
-            }
+        |(question_dot, open, property, close)| InvocationOrPropertyAccess::Accessing {
+            property: Property::Expression(property),
+            optional: question_dot.is_some(),
+            slice: question_dot
+                .as_ref()
+                .unwrap_or(&open)
+                .clone()
+                .spanning(&close),
         },
     )(i)
 }
 
 fn dot_property_access(i: Slice) -> ParseResult<InvocationOrPropertyAccess> {
-    map(tuple((opt(tag("?")), tag("."), plain_identifier)), |(question, dot, property)| {
-        let src = question.as_ref().unwrap_or(&dot).clone().spanning(&property);
+    map(
+        tuple((opt(tag("?")), tag("."), plain_identifier)),
+        |(question, dot, property)| {
+            let src = question
+                .as_ref()
+                .unwrap_or(&dot)
+                .clone()
+                .spanning(&property);
 
-        InvocationOrPropertyAccess::Accessing { property: Property::PlainIdentifier(property), optional: question.is_some(), slice: src }
-    })(i)
+            InvocationOrPropertyAccess::Accessing {
+                property: Property::PlainIdentifier(property),
+                optional: question.is_some(),
+                slice: src,
+            }
+        },
+    )(i)
 }
 
 #[derive(Debug, Clone)]
 enum InvocationOrPropertyAccess {
     InvokingWith(Vec<AST<TypeExpression>>, Vec<AST<Expression>>, Slice),
-    Accessing { property: Property, optional: bool, slice: Slice },
+    Accessing {
+        property: Property,
+        optional: bool,
+        slice: Slice,
+    },
 }
 
 macro_rules! parse_binary_operation {
@@ -1834,13 +1903,13 @@ fn identifier_like(i: Slice) -> ParseResult<Slice> {
 }
 
 pub fn is_valid_identifier(s: &str) -> bool {
-    !s.starts_with(INT) && 
-    s.char_indices().all(|(index, ch)| 
+    !s.starts_with(INT) &&
+    s.char_indices().all(|(index, ch)|
         if index == 0 {
-            ch.is_alphabetic() 
+            ch.is_alphabetic()
         } else {
             ch.is_alphanumeric()
-        } || ch == '_' || ch == '$') && 
+        } || ch == '_' || ch == '$') &&
     !RESERVED_IDENTIFIERS.contains(&s)
 }
 
