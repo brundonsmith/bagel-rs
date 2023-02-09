@@ -596,9 +596,9 @@ impl AST<Declaration> {
             Declaration::ValueDeclaration(ValueDeclaration {
                 destination,
                 value,
-                is_const,
-                exported,
-                platforms,
+                is_const: _,
+                exported: _,
+                platforms: _,
             }) => match destination {
                 DeclarationDestination::NameAndType(NameAndType {
                     name: _,
@@ -610,6 +610,12 @@ impl AST<Declaration> {
                 ),
                 DeclarationDestination::Destructure(_) => None,
             },
+            Declaration::SymbolDeclaration(SymbolDeclaration { name, exported: _ }) => {
+                Some(Type::SymbolType {
+                    module_id: self.clone().upcast().module_id().unwrap(),
+                    name: name.downcast().0.clone(),
+                })
+            }
             Declaration::ImportAllDeclaration(_) => None,
             Declaration::ImportDeclaration(_) => None,
             Declaration::TypeDeclaration(_) => None,

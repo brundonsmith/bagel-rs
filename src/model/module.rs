@@ -1,6 +1,6 @@
 use super::ast::{
     self, Declaration, Destructure, FuncDeclaration, ImportAllDeclaration, ImportDeclaration,
-    NameAndType, ProcDeclaration, ValueDeclaration, AST,
+    NameAndType, ProcDeclaration, SymbolDeclaration, ValueDeclaration, AST,
 };
 use super::errors::ParseError;
 use super::slice::Slice;
@@ -41,7 +41,10 @@ impl ModulesStore {
                 }),
             );
 
-            if let Some(Ok(ast::Module { declarations })) = self
+            if let Some(Ok(ast::Module {
+                module_id: _,
+                declarations,
+            })) = self
                 .modules
                 .get(&module_id)
                 .map(|res| res.as_ref().map(|module| module.ast.downcast()))
@@ -282,55 +285,64 @@ impl Module {
             .downcast()
             .declarations
             .iter()
-            .find(|decl| match decl.downcast() {
-                Declaration::ValueDeclaration(ValueDeclaration {
-                    destination,
-                    exported,
-                    value: _,
-                    is_const: _,
-                    platforms: _,
-                }) => {
-                    (!must_be_exported || exported)
-                        && match destination {
-                            ast::DeclarationDestination::NameAndType(NameAndType {
-                                name,
-                                type_annotation: _,
-                            }) => name.downcast().0.as_str() == item_name,
-                            ast::DeclarationDestination::Destructure(Destructure {
-                                properties,
-                                spread,
-                                destructure_kind: _,
-                            }) => {
-                                properties
-                                    .iter()
-                                    .any(|p| p.downcast().0.as_str() == item_name)
-                                    || spread
-                                        .map(|s| s.downcast().0.as_str() == item_name)
-                                        .unwrap_or(false)
+            .find(|decl| -> bool {
+                match decl.downcast() {
+                    Declaration::ValueDeclaration(ValueDeclaration {
+                        destination,
+                        exported,
+                        value: _,
+                        is_const: _,
+                        platforms: _,
+                    }) => {
+                        (!must_be_exported || exported)
+                            && match destination {
+                                ast::DeclarationDestination::NameAndType(NameAndType {
+                                    name,
+                                    type_annotation: _,
+                                }) => name.downcast().0.as_str() == item_name,
+                                ast::DeclarationDestination::Destructure(Destructure {
+                                    properties,
+                                    spread,
+                                    destructure_kind: _,
+                                }) => {
+                                    properties
+                                        .iter()
+                                        .any(|p| p.downcast().0.as_str() == item_name)
+                                        || spread
+                                            .map(|s| s.downcast().0.as_str() == item_name)
+                                            .unwrap_or(false)
+                                }
                             }
-                        }
-                }
-                Declaration::FuncDeclaration(FuncDeclaration {
-                    name,
-                    exported,
-                    func: _,
-                    platforms: _,
-                    decorators: _,
-                }) => (!must_be_exported || exported) && name.downcast().0.as_str() == item_name,
-                Declaration::ProcDeclaration(ProcDeclaration {
-                    name,
-                    exported,
-                    proc: _,
-                    platforms: _,
-                    decorators: _,
-                }) => (!must_be_exported || exported) && name.downcast().0.as_str() == item_name,
-                Declaration::TypeDeclaration(_) => todo!(),
+                    }
+                    Declaration::FuncDeclaration(FuncDeclaration {
+                        name,
+                        exported,
+                        func: _,
+                        platforms: _,
+                        decorators: _,
+                    }) => {
+                        (!must_be_exported || exported) && name.downcast().0.as_str() == item_name
+                    }
+                    Declaration::ProcDeclaration(ProcDeclaration {
+                        name,
+                        exported,
+                        proc: _,
+                        platforms: _,
+                        decorators: _,
+                    }) => {
+                        (!must_be_exported || exported) && name.downcast().0.as_str() == item_name
+                    }
+                    Declaration::SymbolDeclaration(SymbolDeclaration { name, exported }) => {
+                        (!must_be_exported || exported) && name.downcast().0.as_str() == item_name
+                    }
+                    Declaration::TypeDeclaration(_) => todo!(),
 
-                Declaration::ImportAllDeclaration(_) => false,
-                Declaration::ImportDeclaration(_) => false,
-                Declaration::TestExprDeclaration(_) => false,
-                Declaration::TestBlockDeclaration(_) => false,
-                Declaration::TestTypeDeclaration(_) => false,
+                    Declaration::ImportAllDeclaration(_) => false,
+                    Declaration::ImportDeclaration(_) => false,
+                    Declaration::TestExprDeclaration(_) => false,
+                    Declaration::TestBlockDeclaration(_) => false,
+                    Declaration::TestTypeDeclaration(_) => false,
+                }
             })
             .cloned()
     }

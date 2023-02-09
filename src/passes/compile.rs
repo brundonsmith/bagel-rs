@@ -21,7 +21,10 @@ where
 {
     fn compile<W: Write>(&self, ctx: CompileContext, f: &mut W) -> Result {
         match self.details() {
-            Any::Module(ast::Module { declarations }) => {
+            Any::Module(ast::Module {
+                module_id: _,
+                declarations,
+            }) => {
                 for decl in declarations {
                     decl.compile(ctx, f)?;
                     f.write_str(";\n\n")?;
@@ -160,6 +163,18 @@ where
                     value.compile(ctx, f)?;
                     f.write_str(" }")?;
                 }
+
+                Ok(())
+            }
+            Any::SymbolDeclaration(SymbolDeclaration { name, exported }) => {
+                if *exported {
+                    f.write_str("export ")?;
+                }
+                f.write_str("const ")?;
+                name.compile(ctx, f)?;
+                f.write_str(" = Symbol('")?;
+                name.compile(ctx, f)?;
+                f.write_str("');")?;
 
                 Ok(())
             }

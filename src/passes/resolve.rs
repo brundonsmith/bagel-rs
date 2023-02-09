@@ -7,7 +7,10 @@ where
 {
     pub fn resolve_symbol(&self, symbol: &str) -> Option<ASTAny> {
         match self.parent().as_ref().map(|p| p.details()) {
-            Some(Any::Module(ast::Module { declarations })) => {
+            Some(Any::Module(ast::Module {
+                module_id: _,
+                declarations,
+            })) => {
                 let self_index = if self.try_downcast::<ValueDeclaration>().is_some() {
                     declarations.iter().enumerate().find_map(|(index, decl)| {
                         if self.ptr_eq::<Declaration>(decl) {
@@ -98,6 +101,11 @@ where
                                 }) => name.downcast().0.as_str() == symbol,
                                 DeclarationDestination::Destructure(_) => todo!(),
                             } {
+                                return Some(decl.clone());
+                            }
+                        }
+                        Declaration::SymbolDeclaration(SymbolDeclaration { name, exported: _ }) => {
+                            if name.downcast().0.as_str() == symbol {
                                 return Some(decl.clone());
                             }
                         }

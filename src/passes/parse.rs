@@ -66,7 +66,7 @@ pub fn parse(module_id: ModuleID, module_src: Rc<String>) -> Result<AST<Module>,
     let bgl = Slice::new(module_src.clone());
 
     let start = SystemTime::now();
-    let res = module(bgl.clone());
+    let res = module(bgl.clone(), module_id.clone());
 
     if DEBUG_MODE {
         println!(
@@ -136,15 +136,20 @@ macro_rules! parse_level_expression {
     };
 }
 
-fn module(i: Slice) -> ParseResult<AST<Module>> {
+fn module(i: Slice, module_id: ModuleID) -> ParseResult<AST<Module>> {
+    let i_clone = i.clone();
     map(
         complete(terminated(many0(w(declaration)), whitespace)),
-        |mut declarations| {
-            make_node!(
-                Module,
-                covering(&declarations).unwrap_or(i.clone().slice_range(0, Some(0))),
-                declarations
-            )
+        move |mut declarations| {
+            let module = Module {
+                module_id: module_id.clone(),
+                declarations: declarations.clone(),
+            }
+            .as_ast(covering(&declarations).unwrap_or(i_clone.clone().slice_range(0, Some(0))));
+
+            declarations.set_parent(&module);
+
+            module
         },
     )(i.clone())
 }
@@ -160,6 +165,7 @@ fn declaration(i: Slice) -> ParseResult<AST<Declaration>> {
         map(func_declaration, AST::recast::<Declaration>),
         map(proc_declaration, AST::recast::<Declaration>),
         map(value_declaration, AST::recast::<Declaration>),
+        map(symbol_declaration, AST::recast::<Declaration>),
         map(test_expr_declaration, AST::recast::<Declaration>),
         map(test_block_declaration, AST::recast::<Declaration>),
         // test_type_declaration,
@@ -530,8 +536,8 @@ fn value_declaration(i: Slice) -> ParseResult<AST<ValueDeclaration>> {
     map(
         seq!(
             opt(declaration_platforms),
-            opt(tag("export")),
-            alt((tag("const"), tag("let"))),
+            opt(terminated(tag("export"), whitespace_required)),
+            terminated(alt((tag("const"), tag("let"))), whitespace_required),
             declaration_destination,
             tag("="),
             expression(0),
@@ -550,6 +556,22 @@ fn value_declaration(i: Slice) -> ParseResult<AST<ValueDeclaration>> {
                 is_const,
                 exported
             )
+        },
+    )(i)
+}
+
+fn symbol_declaration(i: Slice) -> ParseResult<AST<SymbolDeclaration>> {
+    map(
+        seq!(
+            opt(terminated(tag("export"), whitespace_required)),
+            terminated(tag("symbol"), whitespace_required),
+            plain_identifier
+        ),
+        |(export, keyword, mut name)| {
+            let mut exported = export.is_some();
+            let src = export.unwrap_or(keyword).spanning(&name);
+
+            make_node!(SymbolDeclaration, src, name, exported)
         },
     )(i)
 }

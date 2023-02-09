@@ -14,9 +14,9 @@ use crate::{
 use super::{
     ast::{
         Any, ElementOrSpread, KeyValueOrSpread, LocalIdentifier, ModifierTypeKind, SpecialTypeKind,
-        TypeDeclaration, AST,
+        SymbolDeclaration, TypeDeclaration, AST,
     },
-    module::Module,
+    module::{Module, ModuleID},
     slice::Slice,
 };
 
@@ -83,7 +83,11 @@ pub enum Type {
         members: Vec<ElementOrSpread<Type>>,
     },
 
-    // promitives
+    // primitives
+    SymbolType {
+        module_id: ModuleID,
+        name: Slice,
+    },
     RegularExpressionType, // TODO: Number of match groups?
     StringType(Option<Slice>),
     NumberType {
@@ -676,6 +680,12 @@ impl Type {
                                 declared_type,
                                 exported: _,
                             }) => declared_type.resolve_type(ctx.into()),
+                            Any::SymbolDeclaration(SymbolDeclaration { name, exported }) => {
+                                Type::SymbolType {
+                                    module_id: name.clone().upcast().module_id().unwrap(),
+                                    name: name.downcast().0.clone(),
+                                }
+                            }
                             _ => Type::PoisonedType,
                         })
                         .unwrap_or(Type::PoisonedType)
@@ -988,6 +998,10 @@ impl Type {
             Type::UnknownType(_) => 21,
             Type::PoisonedType => 22,
             Type::AnyType => 23,
+            Type::SymbolType {
+                module_id: _,
+                name: _,
+            } => 24,
         }
     }
 
@@ -1478,6 +1492,7 @@ impl Display for Type {
                 f.write_char(']')
             }
 
+            Type::SymbolType { module_id: _, name } => f.write_str(name.as_str()),
             Type::RegularExpressionType {} => f.write_str("RegExp"),
             Type::StringType(s) => match s {
                 Some(s) => f.write_fmt(format_args!("'{}'", s.as_str())),

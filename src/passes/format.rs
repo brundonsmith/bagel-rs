@@ -31,7 +31,10 @@ where
 {
     fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
         match self.details() {
-            Any::Module(ast::Module { declarations }) => {
+            Any::Module(ast::Module {
+                module_id: _,
+                declarations,
+            }) => {
                 for decl in declarations {
                     decl.format(f, opts)?;
                     f.write_str("\n\n")?;
@@ -85,6 +88,14 @@ where
                 destination.format(f, opts)?;
                 f.write_str(" = ")?;
                 value.format(f, opts)
+            }
+            Any::SymbolDeclaration(SymbolDeclaration { name, exported }) => {
+                if *exported {
+                    f.write_str("export ")?;
+                }
+
+                f.write_str("symbol ")?;
+                name.format(f, opts)
             }
             Any::TestExprDeclaration(TestExprDeclaration {
                 platforms,

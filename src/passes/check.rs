@@ -118,7 +118,10 @@ where
             };
 
         match self.details() {
-            Any::Module(ast::Module { declarations }) => {
+            Any::Module(ast::Module {
+                module_id: _,
+                declarations,
+            }) => {
                 declarations.check(ctx, report_error);
 
                 // todo!("Check for name duplicates");
@@ -425,12 +428,9 @@ where
                             }
 
                             // Violation of platform-specific constraints
-                            if let Some(decl) = resolved
-                                .find_parent(|p| p.try_downcast::<ImportDeclaration>().is_some())
+                            if let Some(decl) = resolved.find_parent_of_type::<ImportDeclaration>()
                             {
-                                if let Some(import_platforms) =
-                                    decl.try_downcast::<ImportDeclaration>().unwrap().platforms
-                                {
+                                if let Some(import_platforms) = decl.downcast().platforms {
                                     let allowed_platforms = match self
                                         .clone()
                                         .upcast()
@@ -1174,6 +1174,8 @@ where
             Any::ErrorExpression(ErrorExpression(inner)) => inner.check(ctx, report_error),
 
             // intentionally have nothing to check
+            Any::SymbolDeclaration(_) => {}
+
             Any::JavascriptEscape(_) => {}
             Any::NilLiteral(_) => {}
             Any::NumberLiteral(_) => {}

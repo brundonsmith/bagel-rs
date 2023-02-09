@@ -7,6 +7,8 @@ use std::{
 };
 use strum_macros::{EnumString, IntoStaticStr};
 
+use super::module::ModuleID;
+
 macro_rules! union_type {
     ($name:ident = $( $s:ident )|*) => {
         #[derive(Clone, Debug, PartialEq)]
@@ -261,6 +263,7 @@ impl PartialEq for ASTInner {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Module {
+    pub module_id: ModuleID,
     pub declarations: Vec<AST<Declaration>>,
 }
 
@@ -322,6 +325,12 @@ pub struct ValueDeclaration {
     pub destination: DeclarationDestination,
     pub value: AST<Expression>,
     pub is_const: bool,
+    pub exported: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SymbolDeclaration {
+    pub name: AST<PlainIdentifier>,
     pub exported: bool,
 }
 
@@ -1107,6 +1116,7 @@ union_type! {
         | ProcDeclaration
         | Decorator
         | ValueDeclaration
+        | SymbolDeclaration
         | TestExprDeclaration
         | TestBlockDeclaration
         | TestTypeDeclaration
@@ -1189,6 +1199,7 @@ union_subtype!(
         | FuncDeclaration
         | ProcDeclaration
         | ValueDeclaration
+        | SymbolDeclaration
         | TestExprDeclaration
         | TestBlockDeclaration
         | TestTypeDeclaration
@@ -1267,7 +1278,7 @@ union_subtype!(
 
 impl AST<Any> {
     pub fn find_parent<F: Fn(&AST<Any>) -> bool>(&self, f: F) -> Option<AST<Any>> {
-        let mut current: Option<AST<Any>> = self.parent();
+        let mut current: Option<AST<Any>> = Some(self.clone());
 
         while let Some(parent) = current {
             if f(&parent) {
@@ -1278,5 +1289,19 @@ impl AST<Any> {
         }
 
         return None;
+    }
+
+    pub fn find_parent_of_type<TExpected>(&self) -> Option<AST<TExpected>>
+    where
+        TExpected: TryFrom<Any> + Clone,
+        Any: From<TExpected>,
+    {
+        self.find_parent(|p| p.try_downcast::<TExpected>().is_some())
+            .map(|module| module.try_recast::<TExpected>().unwrap())
+    }
+
+    pub fn module_id(&self) -> Option<ModuleID> {
+        self.find_parent_of_type::<Module>()
+            .map(|module| module.downcast().module_id)
     }
 }
