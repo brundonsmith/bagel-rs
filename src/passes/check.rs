@@ -805,7 +805,11 @@ where
                 tag_name,
                 attributes,
                 children,
-            }) => todo!(),
+            }) => {
+                tag_name.check(ctx, report_error);
+                attributes.check(ctx, report_error);
+                children.check(ctx, report_error);
+            }
             Any::AsCast(AsCast { inner, as_type }) => {
                 inner.check(ctx, report_error);
                 as_type.check(ctx, report_error);
@@ -1372,6 +1376,17 @@ where
                 spread.check(ctx, report_error);
             }
         }
+    }
+}
+
+impl<T, U> Checkable for (T, U)
+where
+    T: Checkable,
+    U: Checkable,
+{
+    fn check<'a, F: FnMut(BagelError)>(&self, ctx: &CheckContext<'a>, report_error: &mut F) {
+        self.0.check(ctx, report_error);
+        self.1.check(ctx, report_error);
     }
 }
 

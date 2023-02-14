@@ -6,6 +6,7 @@ use crate::{
         ast::Any,
         bgl_type::{Mutability, Type},
         module::Module,
+        slice::Slice,
     },
     passes::check::CheckContext,
     ModulesStore,
@@ -375,7 +376,44 @@ impl AST<Expression> {
                     tag_name,
                     attributes,
                     children,
-                }) => todo!(),
+                }) => Type::ObjectType {
+                    mutability: Mutability::Literal,
+                    entries: vec![
+                        KeyValueOrSpread::KeyValue(
+                            Type::StringType(Some(Slice::new(Rc::new(String::from("tag"))))),
+                            Type::StringType(Some(tag_name.downcast().0.clone())),
+                        ),
+                        KeyValueOrSpread::KeyValue(
+                            Type::StringType(Some(Slice::new(Rc::new(String::from("attributes"))))),
+                            Type::ObjectType {
+                                mutability: Mutability::Literal,
+                                entries: attributes
+                                    .into_iter()
+                                    .map(|(key, value)| {
+                                        KeyValueOrSpread::KeyValue(
+                                            identifier_to_string_type(key)
+                                                .recast::<TypeExpression>()
+                                                .resolve_type(ctx.into()),
+                                            value.infer_type(ctx),
+                                        )
+                                    })
+                                    .collect(),
+                                is_interface: false,
+                            },
+                        ),
+                        KeyValueOrSpread::KeyValue(
+                            Type::StringType(Some(Slice::new(Rc::new(String::from("children"))))),
+                            Type::TupleType {
+                                mutability: Mutability::Literal,
+                                members: children
+                                    .into_iter()
+                                    .map(|child| ElementOrSpread::Element(child.infer_type(ctx)))
+                                    .collect(),
+                            },
+                        ),
+                    ],
+                    is_interface: false,
+                },
                 Expression::AsCast(AsCast { inner: _, as_type }) => {
                     as_type.resolve_type(ctx.into())
                 }

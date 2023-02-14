@@ -522,7 +522,7 @@ pub struct SpreadExpression(pub AST<Expression>);
 #[derive(Debug, Clone, PartialEq)]
 pub struct ElementTag {
     pub tag_name: AST<PlainIdentifier>,
-    pub attributes: Vec<KeyValue>,
+    pub attributes: Vec<(AST<PlainIdentifier>, AST<Expression>)>,
     pub children: Vec<AST<Expression>>,
 }
 
@@ -782,12 +782,6 @@ impl Parentable for StringLiteralSegment {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct KeyValue {
-    pub key: ASTAny,
-    pub value: AST<Expression>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
 pub struct KeyValueType {
     pub key: ASTAny,
     pub value: AST<TypeExpression>,
@@ -1036,6 +1030,21 @@ impl Parentable for Property {
             Property::Expression(expr) => expr.set_parent(parent),
             Property::PlainIdentifier(ident) => ident.set_parent(parent),
         }
+    }
+}
+
+impl<T, U> Parentable for (T, U)
+where
+    T: Parentable,
+    U: Parentable,
+{
+    fn set_parent<TParentKind>(&mut self, parent: &AST<TParentKind>)
+    where
+        TParentKind: Clone + TryFrom<Any>,
+        Any: From<TParentKind>,
+    {
+        self.0.set_parent(parent);
+        self.1.set_parent(parent);
     }
 }
 

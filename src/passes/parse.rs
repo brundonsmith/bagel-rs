@@ -993,7 +993,7 @@ fn statement(i: Slice) -> ParseResult<AST<Statement>> {
         map(block, AST::recast::<Statement>),
         map(
             seq!(
-                invocation_accessor_chain(13), // HACK: Has to be kept in sync with expression() function!
+                invocation_accessor_chain(14), // HACK: Has to be kept in sync with expression() function!
                 tag(";")
             ),
             |(invocation, _)| {
@@ -1073,7 +1073,7 @@ fn assignment(i: Slice) -> ParseResult<AST<Assignment>> {
     map(
         seq!(
             alt((
-                map(invocation_accessor_chain(13), AST::recast::<Expression>),
+                map(invocation_accessor_chain(14), AST::recast::<Expression>),
                 map(local_identifier, AST::recast::<Expression>)
             )),
             pair(
@@ -1157,7 +1157,8 @@ fn expression(l: usize) -> impl Fn(Slice) -> ParseResult<AST<Expression>> {
 fn expression_inner(l: usize, i: Slice) -> ParseResult<AST<Expression>> {
     let mut tl = 0;
 
-    // parse_level_expression!(level, this_level, i, ); // debug, javascriptEscape, elementTag
+    parse_level_expression!(l, tl, i, element_tag);
+
     parse_level_expression!(
         l,
         tl,
@@ -1474,10 +1475,6 @@ fn as_cast(level: usize) -> impl Fn(Slice) -> ParseResult<AST<AsCast>> {
     }
 }
 
-fn element_tag(i: Slice) -> ParseResult<AST<ElementTag>> {
-    todo!()
-}
-
 fn if_else_expression(i: Slice) -> ParseResult<AST<IfElseExpression>> {
     map(
         seq!(
@@ -1608,6 +1605,35 @@ fn proc(i: Slice) -> ParseResult<AST<Proc>> {
             );
 
             make_node!(Proc, src, type_annotation, is_async, is_pure, body)
+        },
+    )(i)
+}
+
+fn element_tag(i: Slice) -> ParseResult<AST<ElementTag>> {
+    map(
+        tuple((
+            tag("<"),
+            plain_identifier,
+            many0(preceded(
+                whitespace_required,
+                map(
+                    tuple((plain_identifier, tag("={"), expression(0), tag("}"))),
+                    |(key, _, value, _)| (key, value),
+                ),
+            )),
+            w(tag(">")),
+            many0(w(alt((
+                map(element_tag, |el| el.recast::<Expression>()),
+                map(seq!(tag("{"), expression(0), tag("}")), |(_, expr, _)| expr),
+            )))),
+            w(tag("</")),
+            plain_identifier,
+            w(tag(">")),
+        )),
+        |(start, mut tag_name, mut attributes, _, mut children, _, closing_tag, end)| {
+            let src = start.spanning(&end);
+
+            make_node!(ElementTag, src, tag_name, attributes, children)
         },
     )(i)
 }
