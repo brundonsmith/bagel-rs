@@ -826,6 +826,35 @@ fn Strings() {
     );
 }
 
+#[test]
+#[allow(non_snake_case)]
+fn Element_tag() {
+    test_compile(
+        "
+    const thing = (
+      <div>
+        {'The thing:'}
+        <a href={'google.com'}>{'My link'}</a>
+      </div>
+    )
+    ",
+        "
+      const thing = ({
+        tag:'div',
+        attributes:{ },
+        children:[
+          `The thing:`,
+          {
+            tag:'a',
+            attributes:{ href:`google.com`, },
+            children:[ `My link`, ]
+          },
+        ]
+      });
+    ",
+    )
+}
+
 fn test_compile(bgl: &str, js: &str) {
     let parsed = parse(
         ModuleID::Artificial(Rc::new("foo".to_owned())),

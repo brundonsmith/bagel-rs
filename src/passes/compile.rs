@@ -453,7 +453,23 @@ where
                 tag_name,
                 attributes,
                 children,
-            }) => todo!(),
+            }) => {
+                f.write_str("{ tag:'")?;
+                tag_name.compile(ctx, f)?;
+                f.write_str("', attributes:{ ")?;
+                for (key, value) in attributes {
+                    key.compile(ctx, f)?;
+                    f.write_char(':')?;
+                    value.compile(ctx, f)?;
+                    f.write_str(", ")?;
+                }
+                f.write_str("}, children:[ ")?;
+                for child in children {
+                    child.compile(ctx, f)?;
+                    f.write_str(", ")?;
+                }
+                f.write_str(" ] }")
+            }
             Any::AsCast(AsCast { inner, as_type }) => todo!(),
             Any::InstanceOf(InstanceOf {
                 inner,
