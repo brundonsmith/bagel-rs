@@ -8,7 +8,9 @@ mod passes;
 mod tests;
 mod utils;
 
-use std::{collections::HashMap, ffi::OsStr, ops::Add, path::PathBuf, process::ExitCode};
+use std::{
+    borrow::Borrow, collections::HashMap, ffi::OsStr, ops::Add, path::PathBuf, process::ExitCode,
+};
 
 use clap::{command, Parser};
 use cli::Command;
@@ -16,10 +18,11 @@ use colored::Color;
 use config::BagelConfig;
 use glob::glob;
 use model::{
+    ast::Module,
     errors::blue_string,
     module::{ModuleID, ModulesStore},
 };
-use passes::check::CheckContext;
+use passes::{check::CheckContext, compile::CompileContext};
 
 use crate::{model::errors::BagelError, utils::cli_label};
 
@@ -98,7 +101,8 @@ fn main() -> ExitCode {
             watch,
             clean,
         } => {
-            let modules_store = load_and_parse(get_all_entrypoints(target.as_str()), clean);
+            let entrypoints = get_all_entrypoints(target.as_str()).collect::<Vec<_>>();
+            let modules_store = load_and_parse(entrypoints.iter(), clean);
             let errors = gather_errors(&modules_store);
             print_error_results(&errors);
 
@@ -106,8 +110,25 @@ fn main() -> ExitCode {
                 return ExitCode::FAILURE;
             }
 
-            // if no errors,
-            //  transpile
+            for (module_id, module) in modules_store.iter() {
+                if let Ok(module) = module {
+                    if let ModuleID::Local(path) = module_id {
+                        if entrypoints.iter().any(|entry| path.as_ref() == entry) {
+                            let mut compiled = String::new();
+                            module
+                                .compile(
+                                    CompileContext {
+                                        include_types: true,
+                                    },
+                                    &mut compiled,
+                                )
+                                .unwrap();
+
+                            std::fs::write(path.with_extension("bgl.ts"), compiled).unwrap();
+                        }
+                    }
+                }
+            }
         }
         Command::Build {
             target,
@@ -117,7 +138,7 @@ fn main() -> ExitCode {
             let entry_path = if let Some(target) = target {
                 target
             } else if let Some(config) = config {
-                config.main
+                config.entry
             } else {
                 println!(
                     "{} No entry module specified, and current directory doesn't have a {}",
@@ -142,7 +163,7 @@ fn main() -> ExitCode {
             let entry_path = if let Some(target) = target {
                 target
             } else if let Some(config) = config {
-                config.main
+                config.entry
             } else {
                 println!(
                     "{} No entry module specified, and current directory doesn't have a {}",
@@ -209,7 +230,7 @@ fn main() -> ExitCode {
             let modules_store = if let Some(target) = target {
                 load_and_parse(get_all_entrypoints(target.as_str()), clean)
             } else if let Some(config) = config {
-                load_and_parse(std::iter::once(config.main.into()), clean)
+                load_and_parse(std::iter::once(&config.entry.into()), clean)
             } else {
                 println!(
                     "{} No module or directory specified, and current directory doesn't have a {}",
@@ -278,7 +299,7 @@ fn bundle(entrypoint: &str, watch: bool, clean: bool) -> Result<PathBuf, ()> {
 
     match entrypoint_path_buf {
         Ok(entrypoint) => {
-            let modules_store = load_and_parse(std::iter::once(entrypoint.clone()), clean);
+            let modules_store = load_and_parse(std::iter::once(&entrypoint), clean);
             let errors = gather_errors(&modules_store);
             print_error_results(&errors);
 
@@ -357,11 +378,14 @@ pub enum SingleEntrypointError {
     Multi,
 }
 
-fn load_and_parse<I: Iterator<Item = PathBuf>>(entrypoints: I, clean: bool) -> ModulesStore {
+fn load_and_parse<'a, P: Borrow<PathBuf>, I: 'a + Iterator<Item = P>>(
+    entrypoints: I,
+    clean: bool,
+) -> ModulesStore {
     let mut modules_store = ModulesStore::new();
 
     for path in entrypoints {
-        let module_id = ModuleID::try_from(path.as_path()).unwrap();
+        let module_id = ModuleID::try_from(path.borrow().as_path()).unwrap();
         modules_store.load_module_and_dependencies(module_id, clean);
     }
 
