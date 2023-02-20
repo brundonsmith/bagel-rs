@@ -352,7 +352,7 @@ where
 
                 for entry in entries {
                     match entry {
-                        KeyValueOrSpread::KeyValue(_, _) => {}
+                        KeyValueOrSpread::KeyValue(_, _, _) => {}
                         KeyValueOrSpread::Spread(spread) => {
                             check_subsumation(
                                 &any_object(),
@@ -873,7 +873,12 @@ where
             }
             Any::GenericType(GenericType { type_params, inner }) => todo!(),
             Any::TypeParam(TypeParam { name, extends }) => todo!(),
-            Any::BoundGenericType(BoundGenericType { type_args, generic }) => todo!(),
+            Any::BoundGenericType(BoundGenericType { type_args, generic }) => {
+                type_args.check(ctx, report_error);
+                generic.check(ctx, report_error);
+
+                // TODO: Check that generic type is actually generic, and that type args fit
+            }
             Any::ObjectType(ObjectType {
                 entries,
                 is_interface: _,

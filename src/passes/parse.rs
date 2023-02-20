@@ -1725,7 +1725,7 @@ fn declaration_destination(i: Slice) -> ParseResult<DeclarationDestination> {
             seq!(
                 tag("{"),
                 separated_list0(w(char(',')), w(plain_identifier)),
-                opt(w(tag(","))),
+                opt(tag(",")),
                 tag("}"),
             ),
             |(_, properties, _, _)| {

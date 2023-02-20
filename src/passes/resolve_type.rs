@@ -17,7 +17,11 @@ impl AST<TypeExpression> {
             },
             TypeExpression::GenericParamType(GenericParamType { name, extends }) => todo!(),
             TypeExpression::GenericType(GenericType { type_params, inner }) => todo!(),
-            TypeExpression::BoundGenericType(BoundGenericType { type_args, generic }) => todo!(),
+            TypeExpression::BoundGenericType(BoundGenericType { type_args, generic }) => {
+                // TODO
+
+                Type::PoisonedType
+            }
             TypeExpression::ProcType(ProcType {
                 args,
                 args_spread,

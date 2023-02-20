@@ -43,6 +43,7 @@ where
                 name.compile(ctx, f)?;
                 f.write_str(" from \"")?;
                 f.write_str(path.downcast().value.as_str())?; // TODO: Get the correct path for the current build mode
+                f.write_str(".ts")?;
                 f.write_str("\"")
             }
             Any::ImportDeclaration(ImportDeclaration {
@@ -60,6 +61,7 @@ where
                 }
                 f.write_str(" } from \"")?;
                 f.write_str(path.downcast().value.as_str())?; // TODO: Get the correct path for the current build mode
+                f.write_str(".ts")?;
                 f.write_str("\"")
             }
             Any::ImportItem(ImportItem { name, alias }) => {
@@ -246,7 +248,7 @@ where
                     f.write_char(' ')?;
 
                     match entry {
-                        KeyValueOrSpread::KeyValue(key, value) => {
+                        KeyValueOrSpread::KeyValue(key, value, _) => {
                             key.compile(ctx, f)?;
                             f.write_str(": ")?;
                             value.compile(ctx, f)?;
@@ -491,7 +493,7 @@ where
                 inner.compile(ctx, f)?;
                 f.write_str(" | null | undefined)")
             }
-            Any::NamedType(_) => todo!(),
+            Any::NamedType(NamedType(name)) => name.compile(ctx, f),
             Any::GenericParamType(GenericParamType { name, extends }) => todo!(),
             Any::ProcType(ProcType {
                 args,
@@ -499,7 +501,17 @@ where
                 is_pure,
                 is_async,
                 throws,
-            }) => todo!(),
+            }) => {
+                f.write_char('(')?;
+                for (index, arg) in args.iter().enumerate() {
+                    if index > 0 {
+                        f.write_str(", ")?;
+                    }
+
+                    arg.compile(ctx, f)?;
+                }
+                f.write_str(") => void") // TODO: Error return type
+            }
             Any::FuncType(FuncType {
                 args,
                 args_spread,
@@ -528,7 +540,18 @@ where
             }
             Any::GenericType(GenericType { type_params, inner }) => todo!(),
             Any::TypeParam(TypeParam { name, extends }) => todo!(),
-            Any::BoundGenericType(BoundGenericType { type_args, generic }) => todo!(),
+            Any::BoundGenericType(BoundGenericType { type_args, generic }) => {
+                generic.compile(ctx, f)?;
+                f.write_char('<')?;
+                for (index, arg) in type_args.iter().enumerate() {
+                    if index > 0 {
+                        f.write_str(", ")?;
+                    }
+
+                    arg.compile(ctx, f)?;
+                }
+                f.write_char('>')
+            }
             Any::ObjectType(ObjectType {
                 entries,
                 is_interface,
