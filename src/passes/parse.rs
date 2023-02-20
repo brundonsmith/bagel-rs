@@ -1627,16 +1627,24 @@ fn element_tag(i: Slice) -> ParseResult<AST<ElementTag>> {
                     |(key, _, value, _)| (key, value),
                 ),
             )),
-            w(tag(">")),
-            many0(w(alt((
-                map(element_tag, |el| el.recast::<Expression>()),
-                map(seq!(tag("{"), expression(0), tag("}")), |(_, expr, _)| expr),
-            )))),
-            w(tag("</")),
-            plain_identifier,
-            w(tag(">")),
+            alt((
+                map(
+                    tuple((
+                        w(tag(">")),
+                        many0(w(alt((
+                            map(element_tag, |el| el.recast::<Expression>()),
+                            map(seq!(tag("{"), expression(0), tag("}")), |(_, expr, _)| expr),
+                        )))),
+                        w(tag("</")),
+                        plain_identifier,
+                        w(tag(">")),
+                    )),
+                    |(_, children, _, closing_tag, end)| (children, Some(closing_tag), end),
+                ),
+                map(w(tag("/>")), |end| (Vec::new(), None, end)),
+            )),
         )),
-        |(start, mut tag_name, mut attributes, _, mut children, _, closing_tag, end)| {
+        |(start, mut tag_name, mut attributes, (mut children, closing_tag, end))| {
             let src = start.spanning(&end);
 
             make_node!(ElementTag, src, tag_name, attributes, children)
