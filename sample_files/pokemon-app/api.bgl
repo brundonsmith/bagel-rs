@@ -1,0 +1,14 @@
+
+from 'https://raw.githubusercontent.com/brundonsmith/bagel/master/lib/bgl/fetch.bgl' import { fetch }
+
+export type Card = { imageUrl: string }
+
+export type CardsResponse = {
+    cards: Card[]
+}
+
+export func searchCards(str: string): Plan<CardsResponse?> =>
+    const res = await fetch('https://api.pokemontcg.io/v1/cards?name=${str}'),
+    if res instanceof CardsResponse {
+        res
+    }
