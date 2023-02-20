@@ -1050,7 +1050,7 @@ where
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum KeyValueOrSpread<T> {
-    KeyValue(T, T),
+    KeyValue(T, T, bool),
     Spread(T),
 }
 
@@ -1064,7 +1064,7 @@ where
         Any: From<TParentKind>,
     {
         match self {
-            KeyValueOrSpread::KeyValue(key, value) => {
+            KeyValueOrSpread::KeyValue(key, value, _optional) => {
                 key.set_parent(parent);
                 value.set_parent(parent);
             }

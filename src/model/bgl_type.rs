@@ -302,8 +302,8 @@ impl Type {
                 if *destination_mutability == Mutability::Readonly
                     && !*value_is_interface
                     && value_entries.iter().all(|value_entry| match value_entry {
-                        KeyValueOrSpread::KeyValue(key, value) => {
-                            destination_key_type.subsumes(ctx, key)
+                        KeyValueOrSpread::KeyValue(key, value, optional) => {
+                            destination_key_type.subsumes(ctx, key) // TODO: Optional
                                 && destination_value_type.subsumes(ctx, value)
                         }
                         KeyValueOrSpread::Spread(spread) => destination.subsumes(ctx, spread),
@@ -328,15 +328,21 @@ impl Type {
                     destination_entries
                         .iter()
                         .all(|destination_entry| match destination_entry {
-                            KeyValueOrSpread::KeyValue(destination_key, destination_value) => {
-                                value_entries.iter().any(|value_entry| match value_entry {
-                                    KeyValueOrSpread::KeyValue(value_key, value_value) => {
-                                        destination_key.subsumes(ctx, value_key)
-                                            && destination_value.subsumes(ctx, value_value)
-                                    }
-                                    KeyValueOrSpread::Spread(destination_spread) => todo!(),
-                                })
-                            }
+                            KeyValueOrSpread::KeyValue(
+                                destination_key,
+                                destination_value,
+                                destination_optional,
+                            ) => value_entries.iter().any(|value_entry| match value_entry {
+                                KeyValueOrSpread::KeyValue(
+                                    value_key,
+                                    value_value,
+                                    value_optional,
+                                ) => {
+                                    destination_key.subsumes(ctx, value_key)
+                                        && destination_value.subsumes(ctx, value_value)
+                                }
+                                KeyValueOrSpread::Spread(destination_spread) => todo!(),
+                            }),
                             KeyValueOrSpread::Spread(destination_spread) => {
                                 destination_spread.subsumes(ctx, value)
                             }
@@ -765,7 +771,7 @@ impl Type {
                             entries
                                 .into_iter()
                                 .map(|entry| match entry {
-                                    KeyValueOrSpread::KeyValue(key, _) => key,
+                                    KeyValueOrSpread::KeyValue(key, _, optional) => key,
                                     KeyValueOrSpread::Spread(_) => unreachable!(),
                                 })
                                 .collect(),
@@ -787,7 +793,7 @@ impl Type {
                             entries
                                 .into_iter()
                                 .map(|entry| match entry {
-                                    KeyValueOrSpread::KeyValue(_, value) => value,
+                                    KeyValueOrSpread::KeyValue(_, value, optional) => value,
                                     KeyValueOrSpread::Spread(_) => unreachable!(),
                                 })
                                 .collect(),
@@ -844,9 +850,13 @@ impl Type {
 
                 for entry in entries {
                     match entry {
-                        KeyValueOrSpread::KeyValue(key, value) => flattened_entries.push(
-                            KeyValueOrSpread::KeyValue(key.simplify(ctx), value.simplify(ctx)),
-                        ),
+                        KeyValueOrSpread::KeyValue(key, value, optional) => {
+                            flattened_entries.push(KeyValueOrSpread::KeyValue(
+                                key.simplify(ctx),
+                                value.simplify(ctx),
+                                optional,
+                            ))
+                        }
                         KeyValueOrSpread::Spread(spread) => match spread.simplify(ctx) {
                             Type::ObjectType {
                                 mutability,
@@ -1141,7 +1151,7 @@ impl Type {
             } => entries
                 .iter()
                 .find_map(|entry| match entry {
-                    KeyValueOrSpread::KeyValue(key, value) => {
+                    KeyValueOrSpread::KeyValue(key, value, optional) => {
                         if key.subsumes(ctx, &property) {
                             Some(value)
                         } else {
@@ -1438,8 +1448,13 @@ impl Display for Type {
                     }
 
                     match entry {
-                        KeyValueOrSpread::KeyValue(key, value) => {
-                            f.write_fmt(format_args!("{}: {}", key, value))?;
+                        KeyValueOrSpread::KeyValue(key, value, optional) => {
+                            f.write_fmt(format_args!(
+                                "{}{}: {}",
+                                key,
+                                if *optional { "?" } else { "" },
+                                value
+                            ))?;
                         }
                         KeyValueOrSpread::Spread(spread) => {
                             f.write_fmt(format_args!("...{}", spread))?;

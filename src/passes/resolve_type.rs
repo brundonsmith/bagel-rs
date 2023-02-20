@@ -85,10 +85,13 @@ impl AST<TypeExpression> {
                 entries: entries
                     .into_iter()
                     .map(|entry| match entry {
-                        KeyValueOrSpread::KeyValue(key, value) => KeyValueOrSpread::KeyValue(
-                            key.resolve_type(ctx),
-                            value.resolve_type(ctx),
-                        ),
+                        KeyValueOrSpread::KeyValue(key, value, optional) => {
+                            KeyValueOrSpread::KeyValue(
+                                key.resolve_type(ctx),
+                                value.resolve_type(ctx),
+                                optional,
+                            )
+                        }
                         KeyValueOrSpread::Spread(spread) => {
                             KeyValueOrSpread::Spread(spread.resolve_type(ctx))
                         }

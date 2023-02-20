@@ -1352,7 +1352,7 @@ where
 {
     fn check<'a, F: FnMut(BagelError)>(&self, ctx: &CheckContext<'a>, report_error: &mut F) {
         match self {
-            KeyValueOrSpread::KeyValue(key, value) => {
+            KeyValueOrSpread::KeyValue(key, value, _) => {
                 key.check(ctx, report_error);
                 value.check(ctx, report_error);
             }

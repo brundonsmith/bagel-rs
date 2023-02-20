@@ -165,7 +165,7 @@ where
                     f.write_char(' ')?;
 
                     match entry {
-                        KeyValueOrSpread::KeyValue(key, value) => {
+                        KeyValueOrSpread::KeyValue(key, value, _) => {
                             key.format(f, opts)?;
                             f.write_str(": ")?;
                             value.format(f, opts)?;

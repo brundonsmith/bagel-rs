@@ -537,7 +537,7 @@ where
 
                 for entry in entries {
                     match entry {
-                        KeyValueOrSpread::KeyValue(key, value) => {
+                        KeyValueOrSpread::KeyValue(key, value, optional) => {
                             if let Some(StringLiteralType(s)) =
                                 key.try_downcast::<StringLiteralType>()
                             {
@@ -551,6 +551,9 @@ where
                                 key.compile(ctx, f)?;
                             }
 
+                            if *optional {
+                                f.write_char('?')?;
+                            }
                             f.write_str(": ")?;
                             value.compile(ctx, f)?;
                         }

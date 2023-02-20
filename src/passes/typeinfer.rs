@@ -195,10 +195,13 @@ impl AST<Expression> {
                     entries: entries
                         .into_iter()
                         .map(|entry| match entry {
-                            KeyValueOrSpread::KeyValue(key, value) => KeyValueOrSpread::KeyValue(
-                                key.infer_type(ctx),
-                                value.infer_type(ctx),
-                            ),
+                            KeyValueOrSpread::KeyValue(key, value, _) => {
+                                KeyValueOrSpread::KeyValue(
+                                    key.infer_type(ctx),
+                                    value.infer_type(ctx),
+                                    false,
+                                )
+                            }
                             KeyValueOrSpread::Spread(expr) => {
                                 KeyValueOrSpread::Spread(expr.infer_type(ctx))
                             }
@@ -382,6 +385,7 @@ impl AST<Expression> {
                         KeyValueOrSpread::KeyValue(
                             Type::StringType(Some(Slice::new(Rc::new(String::from("tag"))))),
                             Type::StringType(Some(tag_name.downcast().0.clone())),
+                            false,
                         ),
                         KeyValueOrSpread::KeyValue(
                             Type::StringType(Some(Slice::new(Rc::new(String::from("attributes"))))),
@@ -395,11 +399,13 @@ impl AST<Expression> {
                                                 .recast::<TypeExpression>()
                                                 .resolve_type(ctx.into()),
                                             value.infer_type(ctx),
+                                            false,
                                         )
                                     })
                                     .collect(),
                                 is_interface: false,
                             },
+                            false,
                         ),
                         KeyValueOrSpread::KeyValue(
                             Type::StringType(Some(Slice::new(Rc::new(String::from("children"))))),
@@ -410,6 +416,7 @@ impl AST<Expression> {
                                     .map(|child| ElementOrSpread::Element(child.infer_type(ctx)))
                                     .collect(),
                             },
+                            false,
                         ),
                     ],
                     is_interface: false,
