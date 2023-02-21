@@ -18,7 +18,6 @@ use colored::Color;
 use config::BagelConfig;
 use glob::glob;
 use model::{
-    ast::Module,
     errors::blue_string,
     module::{ModuleID, ModulesStore},
 };

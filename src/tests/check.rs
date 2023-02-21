@@ -5,7 +5,6 @@ use crate::{
     model::{
         errors::{BagelError, ParseError},
         module::{Module, ModuleID, ModulesStore},
-        slice::Slice,
     },
     passes::parse::parse,
     print_errors,

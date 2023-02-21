@@ -1,6 +1,8 @@
 use super::ast::{
-    self, Declaration, Destructure, FuncDeclaration, ImportAllDeclaration, ImportDeclaration,
-    NameAndType, ProcDeclaration, SymbolDeclaration, ValueDeclaration, AST,
+    self, AnyLiteral, ArrayLiteral, BooleanLiteral, Declaration, Destructure, ElementOrSpread,
+    ExactStringLiteral, Expression, FuncDeclaration, ImportAllDeclaration, ImportDeclaration,
+    KeyValueOrSpread, NameAndType, NilLiteral, NumberLiteral, ObjectLiteral, ProcDeclaration,
+    StringLiteral, SymbolDeclaration, ValueDeclaration, WithSlice, AST,
 };
 use super::errors::ParseError;
 use super::slice::Slice;
@@ -10,6 +12,7 @@ use crate::utils::cli_label;
 use colored::Color;
 use memoize::memoize;
 use reqwest::Url;
+use serde_json::Value;
 use std::fmt::{Display, Write};
 use std::path::Path;
 use std::{collections::HashMap, path::PathBuf, rc::Rc};
@@ -27,54 +30,111 @@ impl ModulesStore {
     }
 
     pub fn load_module_and_dependencies(&mut self, module_id: ModuleID, clean: bool) {
-        if let Some(mut bgl) = module_id.load(clean) {
-            bgl.push('\n'); // https://github.com/Geal/nom/issues/1573
-            let bgl_rc = Rc::new(bgl);
+        if let Some(mut module_src) = module_id.load(clean) {
+            module_src.push('\n'); // https://github.com/Geal/nom/issues/1573
+            let module_src = Rc::new(module_src);
 
-            let parsed = parse(module_id.clone(), bgl_rc.clone());
-            self.modules.insert(
-                module_id.clone(),
-                parsed.map(|ast| Module {
-                    module_id: module_id.clone(),
-                    src: Slice::new(bgl_rc.clone()),
-                    ast,
-                }),
-            );
+            let module_type = ModuleType::from(&module_id);
 
-            if let Some(Ok(ast::Module {
-                module_id: _,
-                declarations,
-            })) = self
-                .modules
-                .get(&module_id)
-                .map(|res| res.as_ref().map(|module| module.ast.downcast()))
-            {
-                let imported = declarations
-                    .iter()
-                    .filter_map(|decl| match decl.downcast() {
-                        Declaration::ImportAllDeclaration(ImportAllDeclaration {
-                            platforms: _,
-                            name: _,
-                            path,
-                        }) => Some(path.downcast().value.as_str().to_owned()),
-                        Declaration::ImportDeclaration(ImportDeclaration {
-                            platforms: _,
-                            imports: _,
-                            path,
-                        }) => Some(path.downcast().value.as_str().to_owned()),
-                        _ => None,
-                    });
+            match module_type {
+                ModuleType::JavaScript => {
+                    let module_src = Slice::new(module_src);
 
-                for path in imported {
-                    let other_module_id = module_id.imported(&path);
+                    self.modules.insert(
+                        module_id.clone(),
+                        Ok(Module::Singleton {
+                            module_id: module_id.clone(),
+                            contents: AnyLiteral.as_ast(module_src).recast::<Expression>(),
+                        }),
+                    );
+                }
+                ModuleType::JSON => {
+                    let module_src = Slice::new(module_src);
 
-                    if let Some(other_module_id) = other_module_id {
-                        if !self.modules.contains_key(&other_module_id) {
-                            self.load_module_and_dependencies(other_module_id, clean);
+                    let parsed: Value = serde_json::from_str(module_src.as_str()).unwrap();
+                    let contents = json_value_to_ast(module_src, parsed);
+
+                    self.modules.insert(
+                        module_id.clone(),
+                        Ok(Module::Singleton {
+                            module_id: module_id.clone(),
+                            contents,
+                        }),
+                    );
+                }
+                ModuleType::Raw => {
+                    let module_src = Slice::new(module_src);
+
+                    self.modules.insert(
+                        module_id.clone(),
+                        Ok(Module::Singleton {
+                            module_id: module_id.clone(),
+                            contents: ExactStringLiteral {
+                                tag: None,
+                                value: module_src.clone(),
+                            }
+                            .as_ast(module_src)
+                            .recast::<Expression>(),
+                        }),
+                    );
+                }
+                ModuleType::Bagel => {
+                    let parsed = parse(module_id.clone(), module_src.clone());
+                    self.modules.insert(
+                        module_id.clone(),
+                        parsed.map(|ast| Module::Bagel {
+                            module_id: module_id.clone(),
+                            ast,
+                        }),
+                    );
+
+                    if let Some(ast::Module {
+                        module_id: _,
+                        declarations,
+                    }) = self
+                        .modules
+                        .get(&module_id)
+                        .map(|res| {
+                            res.as_ref().ok().map(|module| match module {
+                                Module::Bagel { module_id: _, ast } => Some(ast.downcast()),
+                                Module::Singleton {
+                                    module_id: _,
+                                    contents: _,
+                                } => None,
+                            })
+                        })
+                        .flatten()
+                        .flatten()
+                    {
+                        let imported =
+                            declarations
+                                .iter()
+                                .filter_map(|decl| match decl.downcast() {
+                                    Declaration::ImportAllDeclaration(ImportAllDeclaration {
+                                        platforms: _,
+                                        name: _,
+                                        path,
+                                    }) => Some(path.downcast().value.as_str().to_owned()),
+                                    Declaration::ImportDeclaration(ImportDeclaration {
+                                        platforms: _,
+                                        imports: _,
+                                        path,
+                                    }) => Some(path.downcast().value.as_str().to_owned()),
+                                    _ => None,
+                                });
+
+                        for path in imported {
+                            let other_module_id = module_id.imported(&path);
+
+                            if let Some(other_module_id) = other_module_id {
+                                if !self.modules.contains_key(&other_module_id) {
+                                    self.load_module_and_dependencies(other_module_id, clean);
+                                }
+                            } else {
+                                // TODO: Improve this, make it a proper error
+                                println!("ERROR: Malformed import path {:?}", path);
+                            }
                         }
-                    } else {
-                        // TODO: Improve this, make it a proper error
-                        println!("ERROR: Malformed import path {:?}", path);
                     }
                 }
             }
@@ -268,82 +328,216 @@ impl From<Url> for ModuleID {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum ModuleType {
+    Bagel,
+    JavaScript,
+    JSON,
+    Raw,
+}
+
+impl From<&ModuleID> for ModuleType {
+    fn from(module_id: &ModuleID) -> Self {
+        let ext = match module_id {
+            ModuleID::Local(path) => path
+                .extension()
+                .map(|ext| ext.to_str())
+                .flatten()
+                .unwrap_or(""),
+            ModuleID::Remote(url) => {
+                let url_str = url.as_str();
+                let last_slash = url_str.char_indices().filter(|(_, ch)| *ch == '/').last();
+
+                if let Some((last_slash_index, _)) = last_slash {
+                    let dot = url_str[last_slash_index..url_str.len() - 1]
+                        .char_indices()
+                        .filter(|(_, ch)| *ch == '.')
+                        .next();
+
+                    if let Some((dot_index, _)) = dot {
+                        &url_str[dot_index + 1..]
+                    } else {
+                        ""
+                    }
+                } else {
+                    ""
+                }
+            }
+            ModuleID::Artificial(name) => {
+                let dot = name[..name.len() - 1]
+                    .char_indices()
+                    .filter(|(_, ch)| *ch == '.')
+                    .next();
+
+                if let Some((dot_index, _)) = dot {
+                    &name[dot_index + 1..]
+                } else {
+                    ""
+                }
+            }
+        };
+
+        match ext {
+            "bgl" => ModuleType::Bagel,
+            "js" => ModuleType::JavaScript,
+            "jsx" => ModuleType::JavaScript,
+            "ts" => ModuleType::JavaScript,
+            "tsx" => ModuleType::JavaScript,
+            "json" => ModuleType::JSON,
+            _ => ModuleType::Raw,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
-pub struct Module {
-    pub module_id: ModuleID,
-    pub src: Slice,
-    pub ast: AST<ast::Module>,
+pub enum Module {
+    Bagel {
+        module_id: ModuleID,
+        ast: AST<ast::Module>,
+    },
+    Singleton {
+        module_id: ModuleID,
+        contents: AST<Expression>,
+    },
 }
 
 impl Module {
+    pub fn module_id(&self) -> &ModuleID {
+        match self {
+            Module::Bagel { module_id, ast: _ } => module_id,
+            Module::Singleton {
+                module_id,
+                contents: _,
+            } => module_id,
+        }
+    }
+
     pub fn get_declaration(
         &self,
         item_name: &str,
         must_be_exported: bool,
     ) -> Option<AST<Declaration>> {
-        self.ast
-            .downcast()
-            .declarations
-            .iter()
-            .find(|decl| -> bool {
-                match decl.downcast() {
-                    Declaration::ValueDeclaration(ValueDeclaration {
-                        destination,
-                        exported,
-                        value: _,
-                        is_const: _,
-                        platforms: _,
-                    }) => {
-                        (!must_be_exported || exported)
-                            && match destination {
-                                ast::DeclarationDestination::NameAndType(NameAndType {
-                                    name,
-                                    type_annotation: _,
-                                }) => name.downcast().0.as_str() == item_name,
-                                ast::DeclarationDestination::Destructure(Destructure {
-                                    properties,
-                                    spread,
-                                    destructure_kind: _,
-                                }) => {
-                                    properties
-                                        .iter()
-                                        .any(|p| p.downcast().0.as_str() == item_name)
-                                        || spread
-                                            .map(|s| s.downcast().0.as_str() == item_name)
-                                            .unwrap_or(false)
+        match self {
+            Module::Bagel { module_id, ast } => ast
+                .downcast()
+                .declarations
+                .iter()
+                .find(|decl| -> bool {
+                    match decl.downcast() {
+                        Declaration::ValueDeclaration(ValueDeclaration {
+                            destination,
+                            exported,
+                            value: _,
+                            is_const: _,
+                            platforms: _,
+                        }) => {
+                            (!must_be_exported || exported)
+                                && match destination {
+                                    ast::DeclarationDestination::NameAndType(NameAndType {
+                                        name,
+                                        type_annotation: _,
+                                    }) => name.downcast().0.as_str() == item_name,
+                                    ast::DeclarationDestination::Destructure(Destructure {
+                                        properties,
+                                        spread,
+                                        destructure_kind: _,
+                                    }) => {
+                                        properties
+                                            .iter()
+                                            .any(|p| p.downcast().0.as_str() == item_name)
+                                            || spread
+                                                .map(|s| s.downcast().0.as_str() == item_name)
+                                                .unwrap_or(false)
+                                    }
                                 }
-                            }
-                    }
-                    Declaration::FuncDeclaration(FuncDeclaration {
-                        name,
-                        exported,
-                        func: _,
-                        platforms: _,
-                        decorators: _,
-                    }) => {
-                        (!must_be_exported || exported) && name.downcast().0.as_str() == item_name
-                    }
-                    Declaration::ProcDeclaration(ProcDeclaration {
-                        name,
-                        exported,
-                        proc: _,
-                        platforms: _,
-                        decorators: _,
-                    }) => {
-                        (!must_be_exported || exported) && name.downcast().0.as_str() == item_name
-                    }
-                    Declaration::SymbolDeclaration(SymbolDeclaration { name, exported }) => {
-                        (!must_be_exported || exported) && name.downcast().0.as_str() == item_name
-                    }
-                    Declaration::TypeDeclaration(_) => todo!(),
+                        }
+                        Declaration::FuncDeclaration(FuncDeclaration {
+                            name,
+                            exported,
+                            func: _,
+                            platforms: _,
+                            decorators: _,
+                        }) => {
+                            (!must_be_exported || exported)
+                                && name.downcast().0.as_str() == item_name
+                        }
+                        Declaration::ProcDeclaration(ProcDeclaration {
+                            name,
+                            exported,
+                            proc: _,
+                            platforms: _,
+                            decorators: _,
+                        }) => {
+                            (!must_be_exported || exported)
+                                && name.downcast().0.as_str() == item_name
+                        }
+                        Declaration::SymbolDeclaration(SymbolDeclaration { name, exported }) => {
+                            (!must_be_exported || exported)
+                                && name.downcast().0.as_str() == item_name
+                        }
+                        Declaration::TypeDeclaration(_) => todo!(),
 
-                    Declaration::ImportAllDeclaration(_) => false,
-                    Declaration::ImportDeclaration(_) => false,
-                    Declaration::TestExprDeclaration(_) => false,
-                    Declaration::TestBlockDeclaration(_) => false,
-                    Declaration::TestTypeDeclaration(_) => false,
-                }
-            })
-            .cloned()
+                        Declaration::ImportAllDeclaration(_) => false,
+                        Declaration::ImportDeclaration(_) => false,
+                        Declaration::TestExprDeclaration(_) => false,
+                        Declaration::TestBlockDeclaration(_) => false,
+                        Declaration::TestTypeDeclaration(_) => false,
+                    }
+                })
+                .cloned(),
+            Module::Singleton {
+                module_id,
+                contents,
+            } => None,
+        }
+    }
+}
+
+fn json_value_to_ast(module_src: Slice, value: Value) -> AST<Expression> {
+    match value {
+        Value::Null => NilLiteral.as_ast(module_src).recast::<Expression>(),
+        Value::Bool(value) => BooleanLiteral(value)
+            .as_ast(module_src)
+            .recast::<Expression>(),
+        Value::Number(value) => {
+            NumberLiteral(Slice::new(Rc::new(value.to_string()))) // HACK: Not shared with module_src
+                .as_ast(module_src)
+                .recast::<Expression>()
+        }
+        Value::String(value) => ExactStringLiteral {
+            tag: None,
+            value: Slice::new(Rc::new(value)), // HACK: Not shared with module_src
+        }
+        .as_ast(module_src)
+        .recast::<Expression>(),
+        Value::Array(members) => ArrayLiteral(
+            members
+                .into_iter()
+                .map(|member| {
+                    ElementOrSpread::Element(json_value_to_ast(module_src.clone(), member))
+                })
+                .collect(),
+        )
+        .as_ast(module_src)
+        .recast::<Expression>(),
+        Value::Object(entries) => ObjectLiteral(
+            entries
+                .into_iter()
+                .map(|(key, value)| {
+                    KeyValueOrSpread::KeyValue(
+                        ExactStringLiteral {
+                            tag: None,
+                            value: Slice::new(Rc::new(key)),
+                        }
+                        .as_ast(module_src.clone())
+                        .recast::<Expression>(),
+                        json_value_to_ast(module_src.clone(), value),
+                        false,
+                    )
+                })
+                .collect(),
+        )
+        .as_ast(module_src)
+        .recast::<Expression>(),
     }
 }

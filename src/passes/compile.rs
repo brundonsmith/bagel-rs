@@ -6,7 +6,16 @@ use std::fmt::{Result, Write};
 
 impl Module {
     pub fn compile<W: Write>(&self, ctx: CompileContext, f: &mut W) -> Result {
-        self.ast.compile(ctx, f)
+        match self {
+            Module::Bagel { module_id: _, ast } => ast.compile(ctx, f),
+            Module::Singleton {
+                module_id: _,
+                contents,
+            } => {
+                f.write_str("export default ")?;
+                contents.compile(ctx, f)
+            }
+        }
     }
 }
 
@@ -479,6 +488,7 @@ where
             }) => todo!(),
             Any::ErrorExpression(_) => todo!(),
             Any::RegularExpression(RegularExpression { expr, flags }) => todo!(),
+            Any::AnyLiteral(_) => f.write_str("null"),
             Any::UnionType(UnionType(members)) => {
                 for (index, member) in members.iter().enumerate() {
                     if index > 0 {

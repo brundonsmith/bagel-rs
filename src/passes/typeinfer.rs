@@ -41,7 +41,7 @@ impl AST<Expression> {
                             }) => ctx
                                 .modules
                                 .import(
-                                    &ctx.current_module.module_id,
+                                    ctx.current_module.module_id(),
                                     path.downcast().value.as_str(),
                                 )
                                 .map(|other_module| {
@@ -435,6 +435,7 @@ impl AST<Expression> {
                 Expression::RegularExpression(RegularExpression { expr, flags }) => {
                     Type::RegularExpressionType
                 }
+                Expression::AnyLiteral(_) => Type::AnyType,
             },
         )
     }

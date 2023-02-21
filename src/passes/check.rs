@@ -24,12 +24,18 @@ impl Module {
     pub fn check<'a, F: FnMut(BagelError)>(&self, ctx: &CheckContext<'a>, report_error: &mut F) {
         let start = SystemTime::now();
 
-        self.ast.check(ctx, report_error);
+        match self {
+            Module::Bagel { module_id: _, ast } => ast.check(ctx, report_error),
+            Module::Singleton {
+                module_id: _,
+                contents,
+            } => contents.check(ctx, report_error),
+        }
 
         if DEBUG_MODE {
             println!(
                 "* Checking {} took {}ms",
-                self.module_id,
+                self.module_id(),
                 start.elapsed().unwrap().as_millis()
             );
         }
@@ -46,7 +52,7 @@ where
     Any: From<TKind>,
 {
     fn check<'a, F: FnMut(BagelError)>(&self, ctx: &CheckContext<'a>, report_error: &mut F) {
-        let module_id = &ctx.current_module.module_id.clone();
+        let module_id = &ctx.current_module.module_id().clone();
         let subsumation_context = SubsumationContext::from(ctx);
         let check_subsumation =
             |destination: &Type, value: Type, slice: &Slice, report_error: &mut F| {
@@ -67,7 +73,7 @@ where
                 op.check(ctx, report_error);
                 right.check(ctx, report_error);
 
-                let module_id = &ctx.current_module.module_id.clone();
+                let module_id = &ctx.current_module.module_id().clone();
                 let subsumation_context = SubsumationContext::from(ctx);
                 let check_subsumation =
                     |destination: &Type, value: Type, slice: &Slice, report_error: &mut F| {
@@ -105,7 +111,7 @@ where
                         && !right_type.subsumes(ctx.into(), &left_type)
                     {
                         report_error(BagelError::MiscError {
-                            module_id: ctx.current_module.module_id.clone(),
+                            module_id: ctx.current_module.module_id().clone(),
                             src: op.slice().clone(),
                             message: format!(
                                 "Can't compare types {} and {} because they have no overlap",
@@ -168,7 +174,7 @@ where
                     Some(_) => {
                         if !is_js_file {
                             report_error(BagelError::MiscError {
-                                module_id: ctx.current_module.module_id.clone(),
+                                module_id: module_id.clone(),
                                 src: self.slice().clone(),
                                 message: format!(
                                     "Can only specify valid platforms for an imported module if it's a JavaScript file"
@@ -179,7 +185,7 @@ where
                     None => {
                         if is_js_file {
                             report_error(BagelError::MiscError {
-                                module_id: ctx.current_module.module_id.clone(),
+                                module_id: module_id.clone(),
                                 src: self.slice().clone(),
                                 message: format!(
                                     "Imports of JavaScript files must specify which platforms they can be used on, eg. [node, browser]"
@@ -190,7 +196,7 @@ where
 
                             match imported_module {
                                 None => report_error(BagelError::MiscError {
-                                    module_id: ctx.current_module.module_id.clone(),
+                                    module_id: module_id.clone(),
                                     src: path.slice().clone(),
                                     message: format!(
                                         "Couldn't find module {} from module {}",
@@ -209,12 +215,12 @@ where
 
                                         if decl.is_none() {
                                             report_error(BagelError::MiscError {
-                                                module_id: ctx.current_module.module_id.clone(),
+                                                module_id: module_id.clone(),
                                                 src: item.slice().clone(),
                                                 message: format!(
                                                     "No exported member named {} found in module {}",
                                                     blue_string(item_name),
-                                                    blue_string(&imported_module.module_id)
+                                                    blue_string(module_id)
                                                 ),
                                             })
                                         }
@@ -388,7 +394,7 @@ where
                     None => {
                         // Identifier can't be resolved
                         report_error(BagelError::MiscError {
-                            module_id: ctx.current_module.module_id.clone(),
+                            module_id: module_id.clone(),
                             src: self.slice().clone(),
                             message: format!(
                                 "Couldn't resolve identifier {} in this scope",
@@ -418,7 +424,7 @@ where
 
                             if let Some(failure) = purity_failure {
                                 report_error(BagelError::MiscError {
-                                    module_id: ctx.current_module.module_id.clone(),
+                                    module_id: module_id.clone(),
                                     src: self.slice().clone(),
                                     message: format!(
                                         "Pure {}s can only reference identifiers declared within their own scope!",
@@ -521,7 +527,7 @@ where
                     && self.resolve_symbol(name_str).is_none()
                 {
                     report_error(BagelError::MiscError {
-                        module_id: ctx.current_module.module_id.clone(),
+                        module_id: module_id.clone(),
                         src: self.slice().clone(),
                         message: format!(
                             "Couldn't resolve identifier {} in this scope",
@@ -577,7 +583,7 @@ where
 
                 for arg in duplicated_args {
                     report_error(BagelError::MiscError {
-                        module_id: ctx.current_module.module_id.clone(),
+                        module_id: module_id.clone(),
                         src: arg.slice().clone(),
                         message: format!(
                             "Duplicate arg name {}",
@@ -643,7 +649,7 @@ where
                     .unwrap_or(false)
                 {
                     report_error(BagelError::MiscError {
-                        module_id: ctx.current_module.module_id.clone(),
+                        module_id: module_id.clone(),
                         src: inner.slice().clone(),
                         message: format!("Can only await expressions inside an async func or proc"),
                     });
@@ -695,7 +701,7 @@ where
                     }
                 } else {
                     report_error(BagelError::MiscError {
-                        module_id: ctx.current_module.module_id.clone(),
+                        module_id: module_id.clone(),
                         src: subject.slice().clone(),
                         message: format!(
                             "{} is of type {} and cannot be called",
@@ -738,7 +744,7 @@ where
                     .is_none()
                 {
                     report_error(BagelError::MiscError {
-                        module_id: ctx.current_module.module_id.clone(),
+                        module_id: module_id.clone(),
                         src: property_slice,
                         message: match property {
                             Property::Expression(_) => format!(
@@ -921,7 +927,7 @@ where
                         let kind_str: &str = kind.into();
 
                         report_error(BagelError::MiscError {
-                            module_id: ctx.current_module.module_id.clone(),
+                            module_id: module_id.clone(),
                             src: self.slice().clone(),
                             message: format!(
                                 "Cannot apply {} to {}",
@@ -1193,6 +1199,7 @@ where
             Any::BinaryOperator(_) => {}
             Any::PlainIdentifier(_) => {}
             Any::RegularExpression(_) => {}
+            Any::AnyLiteral(_) => {}
 
             Any::ParenthesizedType(_) => {}
             Any::RegularExpressionType(_) => {}
@@ -1216,7 +1223,7 @@ fn check_declaration_destination<'a, F: FnMut(BagelError)>(
     value: AST<Expression>,
     is_const: bool,
 ) {
-    let module_id = &ctx.current_module.module_id.clone();
+    let module_id = &ctx.current_module.module_id().clone();
     let subsumation_context = SubsumationContext::from(ctx);
     let check_subsumation =
         |destination: &Type, value: Type, slice: &Slice, report_error: &mut F| {
@@ -1287,7 +1294,7 @@ fn check_declaration_destination<'a, F: FnMut(BagelError)>(
 
                         if property_type.is_none() {
                             report_error(BagelError::MiscError {
-                                module_id: ctx.current_module.module_id.clone(),
+                                module_id: module_id.clone(),
                                 src: property.slice().clone(),
                                 message: format!(
                                     "There is no element {} on type {}",
@@ -1313,7 +1320,7 @@ fn check_declaration_destination<'a, F: FnMut(BagelError)>(
 
                         if property_type.is_none() {
                             report_error(BagelError::MiscError {
-                                module_id: ctx.current_module.module_id.clone(),
+                                module_id: module_id.clone(),
                                 src: property.slice().clone(),
                                 message: format!(
                                     "Property {} does not exist on type {}",

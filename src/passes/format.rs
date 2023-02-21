@@ -6,7 +6,13 @@ use std::fmt::{Display, Formatter, Result, Write};
 
 impl Module {
     pub fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
-        self.ast.format(f, opts)
+        match self {
+            Module::Bagel { module_id: _, ast } => ast.format(f, opts),
+            Module::Singleton {
+                module_id: _,
+                contents,
+            } => f.write_str(contents.slice().as_str()),
+        }
     }
 }
 
@@ -376,6 +382,7 @@ where
             }) => todo!(),
             Any::ErrorExpression(ErrorExpression(_)) => todo!(),
             Any::RegularExpression(RegularExpression { expr, flags }) => todo!(),
+            Any::AnyLiteral(AnyLiteral) => f.write_str("nil"),
             Any::UnionType(UnionType(members)) => {
                 for (index, member) in members.iter().enumerate() {
                     if index > 0 {

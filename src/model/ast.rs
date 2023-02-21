@@ -547,6 +547,9 @@ pub struct RegularExpression {
     pub flags: Vec<RegularExpressionFlag>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct AnyLiteral;
+
 // --- Type expressions ---
 #[derive(Debug, Clone, PartialEq)]
 pub struct UnionType(pub Vec<AST<TypeExpression>>);
@@ -1162,6 +1165,7 @@ union_type! {
         | InstanceOf
         | ErrorExpression
         | RegularExpression
+        | AnyLiteral
         | UnionType
         | MaybeType
         | NamedType
@@ -1241,6 +1245,7 @@ union_subtype!(
         | InstanceOf
         | ErrorExpression
         | RegularExpression
+        | AnyLiteral
 );
 
 union_subtype!(
