@@ -4280,16 +4280,9 @@ fn test_check(bgl: &str, should_fail: bool) {
     let parsed = parse(module_id.clone(), bgl_rc.clone());
 
     match parsed {
-        Ok(parsed) => {
+        Ok(ast) => {
             let mut modules_store = HashMap::new();
-            modules_store.insert(
-                module_id.clone(),
-                Ok(Module {
-                    module_id,
-                    src: Slice::new(bgl_rc.clone()),
-                    ast: parsed,
-                }),
-            );
+            modules_store.insert(module_id.clone(), Ok(Module::Bagel { module_id, ast }));
             let modules_store = modules_store.into();
 
             let errors = gather_errors(&modules_store);
