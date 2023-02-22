@@ -31,9 +31,24 @@ impl AST<Expression> {
                                 platforms,
                                 name,
                                 path,
-                            }) => {
-                                todo!()
-                            }
+                            }) => ctx
+                                .modules
+                                .import(
+                                    ctx.current_module.module_id(),
+                                    path.downcast().value.as_str(),
+                                )
+                                .map(|other_module| match other_module {
+                                    Module::Bagel {
+                                        module_id: _,
+                                        ast: _,
+                                    } => None,
+                                    Module::Singleton {
+                                        module_id: _,
+                                        contents,
+                                    } => Some(contents.infer_type(ctx)),
+                                })
+                                .flatten()
+                                .unwrap_or(Type::PoisonedType),
                             Any::ImportDeclaration(ImportDeclaration {
                                 platforms,
                                 imports: _,

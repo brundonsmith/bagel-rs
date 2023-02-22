@@ -143,16 +143,36 @@ where
                 let path_name = path.downcast();
                 let path_name = path_name.value.as_str();
 
-                if ctx.modules.import_raw(module_id, path_name).is_none() {
-                    report_error(BagelError::MiscError {
-                        module_id: module_id.clone(),
-                        src: path.slice().clone(),
-                        message: format!(
-                            "Couldn't find module {} from module {}",
-                            blue_string(path_name),
-                            blue_string(module_id)
-                        ),
-                    });
+                match ctx.modules.import_raw(module_id, path_name) {
+                    Some(Ok(other_module)) => {
+                        if matches!(
+                            other_module,
+                            Module::Bagel {
+                                module_id: _,
+                                ast: _
+                            }
+                        ) {
+                            report_error(BagelError::MiscError {
+                                    module_id: module_id.clone(),
+                                    src: path.slice().clone(),
+                                    message: format!(
+                                        "Bagel modules don't have default-exports and can't be imported this way"
+                                    ),
+                                });
+                        }
+                    }
+                    Some(Err(_)) => {}
+                    None => {
+                        report_error(BagelError::MiscError {
+                            module_id: module_id.clone(),
+                            src: path.slice().clone(),
+                            message: format!(
+                                "Couldn't find module {} from module {}",
+                                blue_string(path_name),
+                                blue_string(module_id)
+                            ),
+                        });
+                    }
                 }
             }
             Any::ImportDeclaration(ImportDeclaration {
@@ -165,71 +185,86 @@ where
 
                 let path_name = path.downcast();
                 let path_name = path_name.value.as_str();
-                let path_extension = path_name.split('.').last();
-                let is_js_file = path_extension
-                    .map(|ext| JS_FILE_EXTENSIONS.contains(&ext))
-                    .unwrap_or(false);
+                // let path_extension = path_name.split('.').last();
+                // let is_js_file = path_extension
+                //     .map(|ext| JS_FILE_EXTENSIONS.contains(&ext))
+                //     .unwrap_or(false);
 
-                match platforms {
-                    Some(_) => {
-                        if !is_js_file {
-                            report_error(BagelError::MiscError {
-                                module_id: module_id.clone(),
-                                src: self.slice().clone(),
-                                message: format!(
-                                    "Can only specify valid platforms for an imported module if it's a JavaScript file"
-                                ),
-                            });
-                        }
-                    }
-                    None => {
-                        if is_js_file {
-                            report_error(BagelError::MiscError {
-                                module_id: module_id.clone(),
-                                src: self.slice().clone(),
-                                message: format!(
-                                    "Imports of JavaScript files must specify which platforms they can be used on, eg. [node, browser]"
-                                ),
-                            });
-                        } else {
-                            let imported_module = ctx.modules.import_raw(module_id, path_name);
+                // match platforms {
+                //     Some(_) => {
+                //         if !is_js_file {
+                //             report_error(BagelError::MiscError {
+                //                 module_id: module_id.clone(),
+                //                 src: self.slice().clone(),
+                //                 message: format!(
+                //                     "Can only specify valid platforms for an imported module if it's a JavaScript file"
+                //                 ),
+                //             });
+                //         }
+                //     }
+                //     None => {
+                //         if is_js_file {
+                //             report_error(BagelError::MiscError {
+                //                 module_id: module_id.clone(),
+                //                 src: self.slice().clone(),
+                //                 message: format!(
+                //                     "Imports of JavaScript files must specify which platforms they can be used on, eg. [node, browser]"
+                //                 ),
+                //             });
+                //         } else {
+                let imported_module = ctx.modules.import_raw(module_id, path_name);
 
-                            match imported_module {
-                                None => report_error(BagelError::MiscError {
-                                    module_id: module_id.clone(),
-                                    src: path.slice().clone(),
-                                    message: format!(
-                                        "Couldn't find module {} from module {}",
-                                        blue_string(path_name),
-                                        blue_string(module_id)
-                                    ),
-                                }),
-                                Some(Err(_)) => {}
-                                Some(Ok(imported_module)) => {
-                                    for item in imports {
-                                        let item_downcast = item.downcast();
-                                        let item_name = item_downcast.name.downcast();
-                                        let item_name = item_name.0.as_str();
+                match imported_module {
+                    Some(Ok(imported_module)) => match imported_module {
+                        Module::Bagel { module_id, ast: _ } => {
+                            for item in imports {
+                                let item_downcast = item.downcast();
+                                let item_name = item_downcast.name.downcast();
+                                let item_name = item_name.0.as_str();
 
-                                        let decl = imported_module.get_declaration(item_name, true);
+                                let decl = imported_module.get_declaration(item_name, true);
 
-                                        if decl.is_none() {
-                                            report_error(BagelError::MiscError {
-                                                module_id: module_id.clone(),
-                                                src: item.slice().clone(),
-                                                message: format!(
-                                                    "No exported member named {} found in module {}",
-                                                    blue_string(item_name),
-                                                    blue_string(module_id)
-                                                ),
-                                            })
-                                        }
-                                    }
+                                if decl.is_none() {
+                                    report_error(BagelError::MiscError {
+                                        module_id: module_id.clone(),
+                                        src: item.slice().clone(),
+                                        message: format!(
+                                            "No exported member named {} found in module {}",
+                                            blue_string(item_name),
+                                            blue_string(module_id)
+                                        ),
+                                    })
                                 }
                             }
                         }
-                    }
+                        Module::Singleton {
+                            module_id,
+                            contents: _,
+                        } => {
+                            report_error(BagelError::MiscError {
+                                module_id: module_id.clone(),
+                                src: path.slice().clone(),
+                                message: format!(
+                                    "This kind of module doesn't expose named imports; import it as a single value instead: {}",
+                                    blue_string(format!("import '{}' as myModule", path.downcast().value.as_str()))
+                                ),
+                            });
+                        }
+                    },
+                    Some(Err(_)) => {}
+                    None => report_error(BagelError::MiscError {
+                        module_id: module_id.clone(),
+                        src: path.slice().clone(),
+                        message: format!(
+                            "Couldn't find module {} from module {}",
+                            blue_string(path_name),
+                            blue_string(module_id)
+                        ),
+                    }),
                 }
+                //     }
+                // }
+                // }
             }
             Any::ImportItem(ImportItem { name, alias }) => {
                 name.check(ctx, report_error);
