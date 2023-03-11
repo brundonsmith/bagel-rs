@@ -1450,7 +1450,11 @@ fn regular_expression(i: Slice) -> ParseResult<AST<RegularExpression>> {
     map(
         tuple((
             tag("/"),
-            escaped(take_while1(|ch: char| ch != '/'), '\\', one_of("/")),
+            escaped(
+                take_while1(|ch: char| ch != '/' && ch != '\\'),
+                '\\',
+                one_of("/\\"),
+            ),
             tag("/"),
             many0(regular_expression_flag),
         )),
@@ -1981,7 +1985,7 @@ where
 #[memoize]
 fn string_contents(i: Slice) -> ParseResult<Slice> {
     escaped(
-        take_while1(|ch: char| ch != '\'' && ch != '$'),
+        take_while1(|ch: char| ch != '\'' && ch != '$' && ch != '\\'),
         '\\',
         one_of("$\'\\"),
     )(i)

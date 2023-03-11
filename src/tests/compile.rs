@@ -818,7 +818,7 @@ fn Strings() {
       const d = 'num: \\${12}'
       const e = ''",
         "
-      const a = `Hello world \\${12}`;
+      const a = `Hello world ${12}`;
       const b = `it's me!`;
       const c = `\\\\foobar`;
       const d = `num: \\${12}`;

@@ -1,6 +1,7 @@
 use crate::model::{
     ast::{self, *},
     module::Module,
+    slice::Slice,
 };
 use std::fmt::{Result, Write};
 
@@ -211,10 +212,11 @@ where
             }),
             Any::NumberLiteral(NumberLiteral(value)) => f.write_str(value.as_str()),
             Any::StringLiteral(StringLiteral { tag: _, segments }) => {
+                println!("{:?}", segments);
                 f.write_char('`')?;
                 for segment in segments {
                     match segment {
-                        StringLiteralSegment::Slice(s) => f.write_str(s.as_str())?,
+                        StringLiteralSegment::Slice(s) => compile_string_contents(f, s)?,
                         StringLiteralSegment::AST(insert) => {
                             f.write_str("${")?;
                             insert.compile(ctx, f)?;
@@ -226,7 +228,7 @@ where
             }
             Any::ExactStringLiteral(ExactStringLiteral { tag, value }) => {
                 f.write_char('`')?;
-                f.write_str(value.as_str())?;
+                compile_string_contents(f, value)?;
                 f.write_char('`')
             }
             Any::ArrayLiteral(ArrayLiteral(entries)) => {
@@ -770,6 +772,18 @@ where
             Any::DeclarationPlatforms(_) => Ok(()),
         }
     }
+}
+
+fn compile_string_contents<W: Write>(f: &mut W, contents: &Slice) -> Result {
+    for (index, ch) in contents.as_str().char_indices() {
+        if ch == '\\' && contents.as_str().chars().nth(index + 1) == Some('\'') {
+            // do nothing
+        } else {
+            f.write_char(ch)?;
+        }
+    }
+
+    Ok(())
 }
 
 // impl<'a, TKind> Compilable for AST<TKind>
