@@ -223,6 +223,15 @@ where
                     return Some(found.clone().upcast());
                 }
             }
+            Some(Any::ForLoop(ForLoop {
+                item_identifier,
+                iterator: _,
+                body: _,
+            })) => {
+                if item_identifier.downcast().0.as_str() == symbol {
+                    return self.parent();
+                }
+            }
             Some(Any::TryCatch(TryCatch {
                 try_block: _,
                 error_identifier,

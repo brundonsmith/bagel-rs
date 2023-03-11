@@ -154,6 +154,23 @@ impl AST<Expression> {
                                     }
                                 }
                             }
+                            Any::ForLoop(ForLoop {
+                                item_identifier: _,
+                                iterator,
+                                body: _,
+                            }) => {
+                                let iterator_type = iterator.infer_type(ctx);
+
+                                if let Type::SpecialType {
+                                    kind: SpecialTypeKind::Iterator,
+                                    inner,
+                                } = iterator_type
+                                {
+                                    return inner.as_ref().clone();
+                                } else {
+                                    return Type::PoisonedType;
+                                }
+                            }
                             Any::TryCatch(TryCatch {
                                 try_block,
                                 error_identifier: _,
@@ -488,6 +505,12 @@ pub fn binary_operation_type<'a>(
                     min: result,
                     max: result,
                 }
+            } else if let (Type::StringType(Some(left)), Type::StringType(Some(right))) =
+                (&left_type, &right_type)
+            {
+                let result = Slice::new(Rc::new(left.as_str().to_owned() + right.as_str()));
+
+                Type::StringType(Some(result))
             } else if Type::ANY_NUMBER.subsumes(ctx.into(), &left_type) {
                 if Type::ANY_NUMBER.subsumes(ctx.into(), &right_type) {
                     Type::ANY_NUMBER
