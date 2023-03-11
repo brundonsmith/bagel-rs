@@ -125,13 +125,20 @@ where
                 is_pure: _,
                 body: _,
             })) => {
-                if let Some(found) = type_annotation
-                    .downcast()
+                let func_type = type_annotation.downcast();
+
+                if let Some(found) = func_type
                     .args
                     .iter()
                     .find(|arg| arg.downcast().name.downcast().0.as_str() == symbol)
                 {
                     return Some(found.clone().upcast());
+                }
+
+                if let Some(spread) = func_type.args_spread {
+                    if spread.downcast().name.downcast().0.as_str() == symbol {
+                        return Some(spread.clone().upcast());
+                    }
                 }
             }
             Some(Any::Proc(Proc {
@@ -140,13 +147,20 @@ where
                 is_pure: _,
                 body: _,
             })) => {
-                if let Some(found) = type_annotation
-                    .downcast()
+                let proc_type = type_annotation.downcast();
+
+                if let Some(found) = proc_type
                     .args
                     .iter()
                     .find(|arg| arg.downcast().name.downcast().0.as_str() == symbol)
                 {
                     return Some(found.clone().upcast());
+                }
+
+                if let Some(spread) = proc_type.args_spread {
+                    if spread.downcast().name.downcast().0.as_str() == symbol {
+                        return Some(spread.clone().upcast());
+                    }
                 }
             }
             Some(Any::InlineConstGroup(InlineConstGroup {
