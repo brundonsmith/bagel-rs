@@ -795,6 +795,9 @@ fn type_expression_inner(l: usize, i: Slice) -> ParseResult<AST<TypeExpression>>
                     .as_ast(src)
                     .recast::<TypeExpression>()
             }),
+            map(tag("RegExp"), |s: Slice| RegularExpressionType
+                .as_ast(s)
+                .recast::<TypeExpression>()),
             map(alt((tag("true"), tag("false"))), |s: Slice| {
                 BooleanLiteralType(s.as_str() == "true")
                     .as_ast(s)
@@ -1234,8 +1237,8 @@ fn expression_inner(l: usize, i: Slice) -> ParseResult<AST<Expression>> {
         tl,
         i,
         alt((
-            local_identifier,
-            // localIdentifier, regExp
+            map(local_identifier, AST::recast::<Expression>),
+            map(regular_expression, AST::recast::<Expression>),
         ))
     );
 
@@ -1444,7 +1447,32 @@ fn binary_operation_4(
 }
 
 fn regular_expression(i: Slice) -> ParseResult<AST<RegularExpression>> {
-    todo!()
+    map(
+        tuple((
+            tag("/"),
+            escaped(take_while1(|ch: char| ch != '/'), '\\', one_of("/")),
+            tag("/"),
+            many0(regular_expression_flag),
+        )),
+        |(start, mut expr, end, mut flags)| {
+            make_node!(RegularExpression, start.spanning(&end), expr, flags)
+        },
+    )(i)
+}
+
+fn regular_expression_flag(i: Slice) -> ParseResult<RegularExpressionFlag> {
+    map(
+        alt((
+            tag("d"),
+            tag("g"),
+            tag("i"),
+            tag("m"),
+            tag("s"),
+            tag("u"),
+            tag("y"),
+        )),
+        |letter: Slice| letter.as_str().try_into().unwrap(),
+    )(i)
 }
 
 fn error_expression(i: Slice) -> ParseResult<AST<ErrorExpression>> {

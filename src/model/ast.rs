@@ -244,6 +244,7 @@ impl Parentable for PlatformSet {}
 impl Parentable for ModifierTypeKind {}
 impl Parentable for SpecialTypeKind {}
 impl Parentable for AwaitOrDetach {}
+impl Parentable for RegularExpressionFlag {}
 
 #[derive(Debug, Clone)]
 pub struct ASTInner {
@@ -894,14 +895,21 @@ where
 
 // --- Misc data ---
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
 pub enum RegularExpressionFlag {
+    #[strum(serialize = "d")]
     D,
+    #[strum(serialize = "g")]
     G,
+    #[strum(serialize = "i")]
     I,
+    #[strum(serialize = "m")]
     M,
+    #[strum(serialize = "s")]
     S,
+    #[strum(serialize = "u")]
     U,
+    #[strum(serialize = "y")]
     Y,
 }
 
