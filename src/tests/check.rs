@@ -4319,10 +4319,9 @@ fn test_check_multi(modules: Vec<(&str, &str)>, should_fail: bool) {
 
             (
                 module_id.clone(),
-                parse(module_id.clone(), bgl_rc.clone()).map(|parsed| Module {
+                parse(module_id.clone(), bgl_rc.clone()).map(|ast| Module::Bagel {
                     module_id: module_id.clone(),
-                    src: Slice::new(bgl_rc.clone()),
-                    ast: parsed,
+                    ast,
                 }),
             )
         })

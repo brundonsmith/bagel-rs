@@ -1,12 +1,12 @@
 use crate::model::{
     ast::{self, *},
-    module::Module,
+    module::{Module, ModulesStore},
     slice::Slice,
 };
 use std::fmt::{Result, Write};
 
 impl Module {
-    pub fn compile<W: Write>(&self, ctx: CompileContext, f: &mut W) -> Result {
+    pub fn compile<'a, W: Write>(&self, ctx: CompileContext<'a>, f: &mut W) -> Result {
         match self {
             Module::Bagel { module_id: _, ast } => ast.compile(ctx, f),
             Module::Singleton {
@@ -21,7 +21,7 @@ impl Module {
 }
 
 pub trait Compilable {
-    fn compile<W: Write>(&self, ctx: CompileContext, f: &mut W) -> Result;
+    fn compile<'a, W: Write>(&self, ctx: CompileContext<'a>, f: &mut W) -> Result;
 }
 
 impl<TKind> Compilable for AST<TKind>
@@ -29,7 +29,7 @@ where
     TKind: Clone + TryFrom<Any>,
     Any: From<TKind>,
 {
-    fn compile<W: Write>(&self, ctx: CompileContext, f: &mut W) -> Result {
+    fn compile<'a, W: Write>(&self, ctx: CompileContext<'a>, f: &mut W) -> Result {
         match self.details() {
             Any::Module(ast::Module {
                 module_id: _,
@@ -395,17 +395,24 @@ where
                 bubbles,
                 awaited_or_detached,
             }) => {
-                subject.compile(ctx, f)?;
+                if let Some(inv) = method_call_as_invocation(
+                    ctx.into(),
+                    self.clone().upcast().try_recast::<Expression>().unwrap(),
+                ) {
+                    inv.compile(ctx, f)?;
+                } else {
+                    subject.compile(ctx, f)?;
 
-                f.write_char('(')?;
-                for (index, arg) in args.iter().enumerate() {
-                    if index > 0 {
-                        f.write_str(", ")?;
+                    f.write_char('(')?;
+                    for (index, arg) in args.iter().enumerate() {
+                        if index > 0 {
+                            f.write_str(", ")?;
+                        }
+
+                        arg.compile(ctx, f)?;
                     }
-
-                    arg.compile(ctx, f)?;
+                    f.write_char(')')?;
                 }
-                f.write_char(')')?;
 
                 Ok(())
             }
@@ -792,13 +799,13 @@ fn compile_string_contents<W: Write>(f: &mut W, contents: &Slice) -> Result {
 //     &'a TKind: From<&'a Any>,
 //     Any: TryInto<TKind>,
 // {
-//     fn compile<W: Write>(&self, ctx: CompileContext, f: &mut W) -> Result {
+//     fn compile<'a, W: Write>(&self, ctx: CompileContext<'a>, f: &mut W) -> Result {
 //         self.into().compile(ctx, f)
 //     }
 // }
 
 impl Compilable for Arg {
-    fn compile<W: Write>(&self, ctx: CompileContext, f: &mut W) -> Result {
+    fn compile<'a, W: Write>(&self, ctx: CompileContext<'a>, f: &mut W) -> Result {
         let Arg {
             name,
             type_annotation,
@@ -819,7 +826,7 @@ impl<T> Compilable for Option<T>
 where
     T: Compilable,
 {
-    fn compile<W: Write>(&self, ctx: CompileContext, f: &mut W) -> Result {
+    fn compile<'a, W: Write>(&self, ctx: CompileContext<'a>, f: &mut W) -> Result {
         if let Some(sel) = self {
             sel.compile(ctx, f);
         }
@@ -832,7 +839,7 @@ impl<T> Compilable for Vec<T>
 where
     T: Compilable,
 {
-    fn compile<W: Write>(&self, ctx: CompileContext, f: &mut W) -> Result {
+    fn compile<'a, W: Write>(&self, ctx: CompileContext<'a>, f: &mut W) -> Result {
         for el in self.iter() {
             el.compile(ctx, f);
         }
@@ -842,7 +849,7 @@ where
 }
 
 impl Compilable for DeclarationDestination {
-    fn compile<W: Write>(&self, ctx: CompileContext, f: &mut W) -> Result {
+    fn compile<'a, W: Write>(&self, ctx: CompileContext<'a>, f: &mut W) -> Result {
         match self {
             DeclarationDestination::NameAndType(NameAndType {
                 name,
@@ -896,8 +903,8 @@ pub const INT_FN: &str = "___fn_";
 
 // --- Util functions ---
 
-fn compile_function<W: Write>(
-    ctx: CompileContext,
+fn compile_function<'a, W: Write>(
+    ctx: CompileContext<'a>,
     f: &mut W,
     name: Option<&str>,
     args: &Vec<AST<Arg>>,
@@ -943,8 +950,8 @@ fn compile_function<W: Write>(
     Ok(())
 }
 
-fn compile_type_annotation<W: Write>(
-    ctx: CompileContext,
+fn compile_type_annotation<'a, W: Write>(
+    ctx: CompileContext<'a>,
     f: &mut W,
     type_annotation: Option<&AST<TypeExpression>>,
 ) -> Result {
@@ -959,6 +966,8 @@ fn compile_type_annotation<W: Write>(
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct CompileContext {
+pub struct CompileContext<'a> {
+    pub modules: &'a ModulesStore,
+    pub current_module: &'a Module,
     pub include_types: bool,
 }

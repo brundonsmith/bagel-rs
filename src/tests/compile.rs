@@ -856,17 +856,27 @@ fn Element_tag() {
 }
 
 fn test_compile(bgl: &str, js: &str) {
-    let parsed = parse(
-        ModuleID::Artificial(Rc::new("foo".to_owned())),
-        Rc::new(bgl.to_owned() + " "),
-    );
+    let module_id = ModuleID::Artificial(Rc::new("foo".to_owned()));
+    let parsed = parse(module_id.clone(), Rc::new(bgl.to_owned() + " "));
 
     match parsed {
         Ok(parsed) => {
+            let mut modules_store = HashMap::new();
+            modules_store.insert(
+                module_id.clone(),
+                Ok(Module::Bagel {
+                    module_id: module_id.clone(),
+                    ast: parsed.clone(),
+                }),
+            );
+            let modules_store = modules_store.into();
+
             let mut compiled = String::new();
             parsed
                 .compile(
                     CompileContext {
+                        modules: &modules_store,
+                        current_module: modules_store.get(&module_id).unwrap(),
                         include_types: true,
                     },
                     &mut compiled,

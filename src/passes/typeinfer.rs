@@ -12,7 +12,7 @@ use crate::{
     ModulesStore,
 };
 
-use super::resolve_type::ResolveContext;
+use super::{compile::CompileContext, resolve_type::ResolveContext};
 
 impl AST<Expression> {
     pub fn infer_type<'a>(&self, ctx: InferTypeContext<'a>) -> Type {
@@ -111,7 +111,7 @@ impl AST<Expression> {
                             }) => type_annotation
                                 .as_ref()
                                 .map(|t| t.resolve_type(ctx.into()))
-                                .unwrap_or(Type::PoisonedType),
+                                .unwrap_or(Type::UnknownType(Mutability::Mutable)),
                             Any::InlineDeclaration(InlineDeclaration { destination, value }) => {
                                 match destination {
                                     DeclarationDestination::NameAndType(NameAndType {
@@ -332,18 +332,25 @@ impl AST<Expression> {
                     bubbles,
                     awaited_or_detached,
                 }) => {
-                    let subject_type = subject.infer_type(ctx);
-
-                    if let Type::FuncType {
-                        args: _,
-                        args_spread: _,
-                        is_pure: _,
-                        returns,
-                    } = subject_type
-                    {
-                        returns.as_ref().clone()
+                    if let Some(inv) = method_call_as_invocation(
+                        ctx.into(),
+                        self.clone().upcast().try_recast::<Expression>().unwrap(),
+                    ) {
+                        inv.infer_type(ctx)
                     } else {
-                        Type::PoisonedType
+                        let subject_type = subject.infer_type(ctx);
+
+                        if let Type::FuncType {
+                            args: _,
+                            args_spread: _,
+                            is_pure: _,
+                            returns,
+                        } = subject_type
+                        {
+                            returns.as_ref().clone()
+                        } else {
+                            Type::PoisonedType
+                        }
                     }
                 }
                 Expression::PropertyAccessor(PropertyAccessor {
@@ -815,6 +822,21 @@ impl<'a> From<ResolveContext<'a>> for InferTypeContext<'a> {
             modules,
             current_module,
         }: ResolveContext<'a>,
+    ) -> Self {
+        Self {
+            modules,
+            current_module,
+        }
+    }
+}
+
+impl<'a> From<CompileContext<'a>> for InferTypeContext<'a> {
+    fn from(
+        CompileContext {
+            modules,
+            current_module,
+            include_types,
+        }: CompileContext<'a>,
     ) -> Self {
         Self {
             modules,

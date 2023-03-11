@@ -117,6 +117,8 @@ fn main() -> ExitCode {
                             module
                                 .compile(
                                     CompileContext {
+                                        modules: &modules_store,
+                                        current_module: &module,
                                         include_types: true,
                                     },
                                     &mut compiled,

@@ -704,7 +704,7 @@ where
                 spread_args.check(ctx, report_error);
 
                 let subject_type = subject.infer_type(ctx.into());
-                let types = match &subject_type {
+                let arg_types = match &subject_type {
                     Type::FuncType {
                         args,
                         args_spread,
@@ -721,7 +721,7 @@ where
                     _ => None,
                 };
 
-                if let Some((arg_types, args_spread_type)) = types {
+                if let Some((arg_types, args_spread_type)) = arg_types {
                     for (i, arg) in args.iter().enumerate() {
                         if let Some(arg_type) = arg_types.get(i) {
                             if let Some(type_annotation) = &arg_type {
@@ -734,6 +734,11 @@ where
                             }
                         }
                     }
+                } else if let Some(inv) = method_call_as_invocation(
+                    ctx.into(),
+                    self.clone().upcast().try_recast::<Expression>().unwrap(),
+                ) {
+                    inv.check(ctx, report_error);
                 } else {
                     report_error(BagelError::MiscError {
                         module_id: module_id.clone(),
@@ -778,22 +783,54 @@ where
                     .get_property(ctx.into(), &property_type)
                     .is_none()
                 {
-                    report_error(BagelError::MiscError {
-                        module_id: module_id.clone(),
-                        src: property_slice,
-                        message: match property {
-                            Property::Expression(_) => format!(
+                    // doesn't have the property
+
+                    match property {
+                        Property::Expression(_) => report_error(BagelError::MiscError {
+                            module_id: module_id.clone(),
+                            src: property_slice,
+                            message: format!(
                                 "{} cannot be used to index type {}",
                                 blue_string(&property_type),
                                 blue_string(&subject_type)
                             ),
-                            Property::PlainIdentifier(ident) => format!(
-                                "Property {} does not exist on type {}",
-                                blue_string(&ident),
-                                blue_string(&subject_type)
-                            ),
-                        },
-                    });
+                        }),
+                        Property::PlainIdentifier(ident) => {
+                            let ident_as_local: AST<LocalIdentifier> = ident.clone().into();
+                            let ident_type =
+                                ident_as_local.recast::<Expression>().infer_type(ctx.into());
+
+                            // if it's not a method call that's re-arrangeable
+                            if !matches!(
+                                ident_type,
+                                Type::FuncType {
+                                    args: _,
+                                    args_spread: _,
+                                    is_pure: _,
+                                    returns: _
+                                }
+                            ) && !matches!(
+                                ident_type,
+                                Type::ProcType {
+                                    args: _,
+                                    args_spread: _,
+                                    is_pure: _,
+                                    is_async: _,
+                                    throws: _
+                                }
+                            ) {
+                                report_error(BagelError::MiscError {
+                                    module_id: module_id.clone(),
+                                    src: property_slice,
+                                    message: format!(
+                                        "Property {} does not exist on type {}",
+                                        blue_string(&ident),
+                                        blue_string(&subject_type)
+                                    ),
+                                })
+                            }
+                        }
+                    }
                 }
             }
             Any::IfElseExpression(IfElseExpression {

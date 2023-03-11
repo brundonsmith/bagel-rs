@@ -1,4 +1,5 @@
 use crate::model::slice::Slice;
+use crate::passes::typeinfer::InferTypeContext;
 use std::fmt::{Debug, Display};
 use std::marker::PhantomData;
 use std::{
@@ -7,6 +8,7 @@ use std::{
 };
 use strum_macros::{EnumString, IntoStaticStr};
 
+use super::bgl_type::Type;
 use super::module::ModuleID;
 
 macro_rules! union_type {
@@ -490,6 +492,75 @@ pub struct PropertyAccessor {
     pub subject: AST<Expression>,
     pub property: Property,
     pub optional: bool,
+}
+
+pub fn method_call_as_invocation<'a>(
+    ctx: InferTypeContext<'a>,
+    expr: AST<Expression>,
+) -> Option<AST<Expression>> {
+    match expr.downcast() {
+        Expression::Invocation(Invocation {
+            subject,
+            args,
+            spread_args,
+            type_args,
+            bubbles,
+            awaited_or_detached,
+        }) => match subject.downcast() {
+            Expression::PropertyAccessor(PropertyAccessor {
+                subject: property_subject,
+                property,
+                optional,
+            }) => {
+                let property_type = match &property {
+                    Property::Expression(expr) => expr.infer_type(ctx.into()),
+                    Property::PlainIdentifier(ident) => {
+                        Type::StringType(Some(ident.downcast().0.clone()))
+                    }
+                };
+
+                if property_subject
+                    .infer_type(ctx)
+                    .get_property(ctx.into(), &property_type)
+                    .is_none()
+                {
+                    if !optional {
+                        if let Property::PlainIdentifier(identifier) = property {
+                            let subject: AST<LocalIdentifier> = identifier.into();
+                            return Some(
+                                Expression::Invocation(Invocation {
+                                    subject: subject.recast::<Expression>(),
+                                    args: std::iter::once(property_subject)
+                                        .chain(args.into_iter())
+                                        .collect(),
+                                    spread_args,
+                                    type_args,
+                                    bubbles,
+                                    awaited_or_detached,
+                                })
+                                .as_ast(expr.slice().clone()),
+                            );
+                        }
+                    }
+                }
+            }
+            _ => {}
+        },
+        _ => {}
+    }
+
+    None
+}
+
+impl From<AST<PlainIdentifier>> for AST<LocalIdentifier> {
+    fn from(plain_identifier: AST<PlainIdentifier>) -> Self {
+        let mut local =
+            LocalIdentifier(plain_identifier.downcast().0).as_ast(plain_identifier.slice().clone());
+
+        local.set_parent(plain_identifier.parent().as_ref().unwrap());
+
+        local
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

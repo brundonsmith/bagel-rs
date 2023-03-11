@@ -2,7 +2,7 @@ use super::ast::{
     self, AnyLiteral, ArrayLiteral, BooleanLiteral, Declaration, Destructure, ElementOrSpread,
     ExactStringLiteral, Expression, FuncDeclaration, ImportAllDeclaration, ImportDeclaration,
     KeyValueOrSpread, NameAndType, NilLiteral, NumberLiteral, ObjectLiteral, ProcDeclaration,
-    StringLiteral, SymbolDeclaration, ValueDeclaration, WithSlice, AST,
+    SymbolDeclaration, ValueDeclaration, WithSlice, AST,
 };
 use super::errors::ParseError;
 use super::slice::Slice;
@@ -162,6 +162,13 @@ impl ModulesStore {
             .flatten()
     }
 
+    pub fn get(&self, module_id: &ModuleID) -> Option<&Module> {
+        self.modules
+            .get(module_id)
+            .map(|res| res.as_ref().ok())
+            .flatten()
+    }
+
     pub fn bundle(&self) -> String {
         let mut buf = String::new();
 
@@ -173,6 +180,8 @@ impl ModulesStore {
         {
             module.compile(
                 CompileContext {
+                    modules: self,
+                    current_module: module,
                     include_types: false,
                 },
                 &mut buf,
