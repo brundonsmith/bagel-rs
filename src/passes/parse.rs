@@ -1257,7 +1257,7 @@ fn invocation_accessor_chain_inner(level: usize, i: Slice) -> ParseResult<AST<Ex
             many1(alt((
                 invocation_args,
                 indexer_expression,
-                dot_property_access,
+                w(dot_property_access),
             )))
         ),
         |(mut awaited_or_detached, base, clauses)| {
@@ -1545,11 +1545,15 @@ fn switch_expression(i: Slice) -> ParseResult<AST<SwitchExpression>> {
             ),
             opt(preceded(
                 whitespace,
-                map(seq!(tag("default"), expression(0)), |(_, expr)| expr),
+                map(
+                    seq!(tag(","), tag("default"), tag(":"), expression(0)),
+                    |(_, _, _, expr)| expr
+                ),
             )),
+            opt(w(tag(","))),
             tag("}"),
         ),
-        |(start, mut value, _, mut cases, mut default_case, end)| {
+        |(start, mut value, _, mut cases, mut default_case, _, end)| {
             make_node!(
                 SwitchExpression,
                 start.spanning(&end),
