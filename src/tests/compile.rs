@@ -1,9 +1,12 @@
-use std::rc::Rc;
+use std::{collections::HashMap, rc::Rc};
 
 use regex::Regex;
 
 use crate::{
-    model::{errors::BagelError, module::ModuleID},
+    model::{
+        errors::BagelError,
+        module::{Module, ModuleID},
+    },
     passes::compile::{Compilable, CompileContext},
     passes::parse::parse,
 };
