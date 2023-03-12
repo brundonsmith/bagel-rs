@@ -642,6 +642,7 @@ pub struct GenericParamType {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ProcType {
+    pub type_params: Vec<AST<TypeParam>>,
     pub args: Vec<AST<Arg>>,
     pub args_spread: Option<AST<Arg>>,
     pub is_pure: bool,
@@ -651,6 +652,7 @@ pub struct ProcType {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FuncType {
+    pub type_params: Vec<AST<TypeParam>>,
     pub args: Vec<AST<Arg>>,
     pub args_spread: Option<AST<Arg>>,
     pub is_pure: bool,

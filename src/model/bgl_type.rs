@@ -36,6 +36,10 @@ pub enum Type {
         property: Rc<Type>,
         // optional: bool,
     },
+    GenericType {
+        type_params: Vec<TypeParam>,
+        inner: Rc<Type>,
+    },
 
     NamedType {
         mutability: Mutability,
@@ -692,6 +696,12 @@ impl Type {
                                     name: name.downcast().0.clone(),
                                 }
                             }
+                            Any::TypeParam(crate::model::ast::TypeParam { name, extends }) => {
+                                extends
+                                    .as_ref()
+                                    .map(|extends| extends.resolve_type(ctx.into()))
+                                    .unwrap_or(Type::UnknownType(Mutability::Mutable))
+                            }
                             _ => Type::PoisonedType,
                         })
                         .unwrap_or(Type::PoisonedType)
@@ -1012,6 +1022,10 @@ impl Type {
                 module_id: _,
                 name: _,
             } => 24,
+            Type::GenericType {
+                type_params: _,
+                inner: _,
+            } => 25,
         }
     }
 
@@ -1070,6 +1084,10 @@ impl Type {
                     .map(|m| m.with_mutability(new_mutability))
                     .collect(),
             ),
+            Type::GenericType { type_params, inner } => Type::GenericType {
+                type_params,
+                inner: Rc::new(inner.as_ref().clone().with_mutability(new_mutability)),
+            },
             // Type::PropertyType { subject, property } => todo!(),
             // Type::ProcType {
             //     args,
@@ -1354,6 +1372,24 @@ impl Display for Type {
                     f.write_fmt(format_args!("{}[{}]", subject, property))
                 }
             }
+            Type::GenericType { type_params, inner } => {
+                if type_params.len() > 0 {
+                    f.write_char('<')?;
+                    for (index, param) in type_params.iter().enumerate() {
+                        if index > 0 {
+                            f.write_str(", ")?;
+                        }
+
+                        f.write_str(param.name.as_str())?;
+                        if let Some(extends) = &param.extends {
+                            f.write_fmt(format_args!(" extends {}", extends))?;
+                        }
+                    }
+                    f.write_char('>')?;
+                }
+
+                f.write_fmt(format_args!("{}", inner))
+            }
 
             Type::NamedType {
                 mutability: _,
@@ -1583,4 +1619,10 @@ impl Mutability {
 pub enum SubsumationIssue {
     Assignment(Vec<(Type, Type)>),
     Mutability(Type, Type),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TypeParam {
+    pub name: Slice,
+    pub extends: Option<Type>,
 }

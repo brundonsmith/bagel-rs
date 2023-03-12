@@ -140,6 +140,14 @@ where
                         return Some(spread.clone().upcast());
                     }
                 }
+
+                if let Some(found) = func_type
+                    .type_params
+                    .iter()
+                    .find(|param| param.downcast().name.downcast().0.as_str() == symbol)
+                {
+                    return Some(found.clone().upcast());
+                }
             }
             Some(Any::Proc(Proc {
                 type_annotation,
@@ -161,6 +169,14 @@ where
                     if spread.downcast().name.downcast().0.as_str() == symbol {
                         return Some(spread.clone().upcast());
                     }
+                }
+
+                if let Some(found) = proc_type
+                    .type_params
+                    .iter()
+                    .find(|param| param.downcast().name.downcast().0.as_str() == symbol)
+                {
+                    return Some(found.clone().upcast());
                 }
             }
             Some(Any::InlineConstGroup(InlineConstGroup {

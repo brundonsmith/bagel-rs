@@ -23,60 +23,102 @@ impl AST<TypeExpression> {
                 Type::PoisonedType
             }
             TypeExpression::ProcType(ProcType {
+                type_params,
                 args,
                 args_spread,
                 is_pure,
                 is_async,
                 throws,
-            }) => Type::ProcType {
-                args: args
-                    .into_iter()
-                    .map(|a| {
-                        a.downcast()
-                            .type_annotation
-                            .as_ref()
-                            .map(|s| s.resolve_type(ctx))
-                    })
-                    .collect(),
-                args_spread: args_spread
-                    .as_ref()
-                    .map(|s| s.downcast().type_annotation.clone())
-                    .flatten()
-                    .map(|s| s.resolve_type(ctx))
-                    .map(Rc::new),
-                is_pure,
-                is_async,
-                throws: throws.as_ref().map(|s| s.resolve_type(ctx)).map(Rc::new),
-            },
+            }) => {
+                let proc_type = Type::ProcType {
+                    args: args
+                        .into_iter()
+                        .map(|a| {
+                            a.downcast()
+                                .type_annotation
+                                .as_ref()
+                                .map(|s| s.resolve_type(ctx))
+                        })
+                        .collect(),
+                    args_spread: args_spread
+                        .as_ref()
+                        .map(|s| s.downcast().type_annotation.clone())
+                        .flatten()
+                        .map(|s| s.resolve_type(ctx))
+                        .map(Rc::new),
+                    is_pure,
+                    is_async,
+                    throws: throws.as_ref().map(|s| s.resolve_type(ctx)).map(Rc::new),
+                };
+
+                if type_params.len() > 0 {
+                    Type::GenericType {
+                        type_params: type_params
+                            .into_iter()
+                            .map(|param| crate::model::bgl_type::TypeParam {
+                                name: param.downcast().name.downcast().0.clone(),
+                                extends: param
+                                    .downcast()
+                                    .extends
+                                    .map(|extends| extends.resolve_type(ctx)),
+                            })
+                            .collect(),
+                        inner: Rc::new(proc_type),
+                    }
+                } else {
+                    proc_type
+                }
+            }
             TypeExpression::FuncType(FuncType {
+                type_params,
                 args,
                 args_spread,
                 is_pure,
                 is_async: _,
                 returns,
-            }) => Type::FuncType {
-                args: args
-                    .into_iter()
-                    .map(|a| {
-                        a.downcast()
-                            .type_annotation
-                            .as_ref()
-                            .map(|s| s.resolve_type(ctx))
-                    })
-                    .collect(),
-                args_spread: args_spread
-                    .as_ref()
-                    .map(|s| s.downcast().type_annotation.clone())
-                    .flatten()
-                    .map(|s| s.resolve_type(ctx))
-                    .map(Rc::new),
-                is_pure,
-                returns: returns
-                    .as_ref()
-                    .map(|s| s.resolve_type(ctx))
-                    .map(Rc::new)
-                    .unwrap(),
-            },
+            }) => {
+                let func_type = Type::FuncType {
+                    args: args
+                        .into_iter()
+                        .map(|a| {
+                            a.downcast()
+                                .type_annotation
+                                .as_ref()
+                                .map(|s| s.resolve_type(ctx))
+                        })
+                        .collect(),
+                    args_spread: args_spread
+                        .as_ref()
+                        .map(|s| s.downcast().type_annotation.clone())
+                        .flatten()
+                        .map(|s| s.resolve_type(ctx))
+                        .map(Rc::new),
+                    is_pure,
+                    returns: returns
+                        .as_ref()
+                        .map(|s| s.resolve_type(ctx))
+                        .map(Rc::new)
+                        .unwrap(),
+                };
+
+                if type_params.len() > 0 {
+                    Type::GenericType {
+                        type_params: type_params
+                            .into_iter()
+                            .map(|param| crate::model::bgl_type::TypeParam {
+                                name: param.downcast().name.downcast().0.clone(),
+                                extends: param
+                                    .downcast()
+                                    .extends
+                                    .map(|extends| extends.resolve_type(ctx)),
+                            })
+                            .collect(),
+                        inner: Rc::new(func_type),
+                    }
+                } else {
+                    func_type
+                }
+            }
             TypeExpression::SpecialType(SpecialType { kind, inner }) => Type::SpecialType {
                 kind,
                 inner: Rc::new(inner.resolve_type(ctx)),

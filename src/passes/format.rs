@@ -401,6 +401,7 @@ where
             Any::NamedType(NamedType(name)) => name.format(f, opts),
             Any::GenericParamType(GenericParamType { name, extends }) => todo!(),
             Any::ProcType(ProcType {
+                type_params,
                 args,
                 args_spread,
                 is_pure,
@@ -408,12 +409,25 @@ where
                 throws,
             }) => todo!(),
             Any::FuncType(FuncType {
+                type_params,
                 args,
                 args_spread,
                 is_pure,
                 is_async,
                 returns,
             }) => {
+                if type_params.len() > 0 {
+                    f.write_char('<')?;
+                    for (index, param) in type_params.iter().enumerate() {
+                        if index > 0 {
+                            f.write_str(", ")?;
+                        }
+
+                        param.format(f, opts);
+                    }
+                    f.write_char('>')?;
+                }
+
                 f.write_char('(')?;
                 for arg in args {
                     arg.format(f, opts)?;
@@ -442,7 +456,16 @@ where
                 format_type_annotation(f, opts, type_annotation.as_ref())
             }
             Any::GenericType(GenericType { type_params, inner }) => todo!(),
-            Any::TypeParam(TypeParam { name, extends }) => todo!(),
+            Any::TypeParam(TypeParam { name, extends }) => {
+                name.format(f, opts)?;
+
+                if let Some(extends) = extends {
+                    f.write_str(" extends ")?;
+                    extends.format(f, opts)?;
+                }
+
+                Ok(())
+            }
             Any::BoundGenericType(BoundGenericType { type_args, generic }) => todo!(),
             Any::ObjectType(ObjectType {
                 entries,

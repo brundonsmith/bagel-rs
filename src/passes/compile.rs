@@ -212,7 +212,6 @@ where
             }),
             Any::NumberLiteral(NumberLiteral(value)) => f.write_str(value.as_str()),
             Any::StringLiteral(StringLiteral { tag: _, segments }) => {
-                println!("{:?}", segments);
                 f.write_char('`')?;
                 for segment in segments {
                     match segment {
@@ -515,12 +514,25 @@ where
             Any::NamedType(NamedType(name)) => name.compile(ctx, f),
             Any::GenericParamType(GenericParamType { name, extends }) => todo!(),
             Any::ProcType(ProcType {
+                type_params,
                 args,
                 args_spread,
                 is_pure,
                 is_async,
                 throws,
             }) => {
+                if type_params.len() > 0 {
+                    f.write_char('<')?;
+                    for (index, param) in type_params.iter().enumerate() {
+                        if index > 0 {
+                            f.write_str(", ")?;
+                        }
+
+                        param.compile(ctx, f);
+                    }
+                    f.write_char('>')?;
+                }
+
                 f.write_char('(')?;
                 for (index, arg) in args.iter().enumerate() {
                     if index > 0 {
@@ -532,12 +544,25 @@ where
                 f.write_str(") => void") // TODO: Error return type
             }
             Any::FuncType(FuncType {
+                type_params,
                 args,
                 args_spread,
                 is_pure,
                 is_async,
                 returns,
             }) => {
+                if type_params.len() > 0 {
+                    f.write_char('<')?;
+                    for (index, param) in type_params.iter().enumerate() {
+                        if index > 0 {
+                            f.write_str(", ")?;
+                        }
+
+                        param.compile(ctx, f);
+                    }
+                    f.write_char('>')?;
+                }
+
                 f.write_char('(')?;
                 for (index, arg) in args.iter().enumerate() {
                     if index > 0 {
@@ -558,7 +583,16 @@ where
                 compile_type_annotation(ctx, f, type_annotation.as_ref())
             }
             Any::GenericType(GenericType { type_params, inner }) => todo!(),
-            Any::TypeParam(TypeParam { name, extends }) => todo!(),
+            Any::TypeParam(TypeParam { name, extends }) => {
+                name.compile(ctx, f)?;
+
+                if let Some(extends) = extends {
+                    f.write_str(" extends ")?;
+                    extends.compile(ctx, f)?;
+                }
+
+                Ok(())
+            }
             Any::BoundGenericType(BoundGenericType { type_args, generic }) => {
                 generic.compile(ctx, f)?;
                 f.write_char('<')?;

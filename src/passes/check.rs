@@ -919,23 +919,27 @@ where
             Any::MaybeType(MaybeType(inner)) => inner.check(ctx, report_error),
             Any::GenericParamType(GenericParamType { name, extends }) => todo!(),
             Any::ProcType(ProcType {
+                type_params,
                 args,
                 args_spread,
                 is_pure,
                 is_async,
                 throws,
             }) => {
+                type_params.check(ctx, report_error);
                 args.check(ctx, report_error);
                 args_spread.check(ctx, report_error);
                 throws.check(ctx, report_error);
             }
             Any::FuncType(FuncType {
+                type_params,
                 args,
                 args_spread,
                 is_pure,
                 is_async,
                 returns,
             }) => {
+                type_params.check(ctx, report_error);
                 args.check(ctx, report_error);
                 args_spread.check(ctx, report_error);
                 returns.check(ctx, report_error);
@@ -949,8 +953,14 @@ where
                 // TODO: Check that no optionsl args come before non-optional args
                 type_annotation.check(ctx, report_error);
             }
-            Any::GenericType(GenericType { type_params, inner }) => todo!(),
-            Any::TypeParam(TypeParam { name, extends }) => todo!(),
+            Any::GenericType(GenericType { type_params, inner }) => {
+                type_params.check(ctx, report_error);
+                inner.check(ctx, report_error);
+            }
+            Any::TypeParam(TypeParam { name, extends }) => {
+                name.check(ctx, report_error);
+                extends.check(ctx, report_error);
+            }
             Any::BoundGenericType(BoundGenericType { type_args, generic }) => {
                 type_args.check(ctx, report_error);
                 generic.check(ctx, report_error);
