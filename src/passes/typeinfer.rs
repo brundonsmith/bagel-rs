@@ -46,6 +46,7 @@ impl AST<Expression> {
                                         module_id: _,
                                         ast: _,
                                     } => None,
+                                    Module::JavaScript { module_id: _ } => Some(Type::AnyType),
                                     Module::Singleton {
                                         module_id: _,
                                         contents,
@@ -63,11 +64,20 @@ impl AST<Expression> {
                                     ctx.current_module.module_id(),
                                     path.downcast().value.as_str(),
                                 )
-                                .map(|other_module| {
-                                    other_module.get_declaration(name.as_str(), true)
+                                .map(|other_module| match other_module {
+                                    Module::Bagel {
+                                        module_id: _,
+                                        ast: _,
+                                    } => other_module
+                                        .get_declaration(name.as_str(), true)
+                                        .map(|decl| decl.declaration_type(ctx))
+                                        .flatten(),
+                                    Module::JavaScript { module_id: _ } => Some(Type::AnyType),
+                                    Module::Singleton {
+                                        module_id: _,
+                                        contents: _,
+                                    } => None,
                                 })
-                                .flatten()
-                                .map(|decl| decl.declaration_type(ctx))
                                 .flatten()
                                 .unwrap_or(Type::PoisonedType),
                             Any::ProcDeclaration(ProcDeclaration {

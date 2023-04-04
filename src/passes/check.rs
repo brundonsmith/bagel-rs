@@ -26,6 +26,7 @@ impl Module {
 
         match self {
             Module::Bagel { module_id: _, ast } => ast.check(ctx, report_error),
+            Module::JavaScript { module_id } => {}
             Module::Singleton {
                 module_id: _,
                 contents,
@@ -237,6 +238,7 @@ where
                                 }
                             }
                         }
+                        Module::JavaScript { module_id: _ } => {}
                         Module::Singleton {
                             module_id,
                             contents: _,

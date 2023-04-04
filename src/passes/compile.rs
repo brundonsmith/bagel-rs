@@ -9,6 +9,7 @@ impl Module {
     pub fn compile<'a, W: Write>(&self, ctx: CompileContext<'a>, f: &mut W) -> Result {
         match self {
             Module::Bagel { module_id: _, ast } => ast.compile(ctx, f),
+            Module::JavaScript { module_id: _ } => Ok(()),
             Module::Singleton {
                 module_id: _,
                 contents,

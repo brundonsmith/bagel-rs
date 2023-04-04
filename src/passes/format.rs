@@ -8,6 +8,7 @@ impl Module {
     pub fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
         match self {
             Module::Bagel { module_id: _, ast } => ast.format(f, opts),
+            Module::JavaScript { module_id: _ } => Ok(()),
             Module::Singleton {
                 module_id: _,
                 contents,

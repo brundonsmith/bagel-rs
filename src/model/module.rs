@@ -38,13 +38,10 @@ impl ModulesStore {
 
             match module_type {
                 ModuleType::JavaScript => {
-                    let module_src = Slice::new(module_src);
-
                     self.modules.insert(
                         module_id.clone(),
-                        Ok(Module::Singleton {
+                        Ok(Module::JavaScript {
                             module_id: module_id.clone(),
-                            contents: AnyLiteral.as_ast(module_src).recast::<Expression>(),
                         }),
                     );
                 }
@@ -97,6 +94,7 @@ impl ModulesStore {
                         .map(|res| {
                             res.as_ref().ok().map(|module| match module {
                                 Module::Bagel { module_id: _, ast } => Some(ast.downcast()),
+                                Module::JavaScript { module_id: _ } => None,
                                 Module::Singleton {
                                     module_id: _,
                                     contents: _,
@@ -405,6 +403,9 @@ pub enum Module {
         module_id: ModuleID,
         ast: AST<ast::Module>,
     },
+    JavaScript {
+        module_id: ModuleID,
+    },
     Singleton {
         module_id: ModuleID,
         contents: AST<Expression>,
@@ -415,6 +416,7 @@ impl Module {
     pub fn module_id(&self) -> &ModuleID {
         match self {
             Module::Bagel { module_id, ast: _ } => module_id,
+            Module::JavaScript { module_id } => module_id,
             Module::Singleton {
                 module_id,
                 contents: _,
@@ -428,7 +430,7 @@ impl Module {
         must_be_exported: bool,
     ) -> Option<AST<Declaration>> {
         match self {
-            Module::Bagel { module_id, ast } => ast
+            Module::Bagel { module_id: _, ast } => ast
                 .downcast()
                 .declarations
                 .iter()
@@ -486,6 +488,7 @@ impl Module {
                     }
                 })
                 .cloned(),
+            Module::JavaScript { module_id: _ } => None,
             Module::Singleton {
                 module_id,
                 contents,
