@@ -1,3 +1,4 @@
+pub mod bundle;
 pub mod check;
 pub mod compile;
 pub mod format;
