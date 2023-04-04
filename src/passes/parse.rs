@@ -700,45 +700,6 @@ fn type_expression_inner(l: usize, i: Slice) -> ParseResult<AST<TypeExpression>>
         tl,
         i,
         map(
-            seq!(
-                type_expression(tl + 1),
-                tag("<"),
-                separated_list1(w(tag(",")), w(type_expression(0))),
-                tag(">"),
-            ),
-            |(generic, _, mut type_args, end)| {
-                let mut generic = generic.recast::<TypeExpression>();
-                let src = generic.spanning(&end);
-
-                if let Some(name) = generic.try_downcast::<NamedType>() {
-                    if type_args.len() == 1 {
-                        let kind = match name.0.downcast().0.as_str() {
-                            "Plan" => Some(SpecialTypeKind::Plan),
-                            "Iterator" => Some(SpecialTypeKind::Iterator),
-                            "Error" => Some(SpecialTypeKind::Error),
-                            _ => None,
-                        };
-
-                        if let Some(mut kind) = kind {
-                            let mut inner = type_args.into_iter().next().unwrap();
-
-                            return make_node!(SpecialType, src, kind, inner)
-                                .recast::<TypeExpression>();
-                        }
-                    }
-                }
-
-                return make_node!(BoundGenericType, src, generic, type_args)
-                    .recast::<TypeExpression>();
-            }
-        )
-    );
-
-    parse_level!(
-        l,
-        tl,
-        i,
-        map(
             preceded(
                 opt(w(tag("|"))),
                 separated_list2(w(tag("|")), w(type_expression(tl + 1))),
@@ -773,6 +734,45 @@ fn type_expression_inner(l: usize, i: Slice) -> ParseResult<AST<TypeExpression>>
             |(mut element, end)| {
                 make_node_tuple!(ArrayType, element.spanning(&end), element)
                     .recast::<TypeExpression>()
+            }
+        )
+    );
+
+    parse_level!(
+        l,
+        tl,
+        i,
+        map(
+            seq!(
+                type_expression(tl + 1),
+                tag("<"),
+                separated_list1(w(tag(",")), w(type_expression(0))),
+                tag(">"),
+            ),
+            |(generic, _, mut type_args, end)| {
+                let mut generic = generic.recast::<TypeExpression>();
+                let src = generic.spanning(&end);
+
+                if let Some(name) = generic.try_downcast::<NamedType>() {
+                    if type_args.len() == 1 {
+                        let kind = match name.0.downcast().0.as_str() {
+                            "Plan" => Some(SpecialTypeKind::Plan),
+                            "Iterator" => Some(SpecialTypeKind::Iterator),
+                            "Error" => Some(SpecialTypeKind::Error),
+                            _ => None,
+                        };
+
+                        if let Some(mut kind) = kind {
+                            let mut inner = type_args.into_iter().next().unwrap();
+
+                            return make_node!(SpecialType, src, kind, inner)
+                                .recast::<TypeExpression>();
+                        }
+                    }
+                }
+
+                return make_node!(BoundGenericType, src, generic, type_args)
+                    .recast::<TypeExpression>();
             }
         )
     );
