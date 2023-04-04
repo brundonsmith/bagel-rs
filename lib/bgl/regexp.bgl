@@ -1,10 +1,6 @@
-js#
-import { iter as ___iter, exec as ___exec } from 'https://raw.githubusercontent.com/brundonsmith/bagel/master/lib/ts/core.ts'
-#js
+from 'https://raw.githubusercontent.com/brundonsmith/bagel/master/lib/ts/core.ts' import { iter, exec }
 
-export pure js func exec(exp: RegExp, s: string): Iterator<RegExpMatch> => {#
-    return ___iter(___exec(exp, s))
-#}
+export pure func exec(exp: RegExp, s: string): Iterator<RegExpMatch> => iter(exec(exp, s))
 
 export type RegExpMatch = {
     match: string,
