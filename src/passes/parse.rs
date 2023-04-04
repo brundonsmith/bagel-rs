@@ -2005,9 +2005,12 @@ fn local_identifier(i: Slice) -> ParseResult<AST<LocalIdentifier>> {
 }
 
 fn plain_identifier(i: Slice) -> ParseResult<AST<PlainIdentifier>> {
-    map(identifier_like, |name| {
-        PlainIdentifier(name.clone()).as_ast(name)
-    })(i)
+    verify(
+        map(identifier_like, |name| {
+            PlainIdentifier(name.clone()).as_ast(name)
+        }),
+        |ident| !RESERVED_IDENTIFIERS.contains(&ident.downcast().0.as_str()),
+    )(i)
 }
 
 // --- Util parsers ---
@@ -2052,10 +2055,11 @@ pub fn is_valid_identifier(s: &str) -> bool {
                     ch.is_alphanumeric()
                 }
         })
-        && !RESERVED_IDENTIFIERS.contains(&s)
+        && !INVALID_IDENTIFIERS.contains(&s)
 }
 
-const RESERVED_IDENTIFIERS: [&'static str; 0] = [];
+const INVALID_IDENTIFIERS: [&'static str; 0] = [];
+const RESERVED_IDENTIFIERS: [&'static str; 1] = [JS_GLOBAL_IDENTIFIER];
 
 fn numeric(i: Slice) -> ParseResult<Slice> {
     take_while1(|c: char| c.is_numeric())(i)
