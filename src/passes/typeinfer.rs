@@ -373,19 +373,6 @@ impl AST<Expression> {
                 }) => {
                     // TODO: optional
 
-                    println!(
-                        "{}",
-                        Type::PropertyType {
-                            subject: Rc::new(subject.infer_type(ctx)),
-                            property: Rc::new(match property.clone() {
-                                Property::Expression(expr) => expr.infer_type(ctx.into()),
-                                Property::PlainIdentifier(ident) => {
-                                    Type::StringType(Some(ident.downcast().0.clone()))
-                                }
-                            }),
-                        }
-                    );
-
                     Type::PropertyType {
                         subject: Rc::new(subject.infer_type(ctx)),
                         property: Rc::new(match property {
