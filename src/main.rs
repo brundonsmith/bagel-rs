@@ -434,7 +434,7 @@ fn print_error_results(errors: &HashMap<ModuleID, Vec<BagelError>>) {
     let modules_with_errors = errors.values().filter(|errors| errors.len() > 0).count();
     let total_errors = errors.values().map(|errors| errors.len()).fold(0, Add::add);
 
-    if errors.len() > 0 {
+    if errors.values().any(|errors| errors.len() > 0) {
         print_errors(errors);
         println!(
             "Found {} problem{} across {} module{} ({} module{} checked)",
