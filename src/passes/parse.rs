@@ -349,7 +349,16 @@ fn args_parenthesized(i: Slice) -> ParseResult<(Vec<AST<Arg>>, Option<AST<Arg>>)
     map(
         seq!(
             tag("("),
-            separated_list0(w(tag(",")), w(seq!(plain_identifier, opt(type_annotation)))),
+            separated_list0(
+                w(tag(",")),
+                w(seq!(
+                    plain_identifier,
+                    opt(map(
+                        tuple((opt(tag("?")), type_annotation)),
+                        |(question, type_annotation)| (question.is_some(), type_annotation)
+                    ))
+                ))
+            ),
             opt(preceded(
                 tag("..."),
                 map(
@@ -377,8 +386,10 @@ fn args_parenthesized(i: Slice) -> ParseResult<(Vec<AST<Arg>>, Option<AST<Arg>>)
         |(start, args, spread, end)| {
             (
                 args.into_iter()
-                    .map(|(mut name, mut type_annotation)| {
-                        let mut optional = false;
+                    .map(|(mut name, annotation)| {
+                        let (mut optional, mut type_annotation) = annotation
+                            .map(|(optional, type_annotation)| (optional, Some(type_annotation)))
+                            .unwrap_or((false, None));
 
                         make_node!(
                             Arg,
