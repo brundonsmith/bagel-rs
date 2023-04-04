@@ -295,28 +295,32 @@ where
                 f.write_char(')')
             }
             Any::LocalIdentifier(LocalIdentifier(name)) => {
-                let resolved = self.resolve_symbol(name.as_str());
+                if name == JS_GLOBAL_IDENTIFIER {
+                    f.write_str("globalThis")
+                } else {
+                    let resolved = self.resolve_symbol(name.as_str());
 
-                match resolved.as_ref().map(|r| r.details()) {
-                    Some(Any::ValueDeclaration(ValueDeclaration {
-                        destination: _,
-                        value: _,
-                        is_const,
-                        exported: _,
-                        platforms: _,
-                    })) => {
-                        if !*is_const {
-                            f.write_str(INT)?;
-                            f.write_str("observe(")?;
-                            f.write_str(name.as_str())?;
-                            f.write_str(", 'value')")?;
-                            return Ok(());
+                    match resolved.as_ref().map(|r| r.details()) {
+                        Some(Any::ValueDeclaration(ValueDeclaration {
+                            destination: _,
+                            value: _,
+                            is_const,
+                            exported: _,
+                            platforms: _,
+                        })) => {
+                            if !*is_const {
+                                f.write_str(INT)?;
+                                f.write_str("observe(")?;
+                                f.write_str(name.as_str())?;
+                                f.write_str(", 'value')")?;
+                                return Ok(());
+                            }
                         }
-                    }
-                    _ => {}
-                };
+                        _ => {}
+                    };
 
-                f.write_str(name.as_str())
+                    f.write_str(name.as_str())
+                }
             }
             Any::InlineConstGroup(InlineConstGroup {
                 declarations,

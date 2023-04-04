@@ -537,15 +537,6 @@ where
                                             ),
                                         });
                                     }
-                                } else if name.as_str() == JS_GLOBAL_IDENTIFIER {
-                                    report_error(BagelError::MiscError {
-                                        module_id: module_id.clone(),
-                                        src: self.slice().clone(),
-                                        message: format!(
-                                            "{} can only be referenced from within platform-specific Bagel declarations", 
-                                            blue_string(JS_GLOBAL_IDENTIFIER)
-                                        ),
-                                    });
                                 }
                             }
 

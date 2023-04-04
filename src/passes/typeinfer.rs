@@ -23,6 +23,10 @@ impl AST<Expression> {
                 Expression::BinaryOperation(op) => binary_operation_type(ctx, &op),
                 Expression::Parenthesis(Parenthesis(inner)) => inner.infer_type(ctx),
                 Expression::LocalIdentifier(LocalIdentifier(name)) => {
+                    if name == JS_GLOBAL_IDENTIFIER {
+                        return Type::AnyType;
+                    }
+
                     let resolved = self.resolve_symbol(name.as_str());
 
                     if let Some(resolved) = resolved {
