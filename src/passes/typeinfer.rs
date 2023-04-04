@@ -129,7 +129,7 @@ impl AST<Expression> {
                                         if let Some((index, property)) = properties
                                             .iter()
                                             .enumerate()
-                                            .find(|(_, p)| p.downcast().0.as_str() == name.as_str())
+                                            .find(|(_, p)| p.downcast().0 == name)
                                         {
                                             Type::PropertyType {
                                                 subject: Rc::new(value.infer_type(ctx)),

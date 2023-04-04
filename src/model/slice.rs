@@ -16,6 +16,30 @@ impl PartialEq for Slice {
     }
 }
 
+impl PartialEq<&str> for Slice {
+    fn eq(&self, other: &&str) -> bool {
+        self.as_str() == *other
+    }
+}
+
+impl PartialEq<Slice> for &str {
+    fn eq(&self, other: &Slice) -> bool {
+        *self == other.as_str()
+    }
+}
+
+impl PartialEq<&str> for &Slice {
+    fn eq(&self, other: &&str) -> bool {
+        self.as_str() == *other
+    }
+}
+
+impl PartialEq<&Slice> for &str {
+    fn eq(&self, other: &&Slice) -> bool {
+        *self == other.as_str()
+    }
+}
+
 impl Slice {
     pub fn new(full_string: Rc<String>) -> Self {
         let end = full_string.len();

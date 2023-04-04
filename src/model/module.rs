@@ -445,17 +445,15 @@ impl Module {
                                     ast::DeclarationDestination::NameAndType(NameAndType {
                                         name,
                                         type_annotation: _,
-                                    }) => name.downcast().0.as_str() == item_name,
+                                    }) => name.downcast().0 == item_name,
                                     ast::DeclarationDestination::Destructure(Destructure {
                                         properties,
                                         spread,
                                         destructure_kind: _,
                                     }) => {
-                                        properties
-                                            .iter()
-                                            .any(|p| p.downcast().0.as_str() == item_name)
+                                        properties.iter().any(|p| p.downcast().0 == item_name)
                                             || spread
-                                                .map(|s| s.downcast().0.as_str() == item_name)
+                                                .map(|s| s.downcast().0 == item_name)
                                                 .unwrap_or(false)
                                     }
                                 }
@@ -466,23 +464,16 @@ impl Module {
                             func: _,
                             platforms: _,
                             decorators: _,
-                        }) => {
-                            (!must_be_exported || exported)
-                                && name.downcast().0.as_str() == item_name
-                        }
+                        }) => (!must_be_exported || exported) && name.downcast().0 == item_name,
                         Declaration::ProcDeclaration(ProcDeclaration {
                             name,
                             exported,
                             proc: _,
                             platforms: _,
                             decorators: _,
-                        }) => {
-                            (!must_be_exported || exported)
-                                && name.downcast().0.as_str() == item_name
-                        }
+                        }) => (!must_be_exported || exported) && name.downcast().0 == item_name,
                         Declaration::SymbolDeclaration(SymbolDeclaration { name, exported }) => {
-                            (!must_be_exported || exported)
-                                && name.downcast().0.as_str() == item_name
+                            (!must_be_exported || exported) && name.downcast().0 == item_name
                         }
                         Declaration::TypeDeclaration(_) => todo!(),
 

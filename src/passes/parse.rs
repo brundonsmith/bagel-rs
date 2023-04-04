@@ -546,7 +546,7 @@ fn value_declaration(i: Slice) -> ParseResult<AST<ValueDeclaration>> {
         ),
         |(mut platforms, export, keyword, mut destination, _, mut value)| {
             let mut exported = export.is_some();
-            let mut is_const = keyword.as_str() == "const";
+            let mut is_const = keyword == "const";
             let src = export.unwrap_or(keyword).spanning(&value);
 
             make_node!(
@@ -801,7 +801,7 @@ fn type_expression_inner(l: usize, i: Slice) -> ParseResult<AST<TypeExpression>>
                 .as_ast(s)
                 .recast::<TypeExpression>()),
             map(alt((tag("true"), tag("false"))), |s: Slice| {
-                BooleanLiteralType(s.as_str() == "true")
+                BooleanLiteralType(s == "true")
                     .as_ast(s)
                     .recast::<TypeExpression>()
             }),

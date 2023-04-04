@@ -36,7 +36,7 @@ where
                             name,
                             path: _,
                         }) => {
-                            if name.downcast().0.as_str() == symbol {
+                            if name.downcast().0 == symbol {
                                 return Some(decl.clone());
                             }
                         }
@@ -49,8 +49,8 @@ where
                                 let item = item.downcast();
 
                                 match item.alias {
-                                    Some(alias) => alias.downcast().0.as_str() == symbol,
-                                    None => item.name.downcast().0.as_str() == symbol,
+                                    Some(alias) => alias.downcast().0 == symbol,
+                                    None => item.name.downcast().0 == symbol,
                                 }
                             }) {
                                 return Some(decl.clone());
@@ -61,7 +61,7 @@ where
                             declared_type: _,
                             exported: _,
                         }) => {
-                            if name.downcast().0.as_str() == symbol {
+                            if name.downcast().0 == symbol {
                                 return Some(decl.clone());
                             }
                         }
@@ -72,7 +72,7 @@ where
                             platforms: _,
                             decorators: _,
                         }) => {
-                            if name.downcast().0.as_str() == symbol {
+                            if name.downcast().0 == symbol {
                                 return Some(decl.clone());
                             }
                         }
@@ -83,7 +83,7 @@ where
                             platforms: _,
                             decorators: _,
                         }) => {
-                            if name.downcast().0.as_str() == symbol {
+                            if name.downcast().0 == symbol {
                                 return Some(decl.clone());
                             }
                         }
@@ -98,14 +98,14 @@ where
                                 DeclarationDestination::NameAndType(NameAndType {
                                     name,
                                     type_annotation,
-                                }) => name.downcast().0.as_str() == symbol,
+                                }) => name.downcast().0 == symbol,
                                 DeclarationDestination::Destructure(_) => todo!(),
                             } {
                                 return Some(decl.clone());
                             }
                         }
                         Declaration::SymbolDeclaration(SymbolDeclaration { name, exported: _ }) => {
-                            if name.downcast().0.as_str() == symbol {
+                            if name.downcast().0 == symbol {
                                 return Some(decl.clone());
                             }
                         }
@@ -130,13 +130,13 @@ where
                 if let Some(found) = func_type
                     .args
                     .iter()
-                    .find(|arg| arg.downcast().name.downcast().0.as_str() == symbol)
+                    .find(|arg| arg.downcast().name.downcast().0 == symbol)
                 {
                     return Some(found.clone().upcast());
                 }
 
                 if let Some(spread) = func_type.args_spread {
-                    if spread.downcast().name.downcast().0.as_str() == symbol {
+                    if spread.downcast().name.downcast().0 == symbol {
                         return Some(spread.clone().upcast());
                     }
                 }
@@ -144,7 +144,7 @@ where
                 if let Some(found) = func_type
                     .type_params
                     .iter()
-                    .find(|param| param.downcast().name.downcast().0.as_str() == symbol)
+                    .find(|param| param.downcast().name.downcast().0 == symbol)
                 {
                     return Some(found.clone().upcast());
                 }
@@ -160,13 +160,13 @@ where
                 if let Some(found) = proc_type
                     .args
                     .iter()
-                    .find(|arg| arg.downcast().name.downcast().0.as_str() == symbol)
+                    .find(|arg| arg.downcast().name.downcast().0 == symbol)
                 {
                     return Some(found.clone().upcast());
                 }
 
                 if let Some(spread) = proc_type.args_spread {
-                    if spread.downcast().name.downcast().0.as_str() == symbol {
+                    if spread.downcast().name.downcast().0 == symbol {
                         return Some(spread.clone().upcast());
                     }
                 }
@@ -174,7 +174,7 @@ where
                 if let Some(found) = proc_type
                     .type_params
                     .iter()
-                    .find(|param| param.downcast().name.downcast().0.as_str() == symbol)
+                    .find(|param| param.downcast().name.downcast().0 == symbol)
                 {
                     return Some(found.clone().upcast());
                 }
@@ -190,16 +190,16 @@ where
                             DeclarationDestination::NameAndType(NameAndType {
                                 name,
                                 type_annotation: _,
-                            }) => name.downcast().0.as_str() == symbol,
+                            }) => name.downcast().0 == symbol,
                             DeclarationDestination::Destructure(Destructure {
                                 properties,
                                 spread,
                                 destructure_kind: _,
                             }) => properties.iter().any(|property| {
-                                property.downcast().0.as_str() == symbol
+                                property.downcast().0 == symbol
                                     || spread
                                         .as_ref()
-                                        .map(|spread| spread.downcast().0.as_str() == symbol)
+                                        .map(|spread| spread.downcast().0 == symbol)
                                         .unwrap_or(false)
                             }),
                         })
@@ -230,7 +230,7 @@ where
                                 DeclarationDestination::NameAndType(NameAndType {
                                     name,
                                     type_annotation,
-                                }) => name.downcast().0.as_str() == symbol,
+                                }) => name.downcast().0 == symbol,
                                 DeclarationDestination::Destructure(_) => todo!(),
                             },
                             _ => false,
@@ -244,7 +244,7 @@ where
                 iterator: _,
                 body: _,
             })) => {
-                if item_identifier.downcast().0.as_str() == symbol {
+                if item_identifier.downcast().0 == symbol {
                     return self.parent();
                 }
             }
@@ -253,7 +253,7 @@ where
                 error_identifier,
                 catch_block,
             })) => {
-                if error_identifier.downcast().0.as_str() == symbol
+                if error_identifier.downcast().0 == symbol
                     && self
                         .clone()
                         .upcast()

@@ -387,9 +387,7 @@ impl Type {
             (Type::StringType(None), Type::StringType(_)) => {
                 return None;
             }
-            (Type::StringType(Some(dest)), Type::StringType(Some(val)))
-                if dest.as_str() == val.as_str() =>
-            {
+            (Type::StringType(Some(dest)), Type::StringType(Some(val))) if dest == val => {
                 return None;
             }
             (
@@ -1131,7 +1129,7 @@ impl Type {
 
         // specific named properties
         if let Type::StringType(Some(s)) = &property {
-            if s.as_str() == "length" {
+            if s == "length" {
                 match subject {
                     Type::ArrayType {
                         mutability: _,
@@ -1150,7 +1148,7 @@ impl Type {
                     _ => {}
                 };
             }
-            if s.as_str() == "value" {
+            if s == "value" {
                 match subject {
                     Type::SpecialType {
                         kind: SpecialTypeKind::Error,
