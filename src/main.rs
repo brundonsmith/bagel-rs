@@ -110,9 +110,15 @@ fn main() -> ExitCode {
             }
 
             for (module_id, module) in modules_store.iter() {
-                if let Ok(module) = module {
-                    if let ModuleID::Local(path) = module_id {
-                        if entrypoints.iter().any(|entry| path.as_ref() == entry) {
+                if let ModuleID::Local(module_path) = module_id {
+                    if let Ok(module) = module {
+                        println!("entrypoints: {:?}", entrypoints);
+                        if entrypoints
+                            .iter()
+                            .map(|entry| ModuleID::try_from(entry.as_path()).unwrap())
+                            .any(|entry| &entry == module_id)
+                        {
+                            println!("stuff");
                             let mut compiled = String::new();
                             module
                                 .compile(
@@ -125,7 +131,7 @@ fn main() -> ExitCode {
                                 )
                                 .unwrap();
 
-                            std::fs::write(path.with_extension("bgl.ts"), compiled).unwrap();
+                            std::fs::write(module_path.with_extension("bgl.ts"), compiled).unwrap();
                         }
                     }
                 }
