@@ -354,7 +354,7 @@ impl AST<Expression> {
                     } else {
                         let subject_type = subject.infer_type(ctx);
 
-                        match subject_type {
+                        match subject_type.simplify(ctx.into()) {
                             Type::FuncType {
                                 args: _,
                                 args_spread: _,
