@@ -1,32 +1,18 @@
 
-js#
-import { iter as ___iter } from 'https://raw.githubusercontent.com/brundonsmith/bagel/master/lib/ts/core.ts'
-#js
+from 'https://raw.githubusercontent.com/brundonsmith/bagel/master/lib/ts/core.ts' import {
+    iter as _iter,
+    logf as _logf,
+    memo as _memo,
+    action as _action
+}
 
-export js proc log(x: readonly unknown) {#
-    console.log(x);
-#}
+export proc log(x: readonly unknown) |> {
+    jsGlobal.console.log(x);
+}
 
-export js func logf<T>(x: T): T => {#
-   console.log(x);
-   return x;
-#}
+export func logf<T>(x: T): T => _logf(x)
 
-export js func iter<T>(x: readonly T[]): Iterator<T> => {#
-    return ___iter(x)
-#}
-
-export nominal type Loading
-
-export js func planned<T>(plan: Plan<T>): T | Loading => {#
-    const current = ___planned(plan)
-
-    if (current === ___LOADING) {
-        return { sym: ___Loading }
-    } else {
-        return current
-    }
-#}
+export func iter<T>(x: readonly T[]): Iterator<T> => _iter(x)
 
 export type MemoOptions = readonly {
     maxItems?: number
@@ -35,13 +21,11 @@ export type MemoOptions = readonly {
 export func memo(options?: MemoOptions) => <
     TArgs extends readonly unknown[],
     TReturn
->(fn: (...args: TArgs) => readonly TReturn): (...args: TArgs) => readonly TReturn => js# ___memo(fn, options) #js
+>(fn: (...args: TArgs) => readonly TReturn): (...args: TArgs) => readonly TReturn => _memo(fn, options)
 
-export js func action<
+export func action<
     TArgs extends readonly unknown[]
->(pr: (...args: TArgs) { }): (...args: TArgs) { } => {#
-    return ___action(pr)
-#}
+>(pr: (...args: TArgs) |> { }): (...args: TArgs) |> { } => _action(pr)
 
 export func assert(condition: boolean, message?: string): Error<string?>? =>
     if condition {

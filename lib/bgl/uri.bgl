@@ -1,6 +1,6 @@
 
-export const decodeURIComponent: (str: string) => string = js# globalThis.decodeURIComponent #js
-export const encodeURIComponent: (str: string) => string = js# globalThis.encodeURIComponent #js
+export const decodeURIComponent: (str: string) => string = jsGlobal.decodeURIComponent
+export const encodeURIComponent: (str: string) => string = jsGlobal.encodeURIComponent
 
 export type URI = readonly interface {
     href: string,
