@@ -358,12 +358,13 @@ impl From<&ModuleID> for ModuleType {
                 let last_slash = url_str.char_indices().filter(|(_, ch)| *ch == '/').last();
 
                 if let Some((last_slash_index, _)) = last_slash {
-                    let dot = url_str[last_slash_index..url_str.len() - 1]
+                    let dot_index = url_str[last_slash_index..]
                         .char_indices()
                         .filter(|(_, ch)| *ch == '.')
-                        .next();
+                        .next()
+                        .map(|(index, ch)| last_slash_index + index);
 
-                    if let Some((dot_index, _)) = dot {
+                    if let Some(dot_index) = dot_index {
                         &url_str[dot_index + 1..]
                     } else {
                         ""
