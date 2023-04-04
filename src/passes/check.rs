@@ -427,40 +427,41 @@ where
             Any::LocalIdentifier(LocalIdentifier(name)) => {
                 // TODO: Make sure it isn't a type
 
-                match self.resolve_symbol(name.as_str()) {
-                    None => {
-                        // Identifier can't be resolved
-                        report_error(BagelError::MiscError {
-                            module_id: module_id.clone(),
-                            src: self.slice().clone(),
-                            message: format!(
-                                "Couldn't resolve identifier {} in this scope",
-                                blue_string(name.as_str())
-                            ),
-                        });
-                    }
-                    Some(resolved) => {
-                        if let Some(nearest_func_or_proc) = &ctx.nearest_func_or_proc {
-                            // Violation of pure func/proc boundary
-                            let purity_failure = match nearest_func_or_proc {
-                                FuncOrProc::Func(func) => {
-                                    if func.downcast().is_pure && !func.contains(&resolved) {
-                                        Some("function")
-                                    } else {
-                                        None
+                if name != JS_GLOBAL_IDENTIFIER {
+                    match self.resolve_symbol(name.as_str()) {
+                        None => {
+                            // Identifier can't be resolved
+                            report_error(BagelError::MiscError {
+                                module_id: module_id.clone(),
+                                src: self.slice().clone(),
+                                message: format!(
+                                    "Couldn't resolve identifier {} in this scope",
+                                    blue_string(name.as_str())
+                                ),
+                            });
+                        }
+                        Some(resolved) => {
+                            if let Some(nearest_func_or_proc) = &ctx.nearest_func_or_proc {
+                                // Violation of pure func/proc boundary
+                                let purity_failure = match nearest_func_or_proc {
+                                    FuncOrProc::Func(func) => {
+                                        if func.downcast().is_pure && !func.contains(&resolved) {
+                                            Some("function")
+                                        } else {
+                                            None
+                                        }
                                     }
-                                }
-                                FuncOrProc::Proc(proc) => {
-                                    if proc.downcast().is_pure && !proc.contains(&resolved) {
-                                        Some("procedure")
-                                    } else {
-                                        None
+                                    FuncOrProc::Proc(proc) => {
+                                        if proc.downcast().is_pure && !proc.contains(&resolved) {
+                                            Some("procedure")
+                                        } else {
+                                            None
+                                        }
                                     }
-                                }
-                            };
+                                };
 
-                            if let Some(failure) = purity_failure {
-                                report_error(BagelError::MiscError {
+                                if let Some(failure) = purity_failure {
+                                    report_error(BagelError::MiscError {
                                     module_id: module_id.clone(),
                                     src: self.slice().clone(),
                                     message: format!(
@@ -468,81 +469,82 @@ where
                                         failure,
                                     ),
                                 });
-                            }
-
-                            // Violation of platform-specific constraints
-                            if let Some(decl) = resolved.find_parent_of_type::<ImportDeclaration>()
-                            {
-                                if let Some(import_platforms) = decl.downcast().platforms {
-                                    let allowed_platforms = match self
-                                        .clone()
-                                        .upcast()
-                                        .find_parent(|p| {
-                                            p.try_downcast::<FuncDeclaration>().is_some()
-                                                || p.try_downcast::<ProcDeclaration>().is_some()
-                                        })
-                                        .map(|p| p.downcast())
-                                    {
-                                        Some(Any::FuncDeclaration(FuncDeclaration {
-                                            platforms,
-                                            name: _,
-                                            func: _,
-                                            exported: _,
-                                            decorators: _,
-                                        })) => platforms,
-                                        Some(Any::ProcDeclaration(ProcDeclaration {
-                                            platforms,
-                                            name: _,
-                                            proc: _,
-                                            exported: _,
-                                            decorators: _,
-                                        })) => platforms,
-                                        Some(Any::ValueDeclaration(ValueDeclaration {
-                                            platforms,
-                                            value: _,
-                                            exported: _,
-                                            destination: _,
-                                            is_const: _,
-                                        })) => platforms,
-                                        _ => None,
-                                    };
-
-                                    if let Some(allowed_platforms) = allowed_platforms {
-                                        let import_platforms: PlatformSet =
-                                            (&import_platforms).try_into().unwrap();
-                                        let allowed_platforms: PlatformSet =
-                                            (&allowed_platforms).try_into().unwrap();
-
-                                        // platform mismatch
-                                        if !import_platforms.subset_of(allowed_platforms) {
-                                            report_error(
-                                                BagelError::MiscError {
-                                                    module_id: module_id.clone(),
-                                                    src: self.slice().clone(),
-                                                    message: format!(
-                                                        "Identifier {} is tagged as being specific to platforms {}, so it can't be referenced from within this declaration, which is tagged for platforms {}", 
-                                                        blue_string(name.as_str()),
-                                                        blue_string(import_platforms),
-                                                        blue_string(allowed_platforms)
-                                                    ),
-                                                }
-                                            );
-                                        }
-                                    } else {
-                                        // can only reference platform-specific imports from platform-specific declarations
-                                        report_error(BagelError::MiscError {
-                                            module_id: module_id.clone(),
-                                            src: self.slice().clone(),
-                                            message: format!(
-                                                "Identifier {} was imported from a JavaScript file, so it can only be referenced from within platform-specific Bagel declarations", 
-                                                blue_string(name.as_str())
-                                            ),
-                                        });
-                                    }
                                 }
-                            }
 
-                            // if we access a platform-specific import or a JS global from outside of a platform-specific context
+                                // Violation of platform-specific constraints
+                                // if let Some(decl) = resolved.find_parent_of_type::<ImportDeclaration>()
+                                // {
+                                //     if let Some(import_platforms) = decl.downcast().platforms {
+                                //         let allowed_platforms = match self
+                                //             .clone()
+                                //             .upcast()
+                                //             .find_parent(|p| {
+                                //                 p.try_downcast::<FuncDeclaration>().is_some()
+                                //                     || p.try_downcast::<ProcDeclaration>().is_some()
+                                //             })
+                                //             .map(|p| p.downcast())
+                                //         {
+                                //             Some(Any::FuncDeclaration(FuncDeclaration {
+                                //                 platforms,
+                                //                 name: _,
+                                //                 func: _,
+                                //                 exported: _,
+                                //                 decorators: _,
+                                //             })) => platforms,
+                                //             Some(Any::ProcDeclaration(ProcDeclaration {
+                                //                 platforms,
+                                //                 name: _,
+                                //                 proc: _,
+                                //                 exported: _,
+                                //                 decorators: _,
+                                //             })) => platforms,
+                                //             Some(Any::ValueDeclaration(ValueDeclaration {
+                                //                 platforms,
+                                //                 value: _,
+                                //                 exported: _,
+                                //                 destination: _,
+                                //                 is_const: _,
+                                //             })) => platforms,
+                                //             _ => None,
+                                //         };
+
+                                //         if let Some(allowed_platforms) = allowed_platforms {
+                                //             let import_platforms: PlatformSet =
+                                //                 (&import_platforms).try_into().unwrap();
+                                //             let allowed_platforms: PlatformSet =
+                                //                 (&allowed_platforms).try_into().unwrap();
+
+                                //             // platform mismatch
+                                //             if !import_platforms.subset_of(allowed_platforms) {
+                                //                 report_error(
+                                //                     BagelError::MiscError {
+                                //                         module_id: module_id.clone(),
+                                //                         src: self.slice().clone(),
+                                //                         message: format!(
+                                //                             "Identifier {} is tagged as being specific to platforms {}, so it can't be referenced from within this declaration, which is tagged for platforms {}",
+                                //                             blue_string(name.as_str()),
+                                //                             blue_string(import_platforms),
+                                //                             blue_string(allowed_platforms)
+                                //                         ),
+                                //                     }
+                                //                 );
+                                //             }
+                                //         } else {
+                                //             // can only reference platform-specific imports from platform-specific declarations
+                                //             report_error(BagelError::MiscError {
+                                //                 module_id: module_id.clone(),
+                                //                 src: self.slice().clone(),
+                                //                 message: format!(
+                                //                     "Identifier {} was imported from a JavaScript file, so it can only be referenced from within platform-specific Bagel declarations",
+                                //                     blue_string(name.as_str())
+                                //                 ),
+                                //             });
+                                //         }
+                                //     }
+                                // }
+
+                                // if we access a platform-specific import or a JS global from outside of a platform-specific context
+                            }
                         }
                     }
                 }
@@ -697,6 +699,11 @@ where
                 spread_args.check(ctx, report_error);
 
                 let subject_type = subject.infer_type(ctx.into());
+
+                if Type::AnyType == subject_type.clone().simplify(ctx.into()) {
+                    return;
+                }
+
                 let arg_types = match &subject_type {
                     Type::FuncType {
                         args,

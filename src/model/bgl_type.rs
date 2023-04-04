@@ -1107,6 +1107,10 @@ impl Type {
     pub fn get_property<'a>(&self, ctx: SubsumationContext<'a>, property: &Type) -> Option<Type> {
         let subject = self.clone().simplify(ctx);
 
+        if let Type::AnyType = subject {
+            return Some(Type::AnyType);
+        }
+
         if let Type::UnionType(members) = subject {
             let property_type_members: Vec<Option<Type>> = members
                 .into_iter()

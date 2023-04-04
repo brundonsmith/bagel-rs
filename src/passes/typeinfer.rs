@@ -354,16 +354,15 @@ impl AST<Expression> {
                     } else {
                         let subject_type = subject.infer_type(ctx);
 
-                        if let Type::FuncType {
-                            args: _,
-                            args_spread: _,
-                            is_pure: _,
-                            returns,
-                        } = subject_type
-                        {
-                            returns.as_ref().clone()
-                        } else {
-                            Type::PoisonedType
+                        match subject_type {
+                            Type::FuncType {
+                                args: _,
+                                args_spread: _,
+                                is_pure: _,
+                                returns,
+                            } => returns.as_ref().clone(),
+                            Type::AnyType => Type::AnyType,
+                            _ => Type::PoisonedType,
                         }
                     }
                 }
