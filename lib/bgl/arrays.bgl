@@ -1,20 +1,22 @@
+from 'https://raw.githubusercontent.com/brundonsmith/bagel/master/lib/ts/core.ts' import { invalidate, WHOLE_OBJECT }
 
-js#
-import { invalidate as ___invalidate, WHOLE_OBJECT as ___WHOLE_OBJECT } from 'https://raw.githubusercontent.com/brundonsmith/bagel/master/lib/ts/core.ts'
-#js
-
-export js proc push<T>(a: T[], el: T) {#
-    a.push(el); ___invalidate(a, ___WHOLE_OBJECT)
-#}
-export js proc unshift<T>(a: T[], el: T) {#
-    a.unshift(el); ___invalidate(a, ___WHOLE_OBJECT)
-#}
-export js proc pop<T>(a: T[]) {#
-    a.pop(); ___invalidate(a, ___WHOLE_OBJECT)
-#}
-export js proc shift<T>(a: T[]) {#
-    a.shift(); ___invalidate(a, ___WHOLE_OBJECT)
-#}
-export js proc splice<T>(a: T[], index: number, count?: number) {#
-    a.splice(index, count); ___invalidate(a, ___WHOLE_OBJECT)
-#}
+export proc push<T>(a: T[], el: T) |> {
+    jsGlobal.Array.prototype.push.call(a, el);
+    invalidate(a, WHOLE_OBJECT);
+}
+export proc unshift<T>(a: T[], el: T) |> {
+    jsGlobal.Array.prototype.unshift.call(a, el);
+    invalidate(a, WHOLE_OBJECT);
+}
+export proc pop<T>(a: T[]) |> {
+    jsGlobal.Array.prototype.pop.call(a);
+    invalidate(a, WHOLE_OBJECT);
+}
+export proc shift<T>(a: T[]) |> {
+    jsGlobal.Array.prototype.shift.call(a);
+    invalidate(a, WHOLE_OBJECT);
+}
+export proc splice<T>(a: T[], index: number, count?: number) |> {
+    jsGlobal.Array.prototype.splice.call(a, index, count);
+    invalidate(a, WHOLE_OBJECT);
+}
