@@ -690,12 +690,12 @@ fn type_expression_inner(l: usize, i: Slice) -> ParseResult<AST<TypeExpression>>
         i,
         map(
             seq!(
-                named_type,
+                type_expression(tl + 1),
                 tag("<"),
                 separated_list1(w(tag(",")), w(type_expression(0))),
                 tag(">"),
             ),
-            |(mut generic, _, mut type_args, end)| {
+            |(generic, _, mut type_args, end)| {
                 let mut generic = generic.recast::<TypeExpression>();
                 let src = generic.spanning(&end);
 
@@ -797,33 +797,33 @@ fn type_expression_inner(l: usize, i: Slice) -> ParseResult<AST<TypeExpression>>
                     .as_ast(src)
                     .recast::<TypeExpression>()
             }),
-            map(tag("RegExp"), |s: Slice| RegularExpressionType
-                .as_ast(s)
-                .recast::<TypeExpression>()),
-            map(alt((tag("true"), tag("false"))), |s: Slice| {
-                BooleanLiteralType(s == "true")
-                    .as_ast(s)
-                    .recast::<TypeExpression>()
-            }),
-            map(tag("string"), |s: Slice| StringType
-                .as_ast(s)
-                .recast::<TypeExpression>()),
-            map(tag("number"), |s: Slice| NumberType
-                .as_ast(s)
-                .recast::<TypeExpression>()),
-            map(tag("boolean"), |s: Slice| BooleanType
-                .as_ast(s)
-                .recast::<TypeExpression>()),
-            map(tag("unknown"), |s: Slice| UnknownType
-                .as_ast(s)
-                .recast::<TypeExpression>()),
-            map(tag("nil"), |s: Slice| NilType
-                .as_ast(s)
-                .recast::<TypeExpression>()),
         ))
     );
 
-    parse_level!(l, tl, i, map(named_type, AST::recast::<TypeExpression>));
+    parse_level!(
+        l,
+        tl,
+        i,
+        map(named_type, |named_type| {
+            let s = named_type.slice().clone();
+
+            match named_type.downcast().0.downcast().0.as_str() {
+                "RegExp" => RegularExpressionType.as_ast(s).recast::<TypeExpression>(),
+                "true" => BooleanLiteralType(true)
+                    .as_ast(s)
+                    .recast::<TypeExpression>(),
+                "false" => BooleanLiteralType(false)
+                    .as_ast(s)
+                    .recast::<TypeExpression>(),
+                "string" => StringType.as_ast(s).recast::<TypeExpression>(),
+                "number" => NumberType.as_ast(s).recast::<TypeExpression>(),
+                "boolean" => BooleanType.as_ast(s).recast::<TypeExpression>(),
+                "unknown" => UnknownType.as_ast(s).recast::<TypeExpression>(),
+                "nil" => NilType.as_ast(s).recast::<TypeExpression>(),
+                _ => named_type.recast::<TypeExpression>(),
+            }
+        })
+    );
 
     Err(nom::Err::Error(RawParseError {
         src: i,
@@ -2031,14 +2031,17 @@ fn identifier_like(i: Slice) -> ParseResult<Slice> {
 }
 
 pub fn is_valid_identifier(s: &str) -> bool {
-    !s.starts_with(INT) &&
-    s.char_indices().all(|(index, ch)|
-        if index == 0 {
-            ch.is_alphabetic()
-        } else {
-            ch.is_alphanumeric()
-        } || ch == '_' || ch == '$') &&
-    !RESERVED_IDENTIFIERS.contains(&s)
+    !s.starts_with(INT)
+        && s.char_indices().all(|(index, ch)| {
+            ch == '_'
+                || ch == '$'
+                || if index == 0 {
+                    ch.is_alphabetic()
+                } else {
+                    ch.is_alphanumeric()
+                }
+        })
+        && !RESERVED_IDENTIFIERS.contains(&s)
 }
 
 const RESERVED_IDENTIFIERS: [&'static str; 0] = [];
