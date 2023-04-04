@@ -1,5 +1,5 @@
 use super::ast::{
-    self, AnyLiteral, ArrayLiteral, BooleanLiteral, Declaration, Destructure, ElementOrSpread,
+    self, ArrayLiteral, BooleanLiteral, Declaration, Destructure, ElementOrSpread,
     ExactStringLiteral, Expression, FuncDeclaration, ImportAllDeclaration, ImportDeclaration,
     KeyValueOrSpread, NameAndType, NilLiteral, NumberLiteral, ObjectLiteral, ProcDeclaration,
     SymbolDeclaration, ValueDeclaration, WithSlice, AST,
