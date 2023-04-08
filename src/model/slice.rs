@@ -3,11 +3,19 @@ use std::{fmt::Debug, rc::Rc};
 
 use nom::{AsChar, Compare, InputIter, InputLength, InputTake, Offset, UnspecializedInput};
 
-#[derive(Clone, Eq, Hash)]
+#[derive(Clone, Eq)]
 pub struct Slice {
     pub full_string: Rc<String>,
     pub start: usize,
     pub end: usize,
+}
+
+impl core::hash::Hash for Slice {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.full_string.as_ptr().hash(state);
+        self.start.hash(state);
+        self.end.hash(state);
+    }
 }
 
 impl PartialEq for Slice {
