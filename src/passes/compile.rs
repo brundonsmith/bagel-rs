@@ -1,9 +1,12 @@
 use crate::model::{
     ast::{self, *},
-    module::{Module, ModulesStore},
+    module::{Module, ModuleID, ModulesStore},
     slice::Slice,
 };
-use std::fmt::{Result, Write};
+use std::{
+    collections::HashMap,
+    fmt::{Binary, Result, Write},
+};
 
 impl Module {
     pub fn compile<'a, W: Write>(&self, ctx: CompileContext<'a>, f: &mut W) -> Result {
@@ -48,32 +51,40 @@ where
                 name,
                 path,
             }) => {
-                //             import { a, b as otherb } from \"./foo.bgl.ts\";
-                //   import * as bar from \"./bar.bgl.ts\";
-                f.write_str("import * as ")?;
-                name.compile(ctx, f)?;
-                f.write_str(" from \"")?;
-                f.write_str(path.downcast().value.as_str())?; // TODO: Get the correct path for the current build mode
-                f.write_str(".ts")?;
-                f.write_str("\"")
+                if ctx.qualify_identifiers_with.is_none() {
+                    //             import { a, b as otherb } from \"./foo.bgl.ts\";
+                    //   import * as bar from \"./bar.bgl.ts\";
+                    f.write_str("import * as ")?;
+                    name.compile(ctx, f)?;
+                    f.write_str(" from \"")?;
+                    f.write_str(path.downcast().value.as_str())?; // TODO: Get the correct path for the current build mode
+                    f.write_str(".ts")?;
+                    f.write_str("\"")
+                } else {
+                    Ok(())
+                }
             }
             Any::ImportDeclaration(ImportDeclaration {
                 platforms,
                 imports,
                 path,
             }) => {
-                f.write_str("import { ")?;
-                for (index, import) in imports.iter().enumerate() {
-                    if index > 0 {
-                        f.write_str(", ")?;
-                    }
+                if ctx.qualify_identifiers_with.is_none() {
+                    f.write_str("import { ")?;
+                    for (index, import) in imports.iter().enumerate() {
+                        if index > 0 {
+                            f.write_str(", ")?;
+                        }
 
-                    import.compile(ctx, f)?;
+                        import.compile(ctx, f)?;
+                    }
+                    f.write_str(" } from \"")?;
+                    f.write_str(path.downcast().value.as_str())?; // TODO: Get the correct path for the current build mode
+                    f.write_str(".ts")?;
+                    f.write_str("\"")
+                } else {
+                    Ok(())
                 }
-                f.write_str(" } from \"")?;
-                f.write_str(path.downcast().value.as_str())?; // TODO: Get the correct path for the current build mode
-                f.write_str(".ts")?;
-                f.write_str("\"")
             }
             Any::ImportItem(ImportItem { name, alias }) => {
                 name.compile(ctx, f)?;
@@ -97,6 +108,9 @@ where
 
                     f.write_str("type ")?;
                     name.compile(ctx, f)?;
+                    if let Some(id) = ctx.current_module_qualifier() {
+                        f.write_fmt(format_args!("_{}", id))?;
+                    }
                     f.write_str(" = ")?;
                     declared_type.compile(ctx, f)?;
                 }
@@ -117,7 +131,10 @@ where
                     f.write_str("export ")?;
                 }
                 f.write_str("const ")?;
-                f.write_str(name.slice().as_str())?;
+                name.compile(ctx, f)?;
+                if let Some(id) = ctx.current_module_qualifier() {
+                    f.write_fmt(format_args!("_{}", id))?;
+                }
                 f.write_str(" = ")?;
                 compile_function(
                     ctx,
@@ -143,7 +160,12 @@ where
                     f.write_str("export ")?;
                 }
                 f.write_str("const ")?;
-                f.write_str(name.slice().as_str())?;
+                name.compile(ctx, f)?;
+                if name.slice().as_str() != "main" {
+                    if let Some(id) = ctx.current_module_qualifier() {
+                        f.write_fmt(format_args!("_{}", id))?;
+                    }
+                }
                 f.write_str(" = ")?;
                 compile_function(
                     ctx,
@@ -167,7 +189,7 @@ where
                     f.write_str("export ")?;
                 }
                 f.write_str("const ")?;
-                destination.compile(ctx, f)?;
+                destination.compile(ctx.qualifying_all_identifiers(), f)?;
                 f.write_str(" = ")?;
                 if *is_const {
                     value.compile(ctx, f)?;
@@ -185,6 +207,9 @@ where
                 }
                 f.write_str("const ")?;
                 name.compile(ctx, f)?;
+                if let Some(id) = ctx.current_module_qualifier() {
+                    f.write_fmt(format_args!("_{}", id))?;
+                }
                 f.write_str(" = Symbol('")?;
                 name.compile(ctx, f)?;
                 f.write_str("');")?;
@@ -302,6 +327,77 @@ where
                     let resolved = self.resolve_symbol(name.as_str());
 
                     match resolved.as_ref().map(|r| r.details()) {
+                        Some(Any::ImportDeclaration(ImportDeclaration {
+                            platforms: _,
+                            imports: _,
+                            path,
+                        })) => {
+                            f.write_str(name.as_str())?;
+
+                            if let Some(id) = ctx
+                                .qualify_identifiers_with
+                                .map(|qualify_identifiers_with| {
+                                    ctx.current_module
+                                        .module_id()
+                                        .imported(path.downcast().value.as_str())
+                                        .map(|other_module_id| {
+                                            qualify_identifiers_with.get(&other_module_id)
+                                        })
+                                })
+                                .flatten()
+                                .flatten()
+                            {
+                                f.write_fmt(format_args!("_{}", id))?;
+                            }
+
+                            Ok(())
+                        }
+                        Some(Any::TypeDeclaration(TypeDeclaration {
+                            name,
+                            declared_type: _,
+                            exported: _,
+                        })) => {
+                            name.compile(ctx, f)?;
+                            if let Some(id) = ctx.current_module_qualifier() {
+                                f.write_fmt(format_args!("_{}", id))?;
+                            }
+                            Ok(())
+                        }
+                        Some(Any::FuncDeclaration(FuncDeclaration {
+                            platforms: _,
+                            name,
+                            func: _,
+                            exported: _,
+                            decorators: _,
+                        })) => {
+                            name.compile(ctx, f)?;
+                            if let Some(id) = ctx.current_module_qualifier() {
+                                f.write_fmt(format_args!("_{}", id))?;
+                            }
+                            Ok(())
+                        }
+                        Some(Any::ProcDeclaration(ProcDeclaration {
+                            platforms: _,
+                            name,
+                            proc: _,
+                            exported: _,
+                            decorators: _,
+                        })) => {
+                            name.compile(ctx, f)?;
+                            if name.slice().as_str() != "main" {
+                                if let Some(id) = ctx.current_module_qualifier() {
+                                    f.write_fmt(format_args!("_{}", id))?;
+                                }
+                            }
+                            Ok(())
+                        }
+                        Some(Any::SymbolDeclaration(SymbolDeclaration { name, exported })) => {
+                            name.compile(ctx, f)?;
+                            if let Some(id) = ctx.current_module_qualifier() {
+                                f.write_fmt(format_args!("_{}", id))?;
+                            }
+                            Ok(())
+                        }
                         Some(Any::ValueDeclaration(ValueDeclaration {
                             destination: _,
                             value: _,
@@ -313,14 +409,21 @@ where
                                 f.write_str(INT)?;
                                 f.write_str("observe(")?;
                                 f.write_str(name.as_str())?;
-                                f.write_str(", 'value')")?;
-                                return Ok(());
+                                if let Some(id) = ctx.current_module_qualifier() {
+                                    f.write_fmt(format_args!("_{}", id))?;
+                                }
+                                f.write_str(", 'value')")
+                            } else {
+                                f.write_str(name.as_str())?;
+                                if let Some(id) = ctx.current_module_qualifier() {
+                                    f.write_fmt(format_args!("_{}", id))?;
+                                }
+                                Ok(())
                             }
                         }
-                        _ => {}
-                    };
 
-                    f.write_str(name.as_str())
+                        _ => f.write_str(name.as_str()),
+                    }
                 }
             }
             Any::InlineConstGroup(InlineConstGroup {
@@ -751,6 +854,9 @@ where
                 match target.details() {
                     Any::LocalIdentifier(LocalIdentifier(name)) => {
                         f.write_str(name.as_str())?;
+                        if let Some(id) = ctx.current_module_qualifier() {
+                            f.write_fmt(format_args!("_{}", id))?;
+                        }
                         f.write_str(", 'value', ")?;
 
                         if let Some(operator) = operator {
@@ -899,6 +1005,11 @@ impl Compilable for DeclarationDestination {
                 type_annotation,
             }) => {
                 name.compile(ctx, f)?;
+                if ctx.qualify_all_identifiers {
+                    if let Some(id) = ctx.current_module_qualifier() {
+                        f.write_fmt(format_args!("_{}", id))?;
+                    }
+                }
                 if let Some(type_annotation) = type_annotation {
                     f.write_str(": ")?;
                     type_annotation.compile(ctx, f)?;
@@ -922,6 +1033,11 @@ impl Compilable for DeclarationDestination {
                     }
 
                     property.compile(ctx, f)?;
+                    if ctx.qualify_all_identifiers {
+                        if let Some(id) = ctx.current_module_qualifier() {
+                            f.write_fmt(format_args!("_{}", id))?;
+                        }
+                    }
                 }
 
                 if let Some(spread) = spread {
@@ -1013,4 +1129,28 @@ pub struct CompileContext<'a> {
     pub modules: &'a ModulesStore,
     pub current_module: &'a Module,
     pub include_types: bool,
+    pub qualify_identifiers_with: Option<&'a HashMap<ModuleID, usize>>,
+    pub qualify_all_identifiers: bool,
+}
+
+impl<'a> CompileContext<'a> {
+    pub fn current_module_qualifier(&self) -> Option<usize> {
+        self.qualify_identifiers_with
+            .map(|qualify_identifiers_with| {
+                qualify_identifiers_with
+                    .get(self.current_module.module_id())
+                    .cloned()
+            })
+            .flatten()
+    }
+
+    pub fn qualifying_all_identifiers(self) -> Self {
+        CompileContext {
+            modules: self.modules,
+            current_module: self.current_module,
+            include_types: self.include_types,
+            qualify_identifiers_with: self.qualify_identifiers_with,
+            qualify_all_identifiers: true,
+        }
+    }
 }

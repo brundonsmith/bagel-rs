@@ -60,5 +60,5 @@ impl Loggable for (Slice, Slice) {
 }
 
 pub fn cli_label(s: &str, color: Color) -> String {
-    format!("{: <11}", s).color(color).to_string()
+    format!("{: <13}", s).color(color).to_string()
 }

@@ -12,6 +12,15 @@ impl ModulesStore {
         buf += CORE_TS;
         buf += REACTIVITY_TS;
 
+        let module_id_map = self
+            .iter()
+            .enumerate()
+            .map(|(index, (module_id, _))| (module_id.clone(), index))
+            .collect();
+
+        // TODO: Sort by import graph
+        // TODO: Helpful error about mutually imported consts
+
         // VERY NAIVE FOR NOW
         for module in self.iter().filter_map(|(_, module)| module.as_ref().ok()) {
             module.compile(
@@ -19,6 +28,8 @@ impl ModulesStore {
                     modules: self,
                     current_module: module,
                     include_types: false,
+                    qualify_identifiers_with: Some(&module_id_map),
+                    qualify_all_identifiers: false,
                 },
                 &mut buf,
             );

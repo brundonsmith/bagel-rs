@@ -835,7 +835,9 @@ impl<'a> From<CompileContext<'a>> for InferTypeContext<'a> {
         CompileContext {
             modules,
             current_module,
-            include_types,
+            include_types: _,
+            qualify_identifiers_with: _,
+            qualify_all_identifiers: _,
         }: CompileContext<'a>,
     ) -> Self {
         Self {

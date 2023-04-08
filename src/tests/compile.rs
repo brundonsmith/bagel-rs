@@ -881,6 +881,8 @@ fn test_compile(bgl: &str, js: &str) {
                         modules: &modules_store,
                         current_module: modules_store.get(&module_id).unwrap(),
                         include_types: true,
+                        qualify_identifiers_with: None,
+                        qualify_all_identifiers: false,
                     },
                     &mut compiled,
                 )

@@ -126,6 +126,8 @@ fn main() -> ExitCode {
                                         modules: &modules_store,
                                         current_module: &module,
                                         include_types: true,
+                                        qualify_identifiers_with: None,
+                                        qualify_all_identifiers: false,
                                     },
                                     &mut compiled,
                                 )
