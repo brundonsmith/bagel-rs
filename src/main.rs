@@ -331,7 +331,7 @@ fn bundle(entrypoint: &str, watch: bool, clean: bool) -> Result<PathBuf, ()> {
                 return Err(());
             }
 
-            let bundle_path = entrypoint.with_extension("bundle.ts");
+            let bundle_path = entrypoint.with_extension("bundle.js");
 
             std::fs::write(&bundle_path, modules_store.bundle());
 
