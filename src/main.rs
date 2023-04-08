@@ -221,7 +221,22 @@ fn main() -> ExitCode {
                             .unwrap()
                             .code();
                     } else if bun {
-                        todo!()
+                        let command = std::env::var("BAGEL_BUN_BIN").unwrap_or("bun".to_owned());
+
+                        println!(
+                            "{} {}",
+                            cli_label(&format!("Running ({})", command), Color::Green),
+                            bundle_path.to_string_lossy()
+                        );
+
+                        std::process::Command::new(&command)
+                            .arg("run")
+                            .arg(bundle_path.canonicalize().unwrap())
+                            .spawn()
+                            .unwrap()
+                            .wait()
+                            .unwrap()
+                            .code();
                     } else {
                         todo!()
                     }
@@ -314,7 +329,7 @@ fn bundle(entrypoint: &str, watch: bool, clean: bool) -> Result<PathBuf, ()> {
                 return Err(());
             }
 
-            let bundle_path = entrypoint.with_extension("bundle.js");
+            let bundle_path = entrypoint.with_extension("bundle.ts");
 
             std::fs::write(&bundle_path, modules_store.bundle());
 
