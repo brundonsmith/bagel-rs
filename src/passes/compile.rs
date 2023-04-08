@@ -813,7 +813,11 @@ where
             Any::Autorun(Autorun {
                 effect_block,
                 until,
-            }) => todo!(),
+            }) => {
+                f.write_str("___autorun(() => {")?;
+                effect_block.compile(ctx, f)?;
+                f.write_str("});")
+            }
             Any::PlainIdentifier(PlainIdentifier(name)) => f.write_str(name.as_str()),
             Any::DeclarationPlatforms(_) => Ok(()),
         }
