@@ -5,7 +5,7 @@ use crate::model::{
 };
 use std::{
     collections::HashMap,
-    fmt::{Binary, Result, Write},
+    fmt::{Result, Write},
 };
 
 impl Module {

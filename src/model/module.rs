@@ -12,7 +12,7 @@ use colored::Color;
 use memoize::memoize;
 use reqwest::Url;
 use serde_json::Value;
-use std::fmt::{Display, Write};
+use std::fmt::Display;
 use std::path::Path;
 use std::{collections::HashMap, path::PathBuf, rc::Rc};
 
