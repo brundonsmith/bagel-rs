@@ -9,6 +9,7 @@ use swc_common::{sync::Lrc, FileName, FilePathMapping, SourceMap, GLOBALS};
 use swc_config::config_types::MergingOption;
 use swc_ecma_lints::config::LintConfig;
 use swc_ecma_minifier::option::terser::TerserEcmaVersion;
+use swc_ecma_minifier::option::MangleOptions;
 use swc_ecma_parser::{Syntax, TsConfig};
 use swc_ecma_transforms::Assumptions;
 
@@ -110,7 +111,17 @@ fn minify(bundle: &str) -> String {
                         paths: indexmap::IndexMap::default(),
                         minify: Some(JsMinifyOptions {
                             compress: BoolOrDataConfig::default(),
-                            mangle: BoolOrDataConfig::default(),
+                            mangle: MangleOptions {
+                                props: None,
+                                top_level: Some(true),
+                                keep_class_names: false,
+                                keep_fn_names: false,
+                                keep_private_props: false,
+                                ie8: false,
+                                safari10: false,
+                                reserved: Vec::new(),
+                            }
+                            .into(),
                             format: JsMinifyFormatOptions::default(),
                             ecma: TerserEcmaVersion::Num(2016),
                             keep_classnames: false,
@@ -128,7 +139,7 @@ fn minify(bundle: &str) -> String {
                         preserve_all_comments: false.into(),
                         output: JscOutputConfig::default(),
                     },
-                    module: None,
+                    module: Some(swc::config::ModuleConfig::Es6),
                     minify: true.into(),
                     input_source_map: None,
                     source_maps: None,
