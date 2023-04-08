@@ -1,7 +1,11 @@
 
 // --- Utilities ---
 
-class IterableWeakMap<K extends object, V extends object> {
+const ___WHOLE_OBJECT = Symbol('WHOLE_OBJECT')
+
+type ___Plan<T> = () => Promise<T>
+
+class ___IterableWeakMap<K extends object, V extends object> {
     private weakMap = new WeakMap<K, V>()
     private map = new Map<string | number | boolean, V>()
     private refSet = new Set<WeakRef<K>>()
@@ -64,23 +68,23 @@ class IterableWeakMap<K extends object, V extends object> {
     }
 }
 
-const VALUE_ITSELF = Symbol('VALUE_ITSELF')
+const ___VALUE_ITSELF = Symbol('VALUE_ITSELF')
 
-class WeakTupleSet<TKeys extends readonly any[]> {
-    private readonly baseMap = new IterableWeakMap<any, any>()
+class ___WeakTupleSet<TKeys extends readonly any[]> {
+    private readonly baseMap = new ___IterableWeakMap<any, any>()
 
     add(keys: TKeys) {
         let currentMap = this.baseMap
 
         for (const key of keys) {
             if (!currentMap.has(key)) {
-                currentMap.set(key, new IterableWeakMap())
+                currentMap.set(key, new ___IterableWeakMap())
             }
 
             currentMap = currentMap.get(key)
         }
 
-        currentMap[VALUE_ITSELF] = true
+        currentMap[___VALUE_ITSELF] = true
     }
 
     has(keys: TKeys): boolean {
@@ -95,15 +99,15 @@ class WeakTupleSet<TKeys extends readonly any[]> {
         let current = this.baseMap
 
         for (const key of keys) {
-            if (current instanceof IterableWeakMap) {
+            if (current instanceof ___IterableWeakMap) {
                 current = current.get(key)
             } else {
                 return
             }
         }
 
-        if (current instanceof IterableWeakMap) {
-            delete current[VALUE_ITSELF]
+        if (current instanceof ___IterableWeakMap) {
+            delete current[___VALUE_ITSELF]
             current.clear()
         }
     }
@@ -119,20 +123,20 @@ class WeakTupleSet<TKeys extends readonly any[]> {
             currentMap = currentMap.get(key)
         }
 
-        if (currentMap instanceof IterableWeakMap) {
-            yield* iterateWeakMapRecursive(currentMap)
+        if (currentMap instanceof ___IterableWeakMap) {
+            yield* ___iterateWeakMapRecursive(currentMap)
         }
     }
 }
 
-function* iterateWeakMapRecursive(map: IterableWeakMap<any, any>): Generator<any[]> {
+function* ___iterateWeakMapRecursive(map: ___IterableWeakMap<any, any>): Generator<any[]> {
     for (const [key, value] of map) {
-        if (value[VALUE_ITSELF]) {
+        if (value[___VALUE_ITSELF]) {
             yield [key]
         }
 
-        if (value instanceof IterableWeakMap) {
-            for (const rest of iterateWeakMapRecursive(value)) {
+        if (value instanceof ___IterableWeakMap) {
+            for (const rest of ___iterateWeakMapRecursive(value)) {
                 yield [key, ...rest]
             }
         }
@@ -141,37 +145,37 @@ function* iterateWeakMapRecursive(map: IterableWeakMap<any, any>): Generator<any
 
 // // --- Core state ---
 
-type Observable = object
-type PropertyName = string
-type Reaction = () => void | Promise<void>;
-type Computation = (...args: unknown[]) => unknown;
+type ___Observable = object
+type ___PropertyName = string
+type ___Reaction = () => void | Promise<void>;
+type ___Computation = (...args: unknown[]) => unknown;
 
-let reportObservableAccessed: (<TObservable extends Observable, TPropertyName extends string & keyof TObservable>(obj: TObservable, prop: TPropertyName) => void) | undefined;
+let ___reportObservableAccessed: (<TObservable extends ___Observable, TPropertyName extends string & keyof TObservable>(obj: TObservable, prop: TPropertyName) => void) | undefined;
 
-const reactionsToObservables = new WeakTupleSet<[Reaction, Observable, PropertyName]>();
-const observablesToReactions = new WeakTupleSet<[Observable, PropertyName, Reaction]>();
+const ___reactionsToObservables = new ___WeakTupleSet<[___Reaction, ___Observable, ___PropertyName]>();
+const ___observablesToReactions = new ___WeakTupleSet<[___Observable, ___PropertyName, ___Reaction]>();
 
-const computationsToObservables = new WeakTupleSet<[Computation, ...unknown[], Observable, PropertyName]>();
-const computationsToCaches = new WeakTupleSet<[Computation, ...unknown[], unknown]>();
-const observablesToComputations = new WeakTupleSet<[Observable, PropertyName, Computation, ...unknown[]]>();
+const ___computationsToObservables = new ___WeakTupleSet<[___Computation, ...unknown[], ___Observable, ___PropertyName]>();
+const ___computationsToCaches = new ___WeakTupleSet<[___Computation, ...unknown[], unknown]>();
+const ___observablesToComputations = new ___WeakTupleSet<[___Observable, ___PropertyName, ___Computation, ...unknown[]]>();
 
 // --- Core functionality ---
 
-function observe<
-    TObservable extends Observable,
-    TPropertyName extends PropertyName & keyof TObservable
+function ___observe<
+    TObservable extends ___Observable,
+    TPropertyName extends ___PropertyName & keyof TObservable
 >(
     obj: TObservable,
     prop: TPropertyName
 ): TObservable[TPropertyName] {
     const value = obj[prop]
-    reportObservableAccessed?.(obj, prop)
+    ___reportObservableAccessed?.(obj, prop)
     return value
 }
 
-function invalidate<
-    TObservable extends Observable,
-    TPropertyName extends PropertyName & keyof TObservable
+function ___invalidate<
+    TObservable extends ___Observable,
+    TPropertyName extends ___PropertyName & keyof TObservable
 >(
     obj: TObservable,
     prop: TPropertyName,
@@ -179,68 +183,68 @@ function invalidate<
 ) {
     obj[prop] = val
 
-    for (const [reaction] of observablesToReactions.get([obj, prop])) {
+    for (const [reaction] of ___observablesToReactions.get([obj, prop])) {
         reaction()
     }
 
-    for (const [computation] of observablesToComputations.get([obj, prop])) {
-        computationsToCaches.delete([computation])
+    for (const [computation] of ___observablesToComputations.get([obj, prop])) {
+        ___computationsToCaches.delete([computation])
     }
 }
 
-function autorun(reaction: Reaction) {
+function ___autorun(reaction: ___Reaction) {
 
     function dispose() {
-        for (const [obj, prop] of reactionsToObservables.get([reaction])) {
-            observablesToReactions.delete([obj, prop, reaction])
+        for (const [obj, prop] of ___reactionsToObservables.get([reaction])) {
+            ___observablesToReactions.delete([obj, prop, reaction])
         }
-        reactionsToObservables.delete([reaction])
+        ___reactionsToObservables.delete([reaction])
     }
 
-    const previous = reportObservableAccessed
-    reportObservableAccessed = (obj, prop) => {
+    const previous = ___reportObservableAccessed
+    ___reportObservableAccessed = (obj, prop) => {
         dispose()
-        reactionsToObservables.add([reaction, obj, prop])
-        observablesToReactions.add([obj, prop, reaction])
+        ___reactionsToObservables.add([reaction, obj, prop])
+        ___observablesToReactions.add([obj, prop, reaction])
     }
 
     reaction()
 
-    reportObservableAccessed = previous
+    ___reportObservableAccessed = previous
 
     return dispose
 }
 
-function memo<F extends Computation>(fn: F): F {
+function ___memo<F extends ___Computation>(fn: F): F {
     return ((...args) => {
 
         function dispose() {
-            for (const entry of computationsToObservables.get([fn])) {
+            for (const entry of ___computationsToObservables.get([fn])) {
                 const obj = entry[entry.length - 2]
                 const prop = entry[entry.length - 1]
 
-                observablesToComputations.delete([obj, prop, fn])
+                ___observablesToComputations.delete([obj, prop, fn])
             }
-            computationsToCaches.delete([fn])
-            computationsToObservables.delete([fn])
+            ___computationsToCaches.delete([fn])
+            ___computationsToObservables.delete([fn])
         }
 
-        if (!computationsToCaches.has([fn, ...args])) {
-            const previous = reportObservableAccessed
-            reportObservableAccessed = (obj, prop) => {
+        if (!___computationsToCaches.has([fn, ...args])) {
+            const previous = ___reportObservableAccessed
+            ___reportObservableAccessed = (obj, prop) => {
                 dispose()
-                computationsToObservables.add([fn, ...args, obj, prop])
-                observablesToComputations.add([obj, prop, fn, ...args])
+                ___computationsToObservables.add([fn, ...args, obj, prop])
+                ___observablesToComputations.add([obj, prop, fn, ...args])
             }
 
             const result = fn(...args)
 
-            reportObservableAccessed = previous
+            ___reportObservableAccessed = previous
 
-            computationsToCaches.add([fn, ...args, result])
+            ___computationsToCaches.add([fn, ...args, result])
         }
 
-        for (const [res] of computationsToCaches.get([fn, ...args])) {
+        for (const [res] of ___computationsToCaches.get([fn, ...args])) {
             return res
         }
     }) as F
