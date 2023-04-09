@@ -1107,8 +1107,12 @@ impl Type {
     pub fn get_property<'a>(&self, ctx: SubsumationContext<'a>, property: &Type) -> Option<Type> {
         let subject = self.clone().simplify(ctx);
 
-        if let Type::AnyType = subject {
+        if subject == Type::AnyType || property == &Type::AnyType {
             return Some(Type::AnyType);
+        }
+
+        if subject == Type::PoisonedType || property == &Type::PoisonedType {
+            return Some(Type::PoisonedType);
         }
 
         if let Type::UnionType(members) = subject {

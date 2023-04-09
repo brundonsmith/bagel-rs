@@ -68,61 +68,65 @@ where
                 }
             };
 
-        let mut check_binary_operation =
-            |BinaryOperation { left, op, right }: &BinaryOperation, report_error: &mut F| {
-                left.check(ctx, report_error);
-                op.check(ctx, report_error);
-                right.check(ctx, report_error);
+        let check_binary_operation = |BinaryOperation { left, op, right }: &BinaryOperation,
+                                      report_error: &mut F| {
+            left.check(ctx, report_error);
+            op.check(ctx, report_error);
+            right.check(ctx, report_error);
 
-                let module_id = &ctx.current_module.module_id().clone();
-                let subsumation_context = SubsumationContext::from(ctx);
-                let check_subsumation =
-                    |destination: &Type, value: Type, slice: &Slice, report_error: &mut F| {
-                        let issues = destination.subsumation_issues(subsumation_context, &value);
+            let module_id = &ctx.current_module.module_id().clone();
+            let subsumation_context = SubsumationContext::from(ctx);
+            let check_subsumation =
+                |destination: &Type, value: Type, slice: &Slice, report_error: &mut F| {
+                    let issues = destination.subsumation_issues(subsumation_context, &value);
 
-                        if let Some(issues) = issues {
-                            report_error(BagelError::AssignmentError {
-                                module_id: module_id.clone(),
-                                src: slice.clone(),
-                                issues,
-                            });
-                        }
-                    };
-
-                let left_type = left.infer_type(ctx.into());
-                let right_type = right.infer_type(ctx.into());
-
-                let number_or_string = Type::ANY_NUMBER.union(Type::ANY_STRING);
-
-                let operator = op.downcast().0;
-
-                if operator == BinaryOperatorOp::Plus {
-                    check_subsumation(&number_or_string, left_type, left.slice(), report_error);
-                    check_subsumation(&number_or_string, right_type, right.slice(), report_error);
-                } else if operator == BinaryOperatorOp::Minus
-                    || operator == BinaryOperatorOp::Times
-                    || operator == BinaryOperatorOp::Divide
-                {
-                    check_subsumation(&Type::ANY_NUMBER, left_type, left.slice(), report_error);
-                    check_subsumation(&Type::ANY_NUMBER, right_type, right.slice(), report_error);
-                } else if operator == BinaryOperatorOp::Equals
-                    || operator == BinaryOperatorOp::NotEquals
-                {
-                    if !left_type.subsumes(ctx.into(), &right_type)
-                        && !right_type.subsumes(ctx.into(), &left_type)
-                    {
-                        report_error(BagelError::MiscError {
-                            module_id: ctx.current_module.module_id().clone(),
-                            src: op.slice().clone(),
-                            message: format!(
-                                "Can't compare types {} and {} because they have no overlap",
-                                blue_string(&left_type),
-                                blue_string(&right_type),
-                            ),
+                    if let Some(issues) = issues {
+                        report_error(BagelError::AssignmentError {
+                            module_id: module_id.clone(),
+                            src: slice.clone(),
+                            issues,
                         });
                     }
+                };
+
+            let left_type = left.infer_type(ctx.into());
+            let right_type = right.infer_type(ctx.into());
+
+            if left_type == Type::PoisonedType || right_type == Type::PoisonedType {
+                return;
+            }
+
+            let number_or_string = Type::ANY_NUMBER.union(Type::ANY_STRING);
+
+            let operator = op.downcast().0;
+
+            if operator == BinaryOperatorOp::Plus {
+                check_subsumation(&number_or_string, left_type, left.slice(), report_error);
+                check_subsumation(&number_or_string, right_type, right.slice(), report_error);
+            } else if operator == BinaryOperatorOp::Minus
+                || operator == BinaryOperatorOp::Times
+                || operator == BinaryOperatorOp::Divide
+            {
+                check_subsumation(&Type::ANY_NUMBER, left_type, left.slice(), report_error);
+                check_subsumation(&Type::ANY_NUMBER, right_type, right.slice(), report_error);
+            } else if operator == BinaryOperatorOp::Equals
+                || operator == BinaryOperatorOp::NotEquals
+            {
+                if !left_type.subsumes(ctx.into(), &right_type)
+                    && !right_type.subsumes(ctx.into(), &left_type)
+                {
+                    report_error(BagelError::MiscError {
+                        module_id: ctx.current_module.module_id().clone(),
+                        src: op.slice().clone(),
+                        message: format!(
+                            "Can't compare types {} and {} because they have no overlap",
+                            blue_string(&left_type),
+                            blue_string(&right_type),
+                        ),
+                    });
                 }
-            };
+            }
+        };
 
         match self.details() {
             Any::Module(ast::Module {
@@ -792,6 +796,11 @@ where
                 };
 
                 let subject_type = subject.infer_type(ctx.into());
+
+                if subject_type == Type::PoisonedType {
+                    return;
+                }
+
                 let (property_type, property_slice) = match property {
                     Property::Expression(expr) => {
                         (expr.infer_type(ctx.into()), expr.slice().clone())
@@ -801,6 +810,10 @@ where
                         ident.slice().clone(),
                     ),
                 };
+
+                if property_type == Type::PoisonedType {
+                    return;
+                }
 
                 // TODO: detect unnecessary optional
                 // TODO: detect valid optional
