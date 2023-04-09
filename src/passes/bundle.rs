@@ -53,9 +53,15 @@ impl ModulesStore {
 
         buf.write_str("\n\nmain();");
 
-        minify(&buf)
+        if MINIFY {
+            minify(&buf)
+        } else {
+            buf
+        }
     }
 }
+
+const MINIFY: bool = false;
 
 fn minify(bundle: &str) -> String {
     let cm = Lrc::new(SourceMap::new(FilePathMapping::empty()));
