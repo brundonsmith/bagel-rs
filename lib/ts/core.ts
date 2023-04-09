@@ -1,4 +1,4 @@
-function ___logf<T>(x: T): T {
+function ___log<T>(x: T): T {
     console.log(x);
     return x;
 }
