@@ -2,7 +2,7 @@ use super::ast::{
     self, ArrayLiteral, BooleanLiteral, Declaration, Destructure, ElementOrSpread,
     ExactStringLiteral, Expression, FuncDeclaration, ImportAllDeclaration, ImportDeclaration,
     KeyValueOrSpread, NameAndType, NilLiteral, NumberLiteral, ObjectLiteral, ProcDeclaration,
-    SymbolDeclaration, ValueDeclaration, WithSlice, AST,
+    SymbolDeclaration, TypeDeclaration, ValueDeclaration, WithSlice, AST,
 };
 use super::errors::ParseError;
 use super::slice::Slice;
@@ -268,7 +268,9 @@ impl ModuleID {
 
     pub fn is_std_lib(&self) -> bool {
         match self {
-            ModuleID::Local(_) => false,
+            ModuleID::Local(path) => path
+                .to_string_lossy()
+                .starts_with("/Users/brundolf/git/bagel-rs/lib/bgl"),
             ModuleID::Remote(url) => url.as_str().starts_with(
                 "https://raw.githubusercontent.com/brundonsmith/bagel-rs/master/lib/bgl",
             ),
@@ -463,7 +465,11 @@ impl Module {
                         Declaration::SymbolDeclaration(SymbolDeclaration { name, exported }) => {
                             (!must_be_exported || exported) && name.downcast().0 == item_name
                         }
-                        Declaration::TypeDeclaration(_) => todo!(),
+                        Declaration::TypeDeclaration(TypeDeclaration {
+                            name,
+                            declared_type: _,
+                            exported,
+                        }) => (!must_be_exported || exported) && name.downcast().0 == item_name,
 
                         Declaration::ImportAllDeclaration(_) => false,
                         Declaration::ImportDeclaration(_) => false,
