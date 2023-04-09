@@ -1,18 +1,11 @@
 
-from 'https://raw.githubusercontent.com/brundonsmith/bagel/master/lib/ts/core.ts' import {
-    iter as _iter,
-    logf as _logf,
-    memo as _memo,
-    action as _action
-}
-
 export proc log(x: readonly unknown) |> {
-    jsGlobal.console.log(x);
+    ___log(x);
 }
 
-export func logf<T>(x: T): T => _logf(x)
+export func logged<T>(x: T): T => ___log(x)
 
-export func iter<T>(x: readonly T[]): Iterator<T> => _iter(x)
+export func iter<T>(x: readonly T[]): Iterator<T> => ___iter(x)
 
 export type MemoOptions = readonly {
     maxItems?: number
@@ -21,11 +14,11 @@ export type MemoOptions = readonly {
 export func memo(options?: MemoOptions) => <
     TArgs extends readonly unknown[],
     TReturn
->(fn: (...args: TArgs) => readonly TReturn): (...args: TArgs) => readonly TReturn => _memo(fn, options)
+>(fn: (...args: TArgs) => readonly TReturn): (...args: TArgs) => readonly TReturn => ___memo(fn, options)
 
 export func action<
     TArgs extends readonly unknown[]
->(pr: (...args: TArgs) |> { }): (...args: TArgs) |> { } => _action(pr)
+>(pr: (...args: TArgs) |> { }): (...args: TArgs) |> { } => ___action(pr)
 
 export func assert(condition: boolean, message?: string): Error<string?>? =>
     if condition {
@@ -34,25 +27,10 @@ export func assert(condition: boolean, message?: string): Error<string?>? =>
         Error(message)
     }
 
-export type UnknownObject = {[string]: unknown} | (readonly {[string]: unknown})
-
-type LintRuleName =
-    | 'unnecessaryParens'
-    | 'funcOrProcAsValue'
-    | 'redundantConditional'
-    | 'stringNumberConditional'
-    | 'explicitBooleansOnly'
-    | 'pureFunctions'
-
-type LintRuleSeverity = 'error'|'warning'|'info'|'off'
-
-export type BagelConfig = {
-    platforms?: ('browser'|'node'|'deno')[],
-    lintRules?: {[LintRuleName]: LintRuleSeverity}
-}
-
-export type Element = {
-    tag: string,
-    attributes: UnknownObject,
-    children: unknown[]
-}
+export type Element = 
+    | string
+    | {
+        tag: string,
+        attributes: UnknownObject,
+        children: Element[]
+    }
