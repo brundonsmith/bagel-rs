@@ -5,6 +5,8 @@ function ___log<T>(x: T): T {
 
 const ___LOADING = Symbol('LOADING')
 
+type ___Plan<T> = () => Promise<T>
+
 function ___planned<T>(plan: ___Plan<T>): T | typeof ___LOADING {
     return ___observe(___getRemote(plan), 'current')
 }
@@ -38,251 +40,54 @@ class ___Remote<T> {
 type ___Error<T> = { kind: typeof ___ERROR_SYM, value: T }
 const ___ERROR_SYM = Symbol('ERROR_SYM')
 
-// ___Iterators
-function* ___rangeInner(start: number, end: number): Generator<number> {
+// Iterators
+
+type ___Iter<T> = Iterable<T> | (() => Generator<T>)
+
+function* ___range(start: number, end: number): Generator<number> {
     for (let i = start; i < end; i++) {
         yield i;
     }
 }
-function ___range(start: number, end: number): ___Iter<number> {
-    return new ___Iter(() => ___rangeInner(start, end))
-}
 
-function* ___repeatInner<T>(val: T, count: number): Generator<T> {
+function* ___repeat<T>(val: T, count: number): Generator<T> {
     for (let i = 0; i < count; i++) {
         yield val
     }
 }
-function ___repeat<T>(val: T, count: number): ___Iter<T> {
-    return new ___Iter(___repeatInner(val, count))
-}
 
-function* ___entriesInner<V>(obj: { [key: string]: V }): Generator<[string, V]> {
+function* ___entries<V>(obj: { [key: string]: V }): Generator<[string, V]> {
     ___observe(obj, ___WHOLE_OBJECT)
     for (const key in obj) {
         yield [key, obj[key]];
     }
 }
 
-function ___entries<V>(obj: { [key: string]: V }): ___Iter<[string, V]> {
-    return new ___Iter(() => ___entriesInner(obj))
-}
-
-function* ___keysInner<V>(obj: { [key: string]: V }): Generator<string> {
+function* ___keys<V>(obj: { [key: string]: V }): Generator<string> {
     ___observe(obj, ___WHOLE_OBJECT)
     for (const key in obj) {
         yield key
     }
 }
 
-function ___keys<V>(obj: { [key: string]: V }): ___Iter<string> {
-    return new ___Iter(() => ___keysInner(obj))
-}
-
-function* ___valuesInner<V>(obj: { [key: string]: V }): Generator<V> {
+function* ___values<V>(obj: { [key: string]: V }): Generator<V> {
     ___observe(obj, ___WHOLE_OBJECT)
     for (const key in obj) {
         yield obj[key]
     }
 }
 
-function ___values<V>(obj: { [key: string]: V }): ___Iter<V> {
-    return new ___Iter(() => ___valuesInner(obj))
+function ___rawIterToIterable<T>(iter: ___Iter<T>): Iterable<T> {
+    if (iter[Symbol.iterator]) {
+        ___observe(iter, ___WHOLE_OBJECT)
+    }
+
+    return typeof iter === 'function' ? iter() : iter
 }
 
-const ___INNER_ITER = Symbol('INNER_ITER')
-
-type ___RawIter<T> = Iterable<T> | (() => Generator<T>)
-
-function ___iter<T>(inner: ___RawIter<T>): ___Iter<T> {
-    return new ___Iter(inner)
-}
-
-class ___Iter<T> {
-
-    [___INNER_ITER]: ___RawIter<T>
-
-    constructor(inner: ___RawIter<T>) {
-        this[___INNER_ITER] = inner
-    }
-
-    get inner() {
-        const inner = this[___INNER_ITER]
-        return typeof inner === 'function' ? inner() : inner
-    }
-
-    map<R>(fn: (el: T) => R): ___Iter<R> {
-        return new ___Iter(___map(fn, this[___INNER_ITER]))
-    }
-
-    reduce<R>(init: R, fn: (acc: R, el: T) => R): R {
-        let acc = init
-        for (const el of this.inner) {
-            acc = fn(acc, el)
-        }
-        return acc
-    }
-
-    filter(fn: (el: T) => boolean): ___Iter<T> {
-        return new ___Iter(___filter(fn, this[___INNER_ITER]))
-    }
-
-    slice(start: number, end?: number): ___Iter<T> {
-        return new ___Iter(___slice(start, end, this[___INNER_ITER]))
-    }
-
-    takeWhile(fn: (el: T) => boolean): ___Iter<T> {
-        return new ___Iter(___takeWhile(this[___INNER_ITER], fn))
-    }
-
-    sorted(fn: (a: T, b: T) => number): ___Iter<T> {
-        return new ___Iter(Array.from(this.inner).sort(fn))
-    }
-
-    every(fn: (a: T) => boolean): boolean {
-        const inner = this.inner
-
-        if (inner[Symbol.iterator]) {
-            ___observe(inner, ___WHOLE_OBJECT)
-        }
-
-        for (const el of inner) {
-            if (!fn(el)) {
-                return false
-            }
-        }
-
-        return true
-    }
-
-    some(fn: (a: T) => boolean): boolean {
-        const inner = this.inner
-
-        if (inner[Symbol.iterator]) {
-            ___observe(inner, ___WHOLE_OBJECT)
-        }
-
-        for (const el of inner) {
-            if (fn(el)) {
-                return true
-            }
-        }
-
-        return false
-    }
-
-    count(): number {
-        const inner = this.inner
-
-        if (inner[Symbol.iterator]) {
-            ___observe(inner, ___WHOLE_OBJECT)
-        }
-
-        let count = 0;
-
-        for (const _ of inner) {
-            count++;
-        }
-
-        return count;
-    }
-
-    first(): T | undefined {
-        const inner = this.inner
-
-        if (inner[Symbol.iterator]) {
-            ___observe(inner, ___WHOLE_OBJECT)
-        }
-
-        for (const item of inner) {
-            return item
-        }
-    }
-
-    concat(other: ___Iter<T>): ___Iter<T> {
-        return new ___Iter(___concat(this[___INNER_ITER], other[___INNER_ITER] ?? other))
-    }
-
-    zip<R>(other: ___Iter<R>): ___Iter<[T | null | undefined, R | null | undefined]> {
-        return new ___Iter(___zip(this[___INNER_ITER], other[___INNER_ITER] ?? other))
-    }
-
-    indexed(): ___Iter<[T, number]> {
-        return new ___Iter(___indexed(this[___INNER_ITER]))
-    }
-
-    collectArray(): T[] {
-        const inner = this.inner
-
-        if (inner[Symbol.iterator]) {
-            ___observe(inner, ___WHOLE_OBJECT)
-        }
-
-        return Array.from(inner)
-    }
-
-    collectObject(): { [key: string]: unknown } {
-        const inner = this.inner
-
-        if (inner[Symbol.iterator]) {
-            ___observe(inner, ___WHOLE_OBJECT)
-        }
-
-        const obj = {} as { [key: string]: unknown }
-        for (const entry of inner) {
-            if (Array.isArray(entry)) {
-                const [key, value] = entry
-
-                obj[key] = value
-            }
-        }
-
-        return obj
-    }
-
-    set(): Set<T> {
-        const inner = this.inner
-
-        if (inner[Symbol.iterator]) {
-            ___observe(inner, ___WHOLE_OBJECT)
-        }
-        return new Set(inner)
-    }
-
-    // Bagel will ensure this is an ___Iter<string>
-    join(delimiter: string): string {
-        const inner = this.inner
-
-        if (inner[Symbol.iterator]) {
-            ___observe(inner, ___WHOLE_OBJECT)
-        }
-
-        let str = "";
-        let first = true;
-
-        for (const el of inner) {
-            if (first) {
-                first = false;
-            } else {
-                str += delimiter;
-            }
-
-            str += el;
-        }
-
-        return str;
-    }
-}
-
-function* ___slice<T>(start: number | undefined, end: number | undefined, iter: ___RawIter<T>): Generator<T> {
-    const inner = typeof iter === 'function' ? iter() : iter
-
-    if (inner[Symbol.iterator]) {
-        ___observe(inner, ___WHOLE_OBJECT)
-    }
-
+function* ___slice<T>(iter: ___Iter<T>, start: number | undefined, end: number | undefined): Generator<T> {
     let index = 0;
-    for (const el of inner) {
+    for (const el of ___rawIterToIterable(iter)) {
         if ((start == null || index >= start) && (end == null || index < end)) {
             yield el;
         }
@@ -290,14 +95,8 @@ function* ___slice<T>(start: number | undefined, end: number | undefined, iter: 
     }
 }
 
-function* ___takeWhile<T>(iter: ___RawIter<T>, fn: (el: T) => boolean): Generator<T> {
-    const inner = typeof iter === 'function' ? iter() : iter
-
-    if (inner[Symbol.iterator]) {
-        ___observe(inner, ___WHOLE_OBJECT)
-    }
-
-    for (const el of inner) {
+function* ___takeWhile<T>(iter: ___Iter<T>, fn: (el: T) => boolean): Generator<T> {
+    for (const el of ___rawIterToIterable(iter)) {
         if (fn(el)) {
             yield el;
         } else {
@@ -306,33 +105,69 @@ function* ___takeWhile<T>(iter: ___RawIter<T>, fn: (el: T) => boolean): Generato
     }
 }
 
-function* ___map<T, R>(fn: (el: T) => R, iter: ___RawIter<T>): Generator<R> {
-    const inner = typeof iter === 'function' ? iter() : iter
+function ___sorted<T>(iter: ___Iter<T>, fn: (a: T, b: T) => number): ___Iter<T> {
+    return Array.from(___rawIterToIterable(iter)).sort(fn)
+}
 
-    if (inner[Symbol.iterator]) {
-        ___observe(inner, ___WHOLE_OBJECT)
+function ___every<T>(iter: ___Iter<T>, fn: (a: T) => boolean): boolean {
+    for (const el of ___rawIterToIterable(iter)) {
+        if (!fn(el)) {
+            return false
+        }
     }
 
-    for (const el of inner) {
+    return true
+}
+
+function ___some<T>(iter: ___Iter<T>, fn: (a: T) => boolean): boolean {
+    for (const el of ___rawIterToIterable(iter)) {
+        if (!fn(el)) {
+            return true
+        }
+    }
+
+    return false
+}
+
+function ___count<T>(iter: ___Iter<T>): number {
+    let count = 0
+
+    for (const _ of ___rawIterToIterable(iter)) {
+        count++
+    }
+
+    return count
+}
+
+function ___first<T>(iter: ___Iter<T>): T | null | undefined {
+    for (const el of ___rawIterToIterable(iter)) {
+        return el
+    }
+}
+
+function* ___map<T, R>(iter: ___Iter<T>, fn: (el: T) => R): Generator<R> {
+    for (const el of ___rawIterToIterable(iter)) {
         yield fn(el);
     }
 }
 
-function* ___filter<T>(fn: (el: T) => boolean, iter: ___RawIter<T>): Generator<T> {
-    const inner = typeof iter === 'function' ? iter() : iter
-
-    if (inner[Symbol.iterator]) {
-        ___observe(inner, ___WHOLE_OBJECT)
+function ___reduce<T, R>(iter: ___Iter<T>, init: R, fn: (acc: R, el: T) => R): R {
+    let acc = init
+    for (const el of ___rawIterToIterable(iter)) {
+        acc = fn(acc, el)
     }
+    return acc
+}
 
-    for (const el of inner) {
+function* ___filter<T>(iter: ___Iter<T>, fn: (el: T) => boolean): Generator<T> {
+    for (const el of ___rawIterToIterable(iter)) {
         if (fn(el)) {
             yield el;
         }
     }
 }
 
-function* ___concat<T>(iter1: ___RawIter<T>, iter2: ___RawIter<T>): Generator<T> {
+function* ___concat<T>(iter1: ___Iter<T>, iter2: ___Iter<T>): Generator<T> {
     const inner1 = typeof iter1 === 'function' ? iter1() : iter1
     const inner2 = typeof iter2 === 'function' ? iter2() : iter2
 
@@ -352,7 +187,7 @@ function* ___concat<T>(iter1: ___RawIter<T>, iter2: ___RawIter<T>): Generator<T>
     }
 }
 
-function* ___zip<T, R>(iter1: ___RawIter<T>, iter2: ___RawIter<R>): Generator<[T | null | undefined, R | null | undefined]> {
+function* ___zip<T, R>(iter1: ___Iter<T>, iter2: ___Iter<R>): Generator<[T | null | undefined, R | null | undefined]> {
     const inner1 = typeof iter1 === 'function' ? iter1() : iter1
     const inner2 = typeof iter2 === 'function' ? iter2() : iter2
 
@@ -378,18 +213,47 @@ function* ___zip<T, R>(iter1: ___RawIter<T>, iter2: ___RawIter<R>): Generator<[T
     }
 }
 
-function* ___indexed<T>(iter: ___RawIter<T>): Generator<[T, number]> {
-    const inner = typeof iter === 'function' ? iter() : iter
-
-    if (inner[Symbol.iterator]) {
-        ___observe(inner, ___WHOLE_OBJECT)
-    }
-
+function* ___indexed<T>(iter: ___Iter<T>): Generator<[T, number]> {
     let index = 0;
-    for (const el of inner) {
+    for (const el of ___rawIterToIterable(iter)) {
         yield [el, index];
         index++
     }
+}
+
+function ___collectArray<T>(iter: ___Iter<T>): T[] {
+    return Array.from(___rawIterToIterable(iter))
+}
+
+function ___collectObject<T>(iter: ___Iter<T>): { [key: string]: unknown } {
+    const obj = {} as { [key: string]: unknown }
+
+    for (const entry of ___rawIterToIterable(iter)) {
+        if (Array.isArray(entry)) {
+            const [key, value] = entry
+
+            obj[key] = value
+        }
+    }
+
+    return obj
+}
+
+function ___join(iter: ___Iter<string>, delimiter: string | null | undefined): string {
+    let str = "";
+    let first = true;
+
+    for (const el of ___rawIterToIterable(iter)) {
+        if (first) {
+            first = false;
+        } else {
+            str += delimiter;
+        }
+
+        str += el;
+    }
+
+    return str
 }
 
 // ___Plans

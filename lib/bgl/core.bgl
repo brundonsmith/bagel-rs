@@ -5,8 +5,6 @@ export proc log(x: readonly unknown) |> {
 
 export func logged<T>(x: T): T => ___log(x)
 
-export func iter<T>(x: readonly T[]): Iterator<T> => ___iter(x)
-
 export type MemoOptions = readonly {
     maxItems?: number
 }

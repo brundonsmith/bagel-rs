@@ -14,8 +14,9 @@ export pure func trimStart(s: string): string => jsGlobal.String.prototype.trimS
 export pure func trimEnd(s: string): string => jsGlobal.String.prototype.trimEnd.call(s)
 export pure func padEnd(s: string, targetLength: number, padString: string): string => jsGlobal.String.prototype.padEnd.call(s, targetLength, padString)
 export pure func padStart(s: string, targetLength: number, padString: string): string => jsGlobal.String.prototype.padStart.call(s, targetLength, padString)
-
 export pure func split(s: string, sep: string | RegExp): Iterator<string> => iter(jsGlobal.String.prototype.split.call(s, sep))
+
+export const join: (i: Iterator<string>, sep?: string) => string = ___join
 
 export pure func indexOf(s: string, piece: string): number? =>
     const res = jsGlobal.String.prototype.indexOf.call(s, piece),
