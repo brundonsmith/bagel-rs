@@ -92,7 +92,11 @@ where
             let left_type = left.infer_type(ctx.into());
             let right_type = right.infer_type(ctx.into());
 
-            if left_type == Type::PoisonedType || right_type == Type::PoisonedType {
+            let simplified_left_type = left_type.clone().simplify(ctx.into());
+            let simplified_right_type = right_type.clone().simplify(ctx.into());
+            if simplified_left_type == Type::PoisonedType
+                || simplified_right_type == Type::PoisonedType
+            {
                 return;
             }
 
@@ -730,7 +734,10 @@ where
 
                 let subject_type = subject.infer_type(ctx.into());
 
-                if Type::AnyType == subject_type.clone().simplify(ctx.into()) {
+                let simplified_subject_type = subject_type.clone().simplify(ctx.into());
+                if simplified_subject_type == Type::AnyType
+                    || simplified_subject_type == Type::PoisonedType
+                {
                     return;
                 }
 
