@@ -12,7 +12,10 @@ use crate::{
     ModulesStore,
 };
 
-use super::{compile::CompileContext, resolve_type::ResolveContext};
+use super::{
+    compile::{CompileContext, INT},
+    resolve_type::ResolveContext,
+};
 
 impl AST<Expression> {
     pub fn infer_type<'a>(&self, ctx: InferTypeContext<'a>) -> Type {
@@ -23,7 +26,7 @@ impl AST<Expression> {
                 Expression::BinaryOperation(op) => binary_operation_type(ctx, &op),
                 Expression::Parenthesis(Parenthesis(inner)) => inner.infer_type(ctx),
                 Expression::LocalIdentifier(LocalIdentifier(name)) => {
-                    if name == JS_GLOBAL_IDENTIFIER {
+                    if name == JS_GLOBAL_IDENTIFIER || name.as_str().starts_with(INT) {
                         return Type::AnyType;
                     }
 

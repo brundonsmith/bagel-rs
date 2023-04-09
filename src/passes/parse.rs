@@ -2045,17 +2045,15 @@ fn identifier_like(i: Slice) -> ParseResult<Slice> {
 }
 
 pub fn is_valid_identifier(s: &str) -> bool {
-    !s.starts_with(INT)
-        && s.char_indices().all(|(index, ch)| {
-            ch == '_'
-                || ch == '$'
-                || if index == 0 {
-                    ch.is_alphabetic()
-                } else {
-                    ch.is_alphanumeric()
-                }
-        })
-        && !INVALID_IDENTIFIERS.contains(&s)
+    s.char_indices().all(|(index, ch)| {
+        ch == '_'
+            || ch == '$'
+            || if index == 0 {
+                ch.is_alphabetic()
+            } else {
+                ch.is_alphanumeric()
+            }
+    }) && !INVALID_IDENTIFIERS.contains(&s)
 }
 
 const INVALID_IDENTIFIERS: [&'static str; 0] = [];

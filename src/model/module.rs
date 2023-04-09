@@ -265,6 +265,16 @@ impl ModuleID {
             }
         }
     }
+
+    pub fn is_std_lib(&self) -> bool {
+        match self {
+            ModuleID::Local(_) => false,
+            ModuleID::Remote(url) => url.as_str().starts_with(
+                "https://raw.githubusercontent.com/brundonsmith/bagel-rs/master/lib/bgl",
+            ),
+            ModuleID::Artificial(_) => false,
+        }
+    }
 }
 
 #[memoize]

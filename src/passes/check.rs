@@ -18,7 +18,7 @@ use crate::{
 use std::fmt::Debug;
 use std::time::SystemTime;
 
-use super::typeinfer::binary_operation_type;
+use super::{compile::INT, typeinfer::binary_operation_type};
 
 impl Module {
     pub fn check<'a, F: FnMut(BagelError)>(&self, ctx: &CheckContext<'a>, report_error: &mut F) {
@@ -427,7 +427,22 @@ where
             Any::LocalIdentifier(LocalIdentifier(name)) => {
                 // TODO: Make sure it isn't a type
 
-                if name != JS_GLOBAL_IDENTIFIER {
+                if name.as_str().starts_with(INT) {
+                    if !ctx.current_module.module_id().is_std_lib() {
+                        // Not allowed to start with ___
+                        report_error(BagelError::MiscError {
+                            module_id: module_id.clone(),
+                            src: self.slice().clone(),
+                            message: format!(
+                                "{} isn't a valid identifier; identifiers can't start with {}",
+                                blue_string(name.as_str()),
+                                blue_string(INT),
+                            ),
+                        });
+                    } else {
+                        // do nothing; don't check this identifier
+                    }
+                } else if name != JS_GLOBAL_IDENTIFIER {
                     match self.resolve_symbol(name.as_str()) {
                         None => {
                             // Identifier can't be resolved
