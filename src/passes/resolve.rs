@@ -262,6 +262,44 @@ where
                     return self.parent();
                 }
             }
+            Some(Any::FuncType(FuncType {
+                type_params,
+                args: _,
+                args_spread: _,
+                is_pure: _,
+                is_async: _,
+                returns: _,
+            })) => {
+                if let Some(found) = type_params
+                    .iter()
+                    .find(|param| param.downcast().name.downcast().0 == symbol)
+                {
+                    return Some(found.clone().upcast());
+                }
+            }
+            Some(Any::ProcType(ProcType {
+                type_params,
+                args: _,
+                args_spread: _,
+                is_pure: _,
+                is_async: _,
+                throws: _,
+            })) => {
+                if let Some(found) = type_params
+                    .iter()
+                    .find(|param| param.downcast().name.downcast().0 == symbol)
+                {
+                    return Some(found.clone().upcast());
+                }
+            }
+            Some(Any::GenericType(GenericType { type_params, inner })) => {
+                if let Some(found) = type_params
+                    .iter()
+                    .find(|param| param.downcast().name.downcast().0 == symbol)
+                {
+                    return Some(found.clone().upcast());
+                }
+            }
             _ => {}
         };
 
