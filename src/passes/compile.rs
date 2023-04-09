@@ -602,7 +602,11 @@ where
                 inner,
                 possible_type,
             }) => todo!(),
-            Any::ErrorExpression(_) => todo!(),
+            Any::ErrorExpression(ErrorExpression(inner)) => {
+                f.write_str("{ kind: ___ERROR_SYM, value: ")?;
+                inner.compile(ctx, f)?;
+                f.write_str(" }")
+            }
             Any::RegularExpression(RegularExpression { expr, flags }) => todo!(),
             Any::AnyLiteral(_) => f.write_str("null"),
             Any::UnionType(UnionType(members)) => {
