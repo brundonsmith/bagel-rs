@@ -330,7 +330,18 @@ where
                 platforms,
                 name,
                 expr,
-            }) => todo!(),
+            }) => {
+                platforms.check(ctx, report_error);
+                name.check(ctx, report_error);
+                expr.check(ctx, report_error);
+
+                check_subsumation(
+                    &expr.infer_type(ctx.into()),
+                    any_error(),
+                    expr.slice(),
+                    report_error,
+                );
+            }
             Any::TestBlockDeclaration(TestBlockDeclaration {
                 platforms,
                 name,
