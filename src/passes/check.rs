@@ -2,7 +2,7 @@ use crate::{
     model::{
         ast::*,
         bgl_type::{
-            any_array, any_error, any_iterator, any_object, any_plan, string_template_safe_types,
+            any_array, any_error, any_iterable, any_object, any_plan, string_template_safe_types,
             Mutability, SubsumationContext, Type,
         },
         errors::blue_string,
@@ -734,31 +734,8 @@ where
 
                 let subject_type = subject.infer_type(ctx.into());
 
-                let simplified_subject_type = subject_type.clone().simplify(ctx.into());
-                if simplified_subject_type == Type::AnyType
-                    || simplified_subject_type == Type::PoisonedType
-                {
-                    return;
-                }
-
-                let arg_types = match &subject_type {
-                    Type::FuncType {
-                        args,
-                        args_spread,
-                        is_pure: _,
-                        returns: _,
-                    } => Some((args, args_spread)),
-                    Type::ProcType {
-                        args,
-                        args_spread,
-                        is_pure: _,
-                        is_async: _,
-                        throws: _,
-                    } => Some((args, args_spread)),
-                    _ => None,
-                };
-
-                if let Some((arg_types, args_spread_type)) = arg_types {
+                if let Some((arg_types, args_spread_type)) = subject_type.callable_arg_types() {
+                    // if subject is callable, check that all argument types match
                     for (i, arg) in args.iter().enumerate() {
                         if let Some(arg_type) = arg_types.get(i) {
                             if let Some(type_annotation) = &arg_type {
@@ -773,19 +750,25 @@ where
                     }
                 } else if let Some(inv) = method_call_as_invocation(
                     ctx.into(),
-                    self.clone().upcast().try_recast::<Expression>().unwrap(),
+                    self.clone().upcast().try_recast::<Invocation>().unwrap(),
                 ) {
+                    // if this is a method-style call that can be transformed to a plain invocation, check that instead
                     inv.check(ctx, report_error);
                 } else {
-                    report_error(BagelError::MiscError {
-                        module_id: module_id.clone(),
-                        src: subject.slice().clone(),
-                        message: format!(
-                            "{} is of type {} and cannot be called",
-                            blue_string(&subject.clone().upcast()),
-                            blue_string(&subject_type),
-                        ),
-                    });
+                    let simplified_subject_type = subject_type.clone().simplify(ctx.into());
+                    if simplified_subject_type != Type::AnyType
+                        && simplified_subject_type != Type::PoisonedType
+                    {
+                        report_error(BagelError::MiscError {
+                            module_id: module_id.clone(),
+                            src: subject.slice().clone(),
+                            message: format!(
+                                "{} is of type {} and cannot be called",
+                                blue_string(&subject.clone().upcast()),
+                                blue_string(&subject_type),
+                            ),
+                        });
+                    }
                 }
 
                 // TODO: Check that type_args fit
@@ -825,9 +808,16 @@ where
                 // TODO: detect unnecessary optional
                 // TODO: detect valid optional
 
-                if subject_type
-                    .get_property(ctx.into(), &property_type)
-                    .is_none()
+                let is_method_call = self
+                    .parent()
+                    .map(|parent| parent.upcast().try_recast::<Expression>())
+                    .flatten()
+                    .is_some();
+
+                if !is_method_call
+                    && subject_type
+                        .get_property(ctx.into(), &property_type)
+                        .is_none()
                 {
                     // doesn't have the property
 
@@ -1094,17 +1084,17 @@ where
             }
             Any::ForLoop(ForLoop {
                 item_identifier,
-                iterator,
+                iterable,
                 body,
             }) => {
                 item_identifier.check(ctx, report_error);
-                iterator.check(ctx, report_error);
+                iterable.check(ctx, report_error);
                 body.check(ctx, report_error);
 
                 check_subsumation(
-                    &any_iterator(),
-                    iterator.infer_type(ctx.into()),
-                    iterator.slice(),
+                    &any_iterable(),
+                    iterable.infer_type(ctx.into()),
+                    iterable.slice(),
                     report_error,
                 );
             }

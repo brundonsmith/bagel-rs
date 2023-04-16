@@ -15,6 +15,7 @@ use swc_ecma_transforms::Assumptions;
 
 use crate::model::module::ModulesStore;
 use crate::passes::compile::CompileContext;
+use crate::MINIFY;
 use std::fmt::Write;
 use std::io::Sink;
 use std::path::PathBuf;
@@ -60,8 +61,6 @@ impl ModulesStore {
         }
     }
 }
-
-const MINIFY: bool = false;
 
 fn minify(bundle: &str) -> String {
     let cm = Lrc::new(SourceMap::new(FilePathMapping::empty()));

@@ -757,7 +757,7 @@ fn type_expression_inner(l: usize, i: Slice) -> ParseResult<AST<TypeExpression>>
                     if type_args.len() == 1 {
                         let kind = match name.0.downcast().0.as_str() {
                             "Plan" => Some(SpecialTypeKind::Plan),
-                            "Iterator" => Some(SpecialTypeKind::Iterator),
+                            "Iterable" => Some(SpecialTypeKind::Iterable),
                             "Error" => Some(SpecialTypeKind::Error),
                             _ => None,
                         };
@@ -1090,12 +1090,12 @@ fn for_loop(i: Slice) -> ParseResult<AST<ForLoop>> {
             expression(0),
             block,
         ),
-        |(start, mut item_identifier, _, mut iterator, mut body)| {
+        |(start, mut item_identifier, _, mut iterable, mut body)| {
             make_node!(
                 ForLoop,
                 start.spanning(&body),
                 item_identifier,
-                iterator,
+                iterable,
                 body
             )
         },

@@ -496,56 +496,55 @@ pub struct PropertyAccessor {
 
 pub fn method_call_as_invocation<'a>(
     ctx: InferTypeContext<'a>,
-    expr: AST<Expression>,
+    invocation: AST<Invocation>,
 ) -> Option<AST<Expression>> {
-    match expr.downcast() {
-        Expression::Invocation(Invocation {
-            subject,
-            args,
-            spread_args,
-            type_args,
-            bubbles,
-            awaited_or_detached,
-        }) => match subject.downcast() {
-            Expression::PropertyAccessor(PropertyAccessor {
-                subject: property_subject,
-                property,
-                optional,
-            }) => {
-                let property_type = match &property {
-                    Property::Expression(expr) => expr.infer_type(ctx.into()),
-                    Property::PlainIdentifier(ident) => {
-                        Type::StringType(Some(ident.downcast().0.clone()))
-                    }
-                };
+    let Invocation {
+        subject,
+        args,
+        spread_args,
+        type_args,
+        bubbles,
+        awaited_or_detached,
+    } = invocation.downcast();
 
-                if property_subject
-                    .infer_type(ctx)
-                    .get_property(ctx.into(), &property_type)
-                    .is_none()
-                {
-                    if !optional {
-                        if let Property::PlainIdentifier(identifier) = property {
-                            let subject: AST<LocalIdentifier> = identifier.into();
-                            return Some(
-                                Expression::Invocation(Invocation {
-                                    subject: subject.recast::<Expression>(),
-                                    args: std::iter::once(property_subject)
-                                        .chain(args.into_iter())
-                                        .collect(),
-                                    spread_args,
-                                    type_args,
-                                    bubbles,
-                                    awaited_or_detached,
-                                })
-                                .as_ast(expr.slice().clone()),
-                            );
-                        }
+    match subject.downcast() {
+        Expression::PropertyAccessor(PropertyAccessor {
+            subject: property_subject,
+            property,
+            optional,
+        }) => {
+            let property_type = match &property {
+                Property::Expression(expr) => expr.infer_type(ctx.into()),
+                Property::PlainIdentifier(ident) => {
+                    Type::StringType(Some(ident.downcast().0.clone()))
+                }
+            };
+
+            if property_subject
+                .infer_type(ctx)
+                .get_property(ctx.into(), &property_type)
+                .is_none()
+            {
+                if !optional {
+                    if let Property::PlainIdentifier(identifier) = property {
+                        let subject: AST<LocalIdentifier> = identifier.into();
+                        return Some(
+                            Expression::Invocation(Invocation {
+                                subject: subject.recast::<Expression>(),
+                                args: std::iter::once(property_subject)
+                                    .chain(args.into_iter())
+                                    .collect(),
+                                spread_args,
+                                type_args,
+                                bubbles,
+                                awaited_or_detached,
+                            })
+                            .as_ast(invocation.slice().clone()),
+                        );
                     }
                 }
             }
-            _ => {}
-        },
+        }
         _ => {}
     }
 
@@ -771,7 +770,7 @@ pub struct IfElseStatementCase {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ForLoop {
     pub item_identifier: AST<PlainIdentifier>,
-    pub iterator: AST<Expression>,
+    pub iterable: AST<Expression>,
     pub body: AST<Block>,
 }
 
@@ -813,7 +812,7 @@ pub struct PlainIdentifier(pub Slice);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
 pub enum SpecialTypeKind {
-    Iterator,
+    Iterable,
     Plan,
     Error,
 }

@@ -173,15 +173,15 @@ impl AST<Expression> {
                             }
                             Any::ForLoop(ForLoop {
                                 item_identifier: _,
-                                iterator,
+                                iterable,
                                 body: _,
                             }) => {
-                                let iterator_type = iterator.infer_type(ctx);
+                                let iterable_type = iterable.infer_type(ctx);
 
                                 if let Type::SpecialType {
-                                    kind: SpecialTypeKind::Iterator,
+                                    kind: SpecialTypeKind::Iterable,
                                     inner,
-                                } = iterator_type
+                                } = iterable_type
                                 {
                                     return inner.as_ref().clone();
                                 } else {
@@ -333,7 +333,7 @@ impl AST<Expression> {
                     let max = end.infer_type(ctx).to_exact_number();
 
                     Type::SpecialType {
-                        kind: SpecialTypeKind::Iterator,
+                        kind: SpecialTypeKind::Iterable,
                         inner: Rc::new(Type::NumberType { min, max }),
                     }
                 }
@@ -351,7 +351,7 @@ impl AST<Expression> {
                 }) => {
                     if let Some(inv) = method_call_as_invocation(
                         ctx.into(),
-                        self.clone().upcast().try_recast::<Expression>().unwrap(),
+                        self.clone().upcast().try_recast::<Invocation>().unwrap(),
                     ) {
                         inv.infer_type(ctx)
                     } else {
@@ -364,6 +364,19 @@ impl AST<Expression> {
                                 is_pure: _,
                                 returns,
                             } => returns.as_ref().clone(),
+                            Type::GenericType { type_params, inner } => {
+                                if let Type::FuncType {
+                                    args,
+                                    args_spread,
+                                    is_pure,
+                                    returns,
+                                } = inner.as_ref()
+                                {
+                                    returns.as_ref().clone()
+                                } else {
+                                    Type::PoisonedType
+                                }
+                            }
                             Type::AnyType => Type::AnyType,
                             _ => Type::PoisonedType,
                         }
@@ -750,7 +763,7 @@ impl AST<Statement> {
             }
             Statement::ForLoop(ForLoop {
                 item_identifier: _,
-                iterator: _,
+                iterable: _,
                 body,
             }) => body.recast::<Statement>().throws(ctx),
             Statement::WhileLoop(WhileLoop { condition: _, body }) => {

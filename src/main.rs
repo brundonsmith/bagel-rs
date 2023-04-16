@@ -318,6 +318,8 @@ fn pretty_size(bytes: u64) -> String {
     }
 }
 
+pub const MINIFY: bool = false;
+
 fn bundle(entrypoint: &str, watch: bool, clean: bool) -> Result<PathBuf, ()> {
     let entrypoint_path_buf = get_single_entrypoint(entrypoint);
 
@@ -331,7 +333,8 @@ fn bundle(entrypoint: &str, watch: bool, clean: bool) -> Result<PathBuf, ()> {
                 return Err(());
             }
 
-            let bundle_path = entrypoint.with_extension("bundle.js");
+            let bundle_path =
+                entrypoint.with_extension(if MINIFY { "bundle.js" } else { "bundle.ts" });
 
             std::fs::write(&bundle_path, modules_store.bundle());
 

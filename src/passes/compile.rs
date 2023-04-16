@@ -220,7 +220,7 @@ where
                 platforms,
                 name,
                 expr,
-            }) => todo!(),
+            }) => Ok(()),
             Any::TestBlockDeclaration(TestBlockDeclaration {
                 platforms,
                 name,
@@ -504,7 +504,7 @@ where
             }) => {
                 if let Some(inv) = method_call_as_invocation(
                     ctx.into(),
-                    self.clone().upcast().try_recast::<Expression>().unwrap(),
+                    self.clone().upcast().try_recast::<Invocation>().unwrap(),
                 ) {
                     inv.compile(ctx, f)?;
                 } else {
@@ -597,7 +597,14 @@ where
                 }
                 f.write_str(" ] }")
             }
-            Any::AsCast(AsCast { inner, as_type }) => todo!(),
+            Any::AsCast(AsCast { inner, as_type }) => {
+                inner.compile(ctx, f)?;
+                if ctx.include_types {
+                    f.write_str(" as ")?;
+                    as_type.compile(ctx, f)?;
+                }
+                Ok(())
+            }
             Any::InstanceOf(InstanceOf {
                 inner,
                 possible_type,
@@ -759,7 +766,13 @@ where
             Any::RecordType(RecordType {
                 key_type,
                 value_type,
-            }) => todo!(),
+            }) => {
+                f.write_str("Record<")?;
+                key_type.compile(ctx, f)?;
+                f.write_str(", ")?;
+                value_type.compile(ctx, f)?;
+                f.write_str(">")
+            }
             Any::ArrayType(ArrayType(element)) => {
                 f.write_char('(')?;
                 element.compile(ctx, f)?;
@@ -837,13 +850,13 @@ where
             }
             Any::ForLoop(ForLoop {
                 item_identifier,
-                iterator,
+                iterable,
                 body,
             }) => {
                 f.write_str("for (const ")?;
                 item_identifier.compile(ctx, f)?;
                 f.write_str(" of ")?;
-                iterator.compile(ctx, f)?;
+                iterable.compile(ctx, f)?;
                 f.write_str(".inner) ")?;
                 body.compile(ctx, f)
             }

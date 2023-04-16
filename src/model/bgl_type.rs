@@ -144,9 +144,9 @@ pub fn any_object() -> Type {
 }
 
 #[memoize]
-pub fn any_iterator() -> Type {
+pub fn any_iterable() -> Type {
     Type::SpecialType {
-        kind: SpecialTypeKind::Iterator,
+        kind: SpecialTypeKind::Iterable,
         inner: Rc::new(Type::AnyType),
     }
 }
@@ -184,6 +184,41 @@ impl Type {
     //     ],
     //     ...TYPE_AST_NOISE
     // }
+
+    pub fn callable_arg_types(&self) -> Option<(&Vec<Option<Type>>, Option<Rc<Type>>)> {
+        match &self {
+            Type::FuncType {
+                args,
+                args_spread,
+                is_pure: _,
+                returns: _,
+            } => Some((args, args_spread.clone())),
+            Type::ProcType {
+                args,
+                args_spread,
+                is_pure: _,
+                is_async: _,
+                throws: _,
+            } => Some((args, args_spread.clone())),
+            Type::GenericType { type_params, inner } => match inner.as_ref() {
+                Type::FuncType {
+                    args,
+                    args_spread,
+                    is_pure: _,
+                    returns: _,
+                } => Some((args, args_spread.clone())),
+                Type::ProcType {
+                    args,
+                    args_spread,
+                    is_pure: _,
+                    is_async: _,
+                    throws: _,
+                } => Some((args, args_spread.clone())),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
 
     pub fn subsumes<'a>(&self, ctx: SubsumationContext<'a>, other: &Self) -> bool {
         self.subsumation_issues(ctx, other).is_none()
@@ -499,6 +534,35 @@ impl Type {
                 },
             ) => {
                 if destination_kind == value_kind && destination_inner.subsumes(ctx, value_inner) {
+                    return None;
+                }
+            }
+            (
+                Type::SpecialType {
+                    kind: SpecialTypeKind::Iterable,
+                    inner: destination_inner,
+                },
+                Type::ArrayType {
+                    mutability: value_mutability,
+                    element_type: value_element_type,
+                },
+            ) => {
+                return destination_inner.subsumation_issues(ctx, value_element_type);
+            }
+            (
+                Type::SpecialType {
+                    kind: SpecialTypeKind::Iterable,
+                    inner: destination_inner,
+                },
+                Type::TupleType {
+                    mutability: value_mutability,
+                    members: value_members,
+                },
+            ) => {
+                if value_members.iter().all(|member| match member {
+                    ElementOrSpread::Element(element) => destination_inner.subsumes(ctx, element),
+                    ElementOrSpread::Spread(spread) => destination.subsumes(ctx, spread),
+                }) {
                     return None;
                 }
             }
@@ -839,7 +903,7 @@ impl Type {
                         kind: inner_kind,
                         inner,
                     } => match (inner_kind, kind) {
-                        (SpecialTypeKind::Iterator, SpecialTypeKind::Iterator) => {
+                        (SpecialTypeKind::Iterable, SpecialTypeKind::Iterable) => {
                             inner.as_ref().clone()
                         }
                         (SpecialTypeKind::Plan, SpecialTypeKind::Plan) => inner.as_ref().clone(),

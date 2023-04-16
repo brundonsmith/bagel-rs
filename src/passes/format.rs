@@ -526,7 +526,7 @@ where
             Any::IfElseStatementCase(IfElseStatementCase { condition, outcome }) => todo!(),
             Any::ForLoop(ForLoop {
                 item_identifier,
-                iterator,
+                iterable,
                 body,
             }) => todo!(),
             Any::WhileLoop(WhileLoop { condition, body }) => todo!(),

@@ -241,7 +241,7 @@ where
             }
             Some(Any::ForLoop(ForLoop {
                 item_identifier,
-                iterator: _,
+                iterable: _,
                 body: _,
             })) => {
                 if item_identifier.downcast().0 == symbol {

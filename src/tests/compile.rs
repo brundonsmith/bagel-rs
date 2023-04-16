@@ -235,7 +235,7 @@ fn Simple_proc_declaration() {
 fn Basic_proc_declaration() {
     test_compile(
         "
-        proc doStuff(items: Iterator<number>) |> {
+        proc doStuff(items: Iterable<number>) |> {
           let count = 0;
           
           for item of items {
@@ -244,7 +244,7 @@ fn Basic_proc_declaration() {
           log(count);
         }",
         "
-        const doStuff = function ___fn_doStuff(items: ___Iterator<number>): void { 
+        const doStuff = function ___fn_doStuff(items: Iterable<number>): void { 
           const count = { value: 0 };
   
           for (const item of items.inner) {
@@ -259,7 +259,7 @@ fn Basic_proc_declaration() {
 #[allow(non_snake_case)]
 fn Proc_declaration_with_statements() {
     test_compile("
-        proc doStuff(items: Iterator<number>) |> {
+        proc doStuff(items: Iterable<number>) |> {
           let count = 0;
   
           for item of items {
@@ -278,7 +278,7 @@ fn Proc_declaration_with_statements() {
   
           log(count);
         }", "
-        const doStuff = function ___fn_doStuff(items: ___Iterator<number>): void { 
+        const doStuff = function ___fn_doStuff(items: Iterable<number>): void { 
           const count = { value: 0 };
   
           for (const item of items.inner) { 
@@ -536,7 +536,7 @@ fn Runtime_types() {
       const d = x instanceof boolean
       const e = x instanceof nil
       const f = x instanceof 'stuff'
-      const g = x instanceof Iterator<number>
+      const g = x instanceof Iterable<number>
       const h = x instanceof Plan<number>
       const j = x instanceof Error<number>
       const k = x instanceof FooNominal
@@ -647,13 +647,13 @@ fn Type_declarations() {
       export type Foo = {
         a: string[],
         b: 'stuff',
-        c: Iterator<Other>
+        c: Iterable<Other>
       }
 
       export nominal type Bar(number)
       ",
         "
-      export type Foo = {a: string[], b: `stuff`, c: ___Iterator<Other>};
+      export type Foo = {a: string[], b: `stuff`, c: Iterable<Other>};
 
       const ___Bar = Symbol('Bar');
       export const Bar = ((value: number): Bar => ({ kind: ___Bar, value })) as (((value: number) => Bar) & { sym: typeof ___Bar });

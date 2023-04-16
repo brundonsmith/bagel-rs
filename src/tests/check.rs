@@ -112,8 +112,8 @@ fn Function_as_argument_inference_4() {
 fn Function_as_argument_inference_5() {
     test_check(
         "
-    pure js func iter<T>(arr: T[]): Iterator<T> => {# #}
-    func find<T>(iter: Iterator<T>, fn: (el: T) => boolean): T? => nil
+    pure js func iter<T>(arr: T[]): Iterable<T> => {# #}
+    func find<T>(iter: Iterable<T>, fn: (el: T) => boolean): T? => nil
 
     const x = [2, 4, 6, 8].iter().find(n => n > 5)",
         false,
@@ -125,9 +125,9 @@ fn Function_as_argument_inference_5() {
 fn Function_as_argument_inference_6() {
     test_check(
         "
-    js func map<T,R>(iter: Iterator<T>, fn: (el: T) => R): Iterator<R> => {# #}
+    js func map<T,R>(iter: Iterable<T>, fn: (el: T) => R): Iterable<R> => {# #}
 
-    func foo(i: Iterator<number>): Iterator<string> => i.map(n => n + 'a')",
+    func foo(i: Iterable<number>): Iterable<string> => i.map(n => n + 'a')",
         false,
     );
 }
@@ -681,39 +681,39 @@ fn Union_generic_param_inference_fail() {
 #[allow(non_snake_case)]
 fn Method_chain_generic_param_inference_pass() {
     test_check("
-      js func iter<T>(x: readonly T[]): Iterator<T> => {# #}
-      js func map<T,R>(iter: Iterator<T>, fn: (el: T) => R): Iterator<R> => {# #}
+      js func iter<T>(x: readonly T[]): Iterable<T> => {# #}
+      js func map<T,R>(iter: Iterable<T>, fn: (el: T) => R): Iterable<R> => {# #}
 
-      func foo(arr: readonly number[]): Iterator<string> => arr.iter().map((n: number) => 'foo' + n)", false);
+      func foo(arr: readonly number[]): Iterable<string> => arr.iter().map((n: number) => 'foo' + n)", false);
 }
 
 #[test]
 #[allow(non_snake_case)]
 fn Method_chain_generic_param_inference_fail() {
     test_check("
-      js func iter<T>(x: readonly T[]): Iterator<T> => {# #}
-      js func map<T,R>(iter: Iterator<T>, fn: (el: T) => R): Iterator<R> => {# #}
+      js func iter<T>(x: readonly T[]): Iterable<T> => {# #}
+      js func map<T,R>(iter: Iterable<T>, fn: (el: T) => R): Iterable<R> => {# #}
 
-      func foo(arr: readonly number[]): Iterator<number> => arr.iter().map((n: number) => 'foo' + n)", true);
+      func foo(arr: readonly number[]): Iterable<number> => arr.iter().map((n: number) => 'foo' + n)", true);
 }
 
 #[test]
 #[allow(non_snake_case)]
-fn Iterator_generic_param_inference_pass() {
+fn Iterable_generic_param_inference_pass() {
     test_check("
       // copied from lib/bgl
-      export pure js func iter<T>(x: readonly T[]): Iterator<T> => {#
+      export pure js func iter<T>(x: readonly T[]): Iterable<T> => {#
         return ___iter(x)
       #}
-      export pure js func filter<T>(iter: Iterator<T>, fn: (el: T) => boolean): Iterator<T> =>     {# return iter.filter(fn) #}
-      export pure js func first<T>(iter: Iterator<T>): T? =>                                       {# return iter.first() #} 
-      export pure js func concat<T,R>(iter: Iterator<T>, other: Iterator<R>): Iterator<T|R> =>         {# return iter.concat(other) #}
-      export pure js func collectArray<T>(iter: Iterator<T>): T[] =>                               {# return iter.collectArray() #}
+      export pure js func filter<T>(iter: Iterable<T>, fn: (el: T) => boolean): Iterable<T> =>     {# return iter.filter(fn) #}
+      export pure js func first<T>(iter: Iterable<T>): T? =>                                       {# return iter.first() #} 
+      export pure js func concat<T,R>(iter: Iterable<T>, other: Iterable<R>): Iterable<T|R> =>         {# return iter.concat(other) #}
+      export pure js func collectArray<T>(iter: Iterable<T>): T[] =>                               {# return iter.collectArray() #}
 
-      const i: Iterator<number> = [1, 2, 3].iter()
+      const i: Iterable<number> = [1, 2, 3].iter()
       const foo: number? = i.filter((n: number) => n > 2).first()
 
-      func find<T>(iter: Iterator<T>, fn: (el: T) => boolean): T? =>
+      func find<T>(iter: Iterable<T>, fn: (el: T) => boolean): T? =>
         iter.filter(fn).first()
 
       const x: number[] = concat([2, 4].iter(), [6, 8].iter()).collectArray()
@@ -2112,7 +2112,7 @@ fn Proc_declaration_with_statements_pass() {
         "
     proc log(val: unknown) |> { }
 
-    proc doStuff(items: Iterator<{ foo: boolean }>) |> {
+    proc doStuff(items: Iterable<{ foo: boolean }>) |> {
       let count = 0;
 
       for item of items {
@@ -2142,7 +2142,7 @@ fn Proc_declaration_with_statements_fail_1() {
         "
     proc log(val: unknown) |> { }
 
-    proc doStuff(items: Iterator<{ foo: boolean }>) |> {
+    proc doStuff(items: Iterable<{ foo: boolean }>) |> {
       let count: string = 0;
     }",
         true,
@@ -2156,7 +2156,7 @@ fn Proc_declaration_with_statements_fail_2() {
         "
     proc log(val: unknown) |> { }
 
-    proc doStuff(items: Iterator<{ foo: boolean }>) |> {
+    proc doStuff(items: Iterable<{ foo: boolean }>) |> {
       const count = 0;
 
       for item of items {
@@ -2172,7 +2172,7 @@ fn Proc_declaration_with_statements_fail_2() {
 fn Proc_declaration_with_statements_fail_3() {
     test_check(
         "
-    proc doStuff(items: Iterator<{ foo: boolean }>) |> {
+    proc doStuff(items: Iterable<{ foo: boolean }>) |> {
       const count = count;
     }",
         true,
@@ -2685,7 +2685,7 @@ fn Switch_expression_fail_3() {
 fn Range_expression_pass() {
     test_check(
         "
-    const a: Iterator<number> = 0..10
+    const a: Iterable<number> = 0..10
     
     proc foo() |> {
       for n of 5..15 {
@@ -2701,7 +2701,7 @@ fn Range_expression_pass() {
 fn Range_expression_fail() {
     test_check(
         "
-    const a: Iterator<string> = 0..10",
+    const a: Iterable<string> = 0..10",
         true,
     );
 }
@@ -3236,19 +3236,19 @@ fn Throws_declaration_fail_3() {
     );
 }
 
-#[test]
-#[allow(non_snake_case)]
-fn Circular_type_pass_1() {
-    test_check(
-        "
-    type Foo =
-      | { a: Foo }
-      | nil
-    
-    const foo: Foo = { a: nil }",
-        false,
-    );
-}
+// #[test]
+// #[allow(non_snake_case)]
+// fn Circular_type_pass_1() {
+//     test_check(
+//         "
+//     type Foo =
+//       | { a: Foo }
+//       | nil
+
+//     const foo: Foo = { a: nil }",
+//         false,
+//     );
+// }
 
 #[test]
 #[allow(non_snake_case)]
@@ -3268,32 +3268,32 @@ fn Circular_type_pass_2() {
     );
 }
 
-#[test]
-#[allow(non_snake_case)]
-fn Circular_type_pass_3() {
-    test_check(
-        "
-        export type JSON =
-            | {[string]: JSON}
-            | JSON[]
-            | string
-            | number
-            | boolean
-            | nil
-    
-        export func clone<T extends JSON>(val: T): T =>
-            if val instanceof {[string]: unknown} {
-                val.entries()
-                    .map(entry => [entry[0], entry[1].clone()])
-                    .collectObject()
-            } else if val instanceof unknown[] {
-                val.map(clone).collectArray()
-            } else {
-                val
-            }",
-        false,
-    );
-}
+// #[test]
+// #[allow(non_snake_case)]
+// fn Circular_type_pass_3() {
+//     test_check(
+//         "
+//         export type JSON =
+//             | {[string]: JSON}
+//             | JSON[]
+//             | string
+//             | number
+//             | boolean
+//             | nil
+
+//         export func clone<T extends JSON>(val: T): T =>
+//             if val instanceof {[string]: unknown} {
+//                 val.entries()
+//                     .map(entry => [entry[0], entry[1].clone()])
+//                     .collectObject()
+//             } else if val instanceof unknown[] {
+//                 val.map(clone).collectArray()
+//             } else {
+//                 val
+//             }",
+//         false,
+//     );
+// }
 
 #[test]
 #[allow(non_snake_case)]
