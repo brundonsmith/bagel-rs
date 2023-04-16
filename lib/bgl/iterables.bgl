@@ -1,0 +1,40 @@
+from './core.bgl' import { assert }
+
+export const map: <T,R>(iter: Iterable<T>, fn: (el: T) => R) => Iterable<R> = ___map
+export const reduce: <T, R>(iter: Iterable<T>, init: R, fn: (acc: R, el: T) => R) => R = ___reduce
+export const filter: <T>(iter: Iterable<T>, fn: (el: T) => boolean) => Iterable<T> = ___filter
+export const slice: <T>(iter: Iterable<T>, start: number, end?: number) => Iterable<T> = ___slice
+export const takeWhile: <T>(iter: Iterable<T>, fn: (el: T) => boolean) => Iterable<T> = ___takeWhile
+export const sorted: <T>(iter: Iterable<T>, fn: (a: T, b: T) => number) => Iterable<T> = ___sorted
+export const every: <T>(iter: Iterable<T>, fn: (el: T) => boolean) => boolean = ___every
+export const some: <T>(iter: Iterable<T>, fn: (el: T) => boolean) => boolean = ___some
+export const count: <T>(iter: Iterable<T>) => number = ___count
+export const first: <T>(iter: Iterable<T>) => T? = ___first 
+export const concat: <T,R>(iter: Iterable<T>, other: Iterable<R>) => Iterable<T|R> = ___concat
+export const zip: <T,R>(iter: Iterable<T>, other: Iterable<R>) => Iterable<[T?, R?]> = ___zip
+export const indexed: <T>(iter: Iterable<T>) => Iterable<[T, number]> = ___indexed
+export const repeat: <T>(val: T, count: number) => Iterable<T> = ___repeat
+export const join: (iter: Iterable<string>, delimiter: string) => string = ___join
+
+export func find<T>(iter: Iterable<T>, fn: (el: T) => boolean): T? =>
+    iter.filter(fn).first()
+
+export const collectArray: <T>(iter: Iterable<T>) => T[] = ___collectArray
+export const collectObject: <K extends string, V>(iter: Iterable<[K, V]>) => {[K]: V} = ___collectObject
+
+test expr 'count()' => assert([2, 4, 6, 8].count() == 4)
+test expr 'concat()' => assert(
+    const arr = concat([2, 4], [6, 8]).collectArray(),
+    arr[0] == 2 &&
+    arr[1] == 4 &&
+    arr[2] == 6 &&
+    arr[3] == 8
+)
+test expr 'zip()' => assert(
+    const arr = zip([1, 2], [3, 4]).collectArray(),
+    arr[0]?.[0] == 1 &&
+    arr[0]?.[1] == 3 &&
+    arr[1]?.[0] == 2 &&
+    arr[1]?.[1] == 4
+)
+test expr 'find()' => assert([2, 4, 6, 8].find((n: number) => n > 5) == 6)

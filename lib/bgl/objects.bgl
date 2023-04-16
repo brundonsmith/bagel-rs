@@ -4,8 +4,8 @@ export pure proc assign<B extends {}, A extends B>(a: A, b: B) |> {
     jsGlobal.Object.assign(a, b);
 }
 
-export pure func keys<O extends {}>(obj: O): Iterator<string> => keys(obj)
+export pure func keys<O extends {}>(obj: O): Iterable<string> => keys(obj)
 
-export pure func values<O extends {}>(obj: O): Iterator<unknown> => values(obj)
+export pure func values<O extends {}>(obj: O): Iterable<unknown> => values(obj)
 
-export pure func entries<O extends {}>(obj: O): Iterator<[string, unknown]> => entries(obj)
+export pure func entries<O extends {}>(obj: O): Iterable<[string, unknown]> => entries(obj)
