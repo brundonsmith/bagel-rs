@@ -1,19 +1,53 @@
-use crate::model::{
-    ast::{self, *},
-    module::{Module, ModuleID, ModulesStore},
-    slice::Slice,
+use crate::{
+    cli::ModulesStore,
+    model::{ast::*, ModuleID, ParsedModule, Slice},
 };
 use std::{
     collections::HashMap,
     fmt::{Result, Write},
 };
 
-impl Module {
-    pub fn compile<'a, W: Write>(&self, ctx: CompileContext<'a>, f: &mut W) -> Result {
+#[derive(Debug, Clone, Copy)]
+pub struct CompileContext<'a> {
+    pub modules: &'a ModulesStore,
+    pub current_module: &'a ParsedModule,
+    pub include_types: bool,
+    pub qualify_identifiers_with: Option<&'a HashMap<ModuleID, usize>>,
+    pub qualify_all_identifiers: bool,
+}
+
+impl<'a> CompileContext<'a> {
+    pub fn current_module_qualifier(&self) -> Option<usize> {
+        self.qualify_identifiers_with
+            .map(|qualify_identifiers_with| {
+                qualify_identifiers_with
+                    .get(self.current_module.module_id())
+                    .cloned()
+            })
+            .flatten()
+    }
+
+    pub fn qualifying_all_identifiers(self) -> Self {
+        CompileContext {
+            modules: self.modules,
+            current_module: self.current_module,
+            include_types: self.include_types,
+            qualify_identifiers_with: self.qualify_identifiers_with,
+            qualify_all_identifiers: true,
+        }
+    }
+}
+
+pub trait Compilable {
+    fn compile<'a, W: Write>(&self, ctx: CompileContext<'a>, f: &mut W) -> Result;
+}
+
+impl Compilable for ParsedModule {
+    fn compile<'a, W: Write>(&self, ctx: CompileContext<'a>, f: &mut W) -> Result {
         match self {
-            Module::Bagel { module_id: _, ast } => ast.compile(ctx, f),
-            Module::JavaScript { module_id: _ } => Ok(()),
-            Module::Singleton {
+            ParsedModule::Bagel { module_id: _, ast } => ast.compile(ctx, f),
+            ParsedModule::JavaScript { module_id: _ } => Ok(()),
+            ParsedModule::Singleton {
                 module_id: _,
                 contents,
             } => {
@@ -24,10 +58,6 @@ impl Module {
     }
 }
 
-pub trait Compilable {
-    fn compile<'a, W: Write>(&self, ctx: CompileContext<'a>, f: &mut W) -> Result;
-}
-
 impl<TKind> Compilable for AST<TKind>
 where
     TKind: Clone + TryFrom<Any>,
@@ -35,7 +65,7 @@ where
 {
     fn compile<'a, W: Write>(&self, ctx: CompileContext<'a>, f: &mut W) -> Result {
         match self.details() {
-            Any::Module(ast::Module {
+            Any::Module(Module {
                 module_id: _,
                 declarations,
             }) => {
@@ -324,7 +354,7 @@ where
                 if name == JS_GLOBAL_IDENTIFIER {
                     f.write_str("globalThis")
                 } else {
-                    let resolved = self.resolve_symbol(name.as_str());
+                    let resolved = self.resolve_symbol(ctx.into(), name.as_str());
 
                     match resolved.as_ref().map(|r| r.details()) {
                         Some(Any::ImportDeclaration(ImportDeclaration {
@@ -608,7 +638,14 @@ where
             Any::InstanceOf(InstanceOf {
                 inner,
                 possible_type,
-            }) => todo!(),
+            }) => {
+                f.write_str(INT)?;
+                f.write_str("instanceOf(")?;
+                inner.compile(ctx, f)?;
+                f.write_str(", ")?;
+                todo!();
+                // f.write_str(")")
+            }
             Any::ErrorExpression(ErrorExpression(inner)) => {
                 f.write_str("{ kind: ___ERROR_SYM, value: ")?;
                 inner.compile(ctx, f)?;
@@ -647,7 +684,7 @@ where
                             f.write_str(", ")?;
                         }
 
-                        param.compile(ctx, f);
+                        param.compile(ctx, f)?;
                     }
                     f.write_char('>')?;
                 }
@@ -677,7 +714,7 @@ where
                             f.write_str(", ")?;
                         }
 
-                        param.compile(ctx, f);
+                        param.compile(ctx, f)?;
                     }
                     f.write_char('>')?;
                 }
@@ -994,7 +1031,7 @@ where
 {
     fn compile<'a, W: Write>(&self, ctx: CompileContext<'a>, f: &mut W) -> Result {
         if let Some(sel) = self {
-            sel.compile(ctx, f);
+            sel.compile(ctx, f)?;
         }
 
         Ok(())
@@ -1007,7 +1044,7 @@ where
 {
     fn compile<'a, W: Write>(&self, ctx: CompileContext<'a>, f: &mut W) -> Result {
         for el in self.iter() {
-            el.compile(ctx, f);
+            el.compile(ctx, f)?;
         }
 
         Ok(())
@@ -1139,35 +1176,4 @@ fn compile_type_annotation<'a, W: Write>(
     }
 
     Ok(())
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct CompileContext<'a> {
-    pub modules: &'a ModulesStore,
-    pub current_module: &'a Module,
-    pub include_types: bool,
-    pub qualify_identifiers_with: Option<&'a HashMap<ModuleID, usize>>,
-    pub qualify_all_identifiers: bool,
-}
-
-impl<'a> CompileContext<'a> {
-    pub fn current_module_qualifier(&self) -> Option<usize> {
-        self.qualify_identifiers_with
-            .map(|qualify_identifiers_with| {
-                qualify_identifiers_with
-                    .get(self.current_module.module_id())
-                    .cloned()
-            })
-            .flatten()
-    }
-
-    pub fn qualifying_all_identifiers(self) -> Self {
-        CompileContext {
-            modules: self.modules,
-            current_module: self.current_module,
-            include_types: self.include_types,
-            qualify_identifiers_with: self.qualify_identifiers_with,
-            qualify_all_identifiers: true,
-        }
-    }
 }

@@ -1,13 +1,12 @@
-use std::{collections::HashMap, ops::Add, rc::Rc};
+use std::{collections::HashMap, ops::Add};
 
 use crate::{
+    cli::ModulesStore,
     gather_errors,
-    model::{
-        errors::{BagelError, ParseError},
-        module::{Module, ModuleID, ModulesStore},
-    },
-    passes::parse::parse,
+    model::{BagelError, ModuleID, ParseError, ParsedModule},
+    passes::parse,
     print_errors,
+    utils::Rcable,
 };
 
 #[test]
@@ -4274,15 +4273,18 @@ fn Pure_procs_fail_3() {
 }
 
 fn test_check(bgl: &str, should_fail: bool) {
-    let module_id = ModuleID::Artificial(Rc::new("foo".to_owned()));
-    let bgl_rc = Rc::new(bgl.to_owned() + " ");
+    let module_id = ModuleID::Artificial("foo".to_owned().rc());
+    let bgl_rc = (bgl.to_owned() + " ").rc();
 
     let parsed = parse(module_id.clone(), bgl_rc.clone());
 
     match parsed {
         Ok(ast) => {
             let mut modules_store = HashMap::new();
-            modules_store.insert(module_id.clone(), Ok(Module::Bagel { module_id, ast }));
+            modules_store.insert(
+                module_id.clone(),
+                Ok(ParsedModule::Bagel { module_id, ast }),
+            );
             let modules_store = modules_store.into();
 
             let errors = gather_errors(&modules_store);
@@ -4311,22 +4313,21 @@ fn test_check(bgl: &str, should_fail: bool) {
 }
 
 fn test_check_multi(modules: Vec<(&str, &str)>, should_fail: bool) {
-    let modules_store: HashMap<ModuleID, Result<Module, ParseError>> = modules
+    let modules_store: ModulesStore = modules
         .into_iter()
         .map(|(id, bgl)| {
-            let module_id = ModuleID::Artificial(Rc::new(id.to_owned()));
-            let bgl_rc = Rc::new(bgl.to_owned() + " ");
+            let module_id = ModuleID::Artificial(id.to_owned().rc());
+            let bgl_rc = (bgl.to_owned() + " ").rc();
 
             (
                 module_id.clone(),
-                parse(module_id.clone(), bgl_rc.clone()).map(|ast| Module::Bagel {
+                parse(module_id.clone(), bgl_rc.clone()).map(|ast| ParsedModule::Bagel {
                     module_id: module_id.clone(),
                     ast,
                 }),
             )
         })
         .collect();
-    let modules_store: ModulesStore = modules_store.into();
 
     let parse_errors = modules_store
         .iter()

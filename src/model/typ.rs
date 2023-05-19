@@ -1,23 +1,25 @@
 use std::{
-    fmt::{Display, Write},
+    fmt::{Debug, Display, Write},
     rc::Rc,
 };
 
 use enum_variant_type::EnumVariantType;
 use memoize::memoize;
 
+#[allow(unused_imports)]
+use crate::utils::Loggable;
 use crate::{
-    passes::{check::CheckContext, resolve_type::ResolveContext, typeinfer::InferTypeContext},
-    ModulesStore,
-};
-
-use super::{
-    ast::{
-        Any, ElementOrSpread, KeyValueOrSpread, LocalIdentifier, ModifierTypeKind, SpecialTypeKind,
-        SymbolDeclaration, TypeDeclaration, AST,
+    cli::ModulesStore,
+    model::{
+        ast::{
+            Any, ElementOrSpread, KeyValueOrSpread, LocalIdentifier, ModifierTypeKind,
+            SpecialTypeKind, SymbolDeclaration, TypeDeclaration, AST,
+        },
+        parsed_module::ParsedModule,
+        slice::Slice,
+        ModuleID,
     },
-    module::{Module, ModuleID},
-    slice::Slice,
+    utils::Rcable,
 };
 
 #[derive(Clone, Debug, PartialEq, EnumVariantType)]
@@ -39,6 +41,10 @@ pub enum Type {
     GenericType {
         type_params: Vec<TypeParam>,
         inner: Rc<Type>,
+    },
+    BoundGenericType {
+        type_args: Vec<Type>,
+        generic: Rc<Type>,
     },
 
     NamedType {
@@ -130,7 +136,7 @@ pub fn string_template_safe_types() -> Type {
 pub fn any_array() -> Type {
     Type::ArrayType {
         mutability: Mutability::Readonly,
-        element_type: Rc::new(Type::AnyType),
+        element_type: Type::AnyType.rc(),
     }
 }
 
@@ -138,8 +144,8 @@ pub fn any_array() -> Type {
 pub fn any_object() -> Type {
     Type::RecordType {
         mutability: Mutability::Readonly,
-        key_type: Rc::new(Type::AnyType),
-        value_type: Rc::new(Type::AnyType),
+        key_type: Type::AnyType.rc(),
+        value_type: Type::AnyType.rc(),
     }
 }
 
@@ -147,7 +153,7 @@ pub fn any_object() -> Type {
 pub fn any_iterable() -> Type {
     Type::SpecialType {
         kind: SpecialTypeKind::Iterable,
-        inner: Rc::new(Type::AnyType),
+        inner: Type::AnyType.rc(),
     }
 }
 
@@ -155,7 +161,7 @@ pub fn any_iterable() -> Type {
 pub fn any_error() -> Type {
     Type::SpecialType {
         kind: SpecialTypeKind::Error,
-        inner: Rc::new(Type::AnyType),
+        inner: Type::AnyType.rc(),
     }
 }
 
@@ -163,8 +169,15 @@ pub fn any_error() -> Type {
 pub fn any_plan() -> Type {
     Type::SpecialType {
         kind: SpecialTypeKind::Plan,
-        inner: Rc::new(Type::AnyType),
+        inner: Type::AnyType.rc(),
     }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct SubsumationContext<'a> {
+    pub modules: &'a ModulesStore,
+    pub current_module: &'a ParsedModule,
+    pub symbols_encountered: &'a Vec<Slice>,
 }
 
 impl Type {
@@ -575,7 +588,7 @@ impl Type {
             ) => {
                 return Type::SpecialType {
                     kind: *value_kind,
-                    inner: Rc::new(destination.clone()),
+                    inner: destination.clone().rc(),
                 }
                 .subsumation_issues(ctx, value_inner)
             }
@@ -723,6 +736,8 @@ impl Type {
     }
 
     pub fn simplify<'a>(self, ctx: SubsumationContext<'a>) -> Type {
+        println!("simplify {} {:?}", self, ctx.symbols_encountered);
+
         match self {
             Type::NamedType { mutability, name } => {
                 let name_slice = name.downcast().0;
@@ -745,7 +760,7 @@ impl Type {
                         symbols_encountered,
                     };
 
-                    name.resolve_symbol(name_slice.as_str())
+                    name.resolve_symbol(ctx.into(), name_slice.as_str())
                         .map(|resolved| match resolved.details() {
                             Any::TypeDeclaration(TypeDeclaration {
                                 name: _,
@@ -991,7 +1006,7 @@ impl Type {
                 match is_array {
                     true => Type::ArrayType {
                         mutability,
-                        element_type: Rc::new(Type::UnionType(simplified_members)),
+                        element_type: Type::UnionType(simplified_members).rc(),
                     },
                     false => Type::TupleType {
                         mutability,
@@ -1008,20 +1023,28 @@ impl Type {
                 value_type,
             } => Type::RecordType {
                 mutability,
-                key_type: Rc::new(key_type.as_ref().clone().simplify(ctx)),
-                value_type: Rc::new(value_type.as_ref().clone().simplify(ctx)),
+                key_type: key_type.as_ref().clone().simplify(ctx).rc(),
+                value_type: value_type.as_ref().clone().simplify(ctx).rc(),
             },
             Type::ArrayType {
                 mutability,
                 element_type,
             } => Type::ArrayType {
                 mutability,
-                element_type: Rc::new(element_type.as_ref().clone().simplify(ctx)),
+                element_type: element_type.as_ref().clone().simplify(ctx).rc(),
             },
             Type::SpecialType { kind, inner } => Type::SpecialType {
                 kind,
-                inner: Rc::new(inner.as_ref().clone().simplify(ctx)),
+                inner: inner.as_ref().clone().simplify(ctx).rc(),
             },
+            Type::BoundGenericType { type_args, generic } => {
+                if let Type::GenericType { type_params, inner } = generic.as_ref() {
+                    // let params_to_args = type_params.iter().zip(type_args.iter()).collect();
+                    todo!()
+                } else {
+                    unreachable!()
+                }
+            }
             _ => self,
         }
     }
@@ -1088,6 +1111,10 @@ impl Type {
                 type_params: _,
                 inner: _,
             } => 25,
+            Type::BoundGenericType {
+                type_args: _,
+                generic: _,
+            } => 26,
         }
     }
 
@@ -1135,11 +1162,11 @@ impl Type {
             // recursive
             Type::ModifierType { kind, inner } => Type::ModifierType {
                 kind,
-                inner: Rc::new(inner.as_ref().clone().with_mutability(new_mutability)),
+                inner: inner.as_ref().clone().with_mutability(new_mutability).rc(),
             },
-            Type::ReturnType(inner) => Type::ReturnType(Rc::new(
-                inner.as_ref().clone().with_mutability(new_mutability),
-            )),
+            Type::ReturnType(inner) => {
+                Type::ReturnType(inner.as_ref().clone().with_mutability(new_mutability).rc())
+            }
             Type::UnionType(members) => Type::UnionType(
                 members
                     .into_iter()
@@ -1148,7 +1175,7 @@ impl Type {
             ),
             Type::GenericType { type_params, inner } => Type::GenericType {
                 type_params,
-                inner: Rc::new(inner.as_ref().clone().with_mutability(new_mutability)),
+                inner: inner.as_ref().clone().with_mutability(new_mutability).rc(),
             },
             // Type::PropertyType { subject, property } => todo!(),
             // Type::ProcType {
@@ -1370,68 +1397,13 @@ impl Type {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
-pub struct SubsumationContext<'a> {
-    pub modules: &'a ModulesStore,
-    pub current_module: &'a Module,
-    pub symbols_encountered: &'a Vec<Slice>,
-}
-
-impl<'a> From<&CheckContext<'a>> for SubsumationContext<'a> {
-    fn from(
-        CheckContext {
-            modules,
-            current_module,
-            nearest_func_or_proc: _,
-        }: &CheckContext<'a>,
-    ) -> Self {
-        Self {
-            modules,
-            current_module,
-            symbols_encountered: NO_SYMBOLS_ENCOUNTERED,
-        }
-    }
-}
-
-impl<'a> From<InferTypeContext<'a>> for SubsumationContext<'a> {
-    fn from(
-        InferTypeContext {
-            modules,
-            current_module,
-        }: InferTypeContext<'a>,
-    ) -> Self {
-        Self {
-            modules,
-            current_module,
-            symbols_encountered: NO_SYMBOLS_ENCOUNTERED,
-        }
-    }
-}
-
-impl<'a> From<ResolveContext<'a>> for SubsumationContext<'a> {
-    fn from(
-        ResolveContext {
-            modules,
-            current_module,
-        }: ResolveContext<'a>,
-    ) -> Self {
-        Self {
-            modules,
-            current_module,
-            symbols_encountered: NO_SYMBOLS_ENCOUNTERED,
-        }
-    }
-}
-
-const NO_SYMBOLS_ENCOUNTERED: &'static Vec<Slice> = &Vec::new();
-
 impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Type::ModifierType { kind, inner } => {
                 f.write_str(kind.into())?;
                 f.write_char(' ')?;
-                inner.fmt(f)
+                f.write_fmt(format_args!("{}", inner))
             }
             Type::InnerType { kind, inner } => todo!(),
             Type::ReturnType(inner) => todo!(),
@@ -1459,6 +1431,18 @@ impl Display for Type {
                 }
 
                 f.write_fmt(format_args!("{}", inner))
+            }
+            Type::BoundGenericType { type_args, generic } => {
+                f.write_char('<')?;
+                for (index, arg) in type_args.iter().enumerate() {
+                    if index > 0 {
+                        f.write_str(", ")?;
+                    }
+                    f.write_fmt(format_args!("{}", arg))?;
+                }
+                f.write_char('>')?;
+
+                f.write_fmt(format_args!("{}", generic))
             }
 
             Type::NamedType {

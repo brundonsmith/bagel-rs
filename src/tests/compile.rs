@@ -1,14 +1,11 @@
-use std::{collections::HashMap, rc::Rc};
+use std::collections::HashMap;
 
 use regex::Regex;
 
 use crate::{
-    model::{
-        errors::BagelError,
-        module::{Module, ModuleID},
-    },
-    passes::compile::{Compilable, CompileContext},
-    passes::parse::parse,
+    model::{BagelError, ModuleID, ParsedModule},
+    passes::{parse, Compilable, CompileContext},
+    utils::Rcable,
 };
 
 #[test]
@@ -859,27 +856,26 @@ fn Element_tag() {
 }
 
 fn test_compile(bgl: &str, js: &str) {
-    let module_id = ModuleID::Artificial(Rc::new("foo".to_owned()));
-    let parsed = parse(module_id.clone(), Rc::new(bgl.to_owned() + " "));
+    let module_id = ModuleID::Artificial("foo".to_owned().rc());
+    let parsed = parse(module_id.clone(), (bgl.to_owned() + " ").rc());
 
     match parsed {
         Ok(parsed) => {
             let mut modules_store = HashMap::new();
             modules_store.insert(
                 module_id.clone(),
-                Ok(Module::Bagel {
+                Ok(ParsedModule::Bagel {
                     module_id: module_id.clone(),
                     ast: parsed.clone(),
                 }),
             );
-            let modules_store = modules_store.into();
 
             let mut compiled = String::new();
             parsed
                 .compile(
                     CompileContext {
                         modules: &modules_store,
-                        current_module: modules_store.get(&module_id).unwrap(),
+                        current_module: modules_store.get(&module_id).unwrap().as_ref().unwrap(),
                         include_types: true,
                         qualify_identifiers_with: None,
                         qualify_all_identifiers: false,

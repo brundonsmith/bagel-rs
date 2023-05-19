@@ -1,26 +1,42 @@
 use std::rc::Rc;
 
-use crate::model::{
-    ast::*,
-    bgl_type::{Mutability, SubsumationContext, Type},
-    module::{Module, ModulesStore},
+use crate::{
+    cli::ModulesStore,
+    model::{
+        ast::{
+            ArrayType, BooleanLiteralType, BoundGenericType, ElementOrSpread, FuncType,
+            GenericParamType, GenericType, KeyValueOrSpread, MaybeType, ModifierType, NamedType,
+            NumberLiteralType, ObjectType, ParenthesizedType, ProcType, PropertyType, RecordType,
+            SpecialType, StringLiteralType, TupleType, TypeExpression, TypeofType, UnionType, AST,
+        },
+        Mutability, ParsedModule, Type, TypeParam,
+    },
+    utils::Rcable,
 };
 
-use super::{check::CheckContext, typeinfer::InferTypeContext};
+#[derive(Clone, Copy, Debug)]
+pub struct ResolveTypeContext<'a> {
+    pub modules: &'a ModulesStore,
+    pub current_module: &'a ParsedModule,
+}
 
 impl AST<TypeExpression> {
-    pub fn resolve_type<'a>(&self, ctx: ResolveContext<'a>) -> Type {
+    pub fn resolve_type<'a>(&self, ctx: ResolveTypeContext<'a>) -> Type {
         match self.downcast() {
             TypeExpression::ModifierType(ModifierType { kind, inner }) => Type::ModifierType {
                 kind,
-                inner: Rc::new(inner.resolve_type(ctx)),
+                inner: inner.resolve_type(ctx).rc(),
             },
             TypeExpression::GenericParamType(GenericParamType { name, extends }) => todo!(),
             TypeExpression::GenericType(GenericType { type_params, inner }) => todo!(),
             TypeExpression::BoundGenericType(BoundGenericType { type_args, generic }) => {
-                // TODO
-
-                Type::PoisonedType
+                Type::BoundGenericType {
+                    type_args: type_args
+                        .into_iter()
+                        .map(|arg| arg.resolve_type(ctx))
+                        .collect(),
+                    generic: generic.resolve_type(ctx).rc(),
+                }
             }
             TypeExpression::ProcType(ProcType {
                 type_params,
@@ -55,7 +71,7 @@ impl AST<TypeExpression> {
                     Type::GenericType {
                         type_params: type_params
                             .into_iter()
-                            .map(|param| crate::model::bgl_type::TypeParam {
+                            .map(|param| TypeParam {
                                 name: param.downcast().name.downcast().0.clone(),
                                 extends: param
                                     .downcast()
@@ -63,7 +79,7 @@ impl AST<TypeExpression> {
                                     .map(|extends| extends.resolve_type(ctx)),
                             })
                             .collect(),
-                        inner: Rc::new(proc_type),
+                        inner: proc_type.rc(),
                     }
                 } else {
                     proc_type
@@ -105,7 +121,7 @@ impl AST<TypeExpression> {
                     Type::GenericType {
                         type_params: type_params
                             .into_iter()
-                            .map(|param| crate::model::bgl_type::TypeParam {
+                            .map(|param| TypeParam {
                                 name: param.downcast().name.downcast().0.clone(),
                                 extends: param
                                     .downcast()
@@ -113,7 +129,7 @@ impl AST<TypeExpression> {
                                     .map(|extends| extends.resolve_type(ctx)),
                             })
                             .collect(),
-                        inner: Rc::new(func_type),
+                        inner: func_type.rc(),
                     }
                 } else {
                     func_type
@@ -121,7 +137,7 @@ impl AST<TypeExpression> {
             }
             TypeExpression::SpecialType(SpecialType { kind, inner }) => Type::SpecialType {
                 kind,
-                inner: Rc::new(inner.resolve_type(ctx)),
+                inner: inner.resolve_type(ctx).rc(),
             },
             TypeExpression::ObjectType(ObjectType {
                 entries,
@@ -160,12 +176,12 @@ impl AST<TypeExpression> {
                 value_type,
             }) => Type::RecordType {
                 mutability: Mutability::Mutable,
-                key_type: Rc::new(key_type.resolve_type(ctx)),
-                value_type: Rc::new(value_type.resolve_type(ctx)),
+                key_type: key_type.resolve_type(ctx).rc(),
+                value_type: value_type.resolve_type(ctx).rc(),
             },
             TypeExpression::ArrayType(ArrayType(element)) => Type::ArrayType {
                 mutability: Mutability::Mutable,
-                element_type: Rc::new(element.resolve_type(ctx)),
+                element_type: element.resolve_type(ctx).rc(),
             },
             TypeExpression::TupleType(TupleType(members)) => Type::TupleType {
                 mutability: Mutability::Mutable,
@@ -198,8 +214,8 @@ impl AST<TypeExpression> {
                 property,
                 optional: _,
             }) => Type::PropertyType {
-                subject: Rc::new(subject.resolve_type(ctx)),
-                property: Rc::new(property.resolve_type(ctx)),
+                subject: subject.resolve_type(ctx).rc(),
+                property: property.resolve_type(ctx).rc(),
             },
             TypeExpression::RegularExpressionType(_) => Type::RegularExpressionType {},
             TypeExpression::StringType(_) => Type::ANY_STRING,
@@ -207,56 +223,6 @@ impl AST<TypeExpression> {
             TypeExpression::BooleanType(_) => Type::ANY_BOOLEAN,
             TypeExpression::NilType(_) => Type::NilType,
             TypeExpression::UnknownType(_) => Type::UnknownType(Mutability::Mutable),
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug)]
-pub struct ResolveContext<'a> {
-    pub modules: &'a ModulesStore,
-    pub current_module: &'a Module,
-}
-
-impl<'a> From<InferTypeContext<'a>> for ResolveContext<'a> {
-    fn from(
-        InferTypeContext {
-            modules,
-            current_module,
-        }: InferTypeContext<'a>,
-    ) -> Self {
-        Self {
-            modules,
-            current_module,
-        }
-    }
-}
-
-impl<'a> From<&CheckContext<'a>> for ResolveContext<'a> {
-    fn from(
-        CheckContext {
-            modules,
-            current_module,
-            nearest_func_or_proc: _,
-        }: &CheckContext<'a>,
-    ) -> Self {
-        Self {
-            modules,
-            current_module,
-        }
-    }
-}
-
-impl<'a> From<SubsumationContext<'a>> for ResolveContext<'a> {
-    fn from(
-        SubsumationContext {
-            modules,
-            current_module,
-            symbols_encountered: _,
-        }: SubsumationContext<'a>,
-    ) -> Self {
-        Self {
-            modules,
-            current_module,
         }
     }
 }

@@ -1,5 +1,3 @@
-use crate::model::slice::Slice;
-use crate::passes::typeinfer::InferTypeContext;
 use std::fmt::{Debug, Display};
 use std::marker::PhantomData;
 use std::{
@@ -8,8 +6,9 @@ use std::{
 };
 use strum_macros::{EnumString, IntoStaticStr};
 
-use super::bgl_type::Type;
-use super::module::ModuleID;
+use crate::model::{ModuleID, Slice, Type};
+use crate::passes::InferTypeContext;
+use crate::utils::Rcable;
 
 macro_rules! union_type {
     ($name:ident = $( $s:ident )|*) => {
@@ -68,11 +67,21 @@ macro_rules! union_subtype {
     };
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct AST<TKind>(Rc<ASTInner>, PhantomData<TKind>)
 where
     TKind: Clone + TryFrom<Any>,
     Any: From<TKind>;
+
+impl<TKind> Debug for AST<TKind>
+where
+    TKind: Clone + TryFrom<Any> + Debug,
+    Any: From<TKind>,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("AST").field(&self.0).finish()
+    }
+}
 
 pub type ASTAny = AST<Any>;
 
@@ -248,11 +257,17 @@ impl Parentable for SpecialTypeKind {}
 impl Parentable for AwaitOrDetach {}
 impl Parentable for RegularExpressionFlag {}
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ASTInner {
     pub parent: RefCell<Option<Weak<ASTInner>>>,
     pub slice: Slice,
     pub details: Any,
+}
+
+impl Debug for ASTInner {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("{:?}", self.details))
+    }
 }
 
 impl PartialEq for ASTInner {
@@ -530,7 +545,7 @@ pub fn method_call_as_invocation<'a>(
                         let subject: AST<LocalIdentifier> = identifier.into();
 
                         if subject
-                            .resolve_symbol(subject.downcast().0.as_str())
+                            .resolve_symbol(ctx.into(), subject.downcast().0.as_str())
                             .is_some()
                         {
                             return Some(
@@ -961,11 +976,12 @@ where
 {
     fn as_ast(self, src: Slice) -> AST<TKind> {
         AST(
-            Rc::new(ASTInner {
+            ASTInner {
                 parent: RefCell::new(None),
                 slice: src,
                 details: self.into(),
-            }),
+            }
+            .rc(),
             PhantomData,
         )
     }
@@ -1095,8 +1111,6 @@ impl Display for PlatformSet {
             }
 
             f.write_str("browser")?;
-
-            first = true;
         }
 
         Ok(())

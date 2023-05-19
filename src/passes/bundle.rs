@@ -1,3 +1,7 @@
+use std::fmt::Write;
+use std::io::Sink;
+use std::path::PathBuf;
+
 use swc::config::{
     Config, ErrorConfig, ExperimentalOptions, JsMinifyFormatOptions, JsMinifyOptions, JscConfig,
     JscExperimental, JscOutputConfig, Options, RootMode,
@@ -13,52 +17,52 @@ use swc_ecma_minifier::option::MangleOptions;
 use swc_ecma_parser::{Syntax, TsConfig};
 use swc_ecma_transforms::Assumptions;
 
-use crate::model::module::ModulesStore;
-use crate::passes::compile::CompileContext;
+use crate::cli::ModulesStore;
+use crate::passes::{Compilable, CompileContext};
 use crate::MINIFY;
-use std::fmt::Write;
-use std::io::Sink;
-use std::path::PathBuf;
 
 const CORE_TS: &str = include_str!("../../lib/ts/core.ts");
 const REACTIVITY_TS: &str = include_str!("../../lib/ts/reactivity.ts");
 
-impl ModulesStore {
-    pub fn bundle<'a>(&self) -> String {
-        let mut buf = String::new();
+pub fn bundle<'a>(modules_store: &ModulesStore) -> String {
+    let mut buf = String::new();
 
-        buf += CORE_TS;
-        buf += REACTIVITY_TS;
+    buf += CORE_TS;
+    buf += REACTIVITY_TS;
 
-        let module_id_map = self
-            .iter()
-            .enumerate()
-            .map(|(index, (module_id, _))| (module_id.clone(), index))
-            .collect();
+    let module_id_map = modules_store
+        .iter()
+        .enumerate()
+        .map(|(index, (module_id, _))| (module_id.clone(), index))
+        .collect();
 
-        // TODO: Sort by import graph
-        // TODO: Helpful error about mutually imported consts
+    // TODO: Sort by import graph
+    // TODO: Helpful error about mutually imported consts
 
-        for module in self.iter().filter_map(|(_, module)| module.as_ref().ok()) {
-            module.compile(
+    for module in modules_store
+        .iter()
+        .filter_map(|(_, module)| module.as_ref().ok())
+    {
+        module
+            .compile(
                 CompileContext {
-                    modules: self,
+                    modules: modules_store,
                     current_module: module,
                     include_types: false,
                     qualify_identifiers_with: Some(&module_id_map),
                     qualify_all_identifiers: false,
                 },
                 &mut buf,
-            );
-        }
+            )
+            .unwrap();
+    }
 
-        buf.write_str("\n\nmain();");
+    buf.write_str("\n\nmain();").unwrap();
 
-        if MINIFY {
-            minify(&buf)
-        } else {
-            buf
-        }
+    if MINIFY {
+        minify(&buf)
+    } else {
+        buf
     }
 }
 

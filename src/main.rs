@@ -1,4 +1,6 @@
-// #![allow(dead_code)]
+#![allow(dead_code)]
+#![allow(unused_variables)]
+#![allow(non_snake_case)]
 #![macro_use]
 
 mod cli;
@@ -13,17 +15,23 @@ use std::{
 };
 
 use clap::{command, Parser};
-use cli::Command;
+use cli::{Command, ModulesStore};
 use colored::Color;
 use config::BagelConfig;
 use glob::glob;
 use model::{
-    errors::blue_string,
-    module::{ModuleID, ModulesStore},
+    ast::{
+        ArrayLiteral, BooleanLiteral, Declaration, ElementOrSpread, ExactStringLiteral, Expression,
+        ImportAllDeclaration, ImportDeclaration, KeyValueOrSpread, Module, NilLiteral,
+        NumberLiteral, ObjectLiteral, WithSlice, AST,
+    },
+    blue_string, ModuleID, ModuleType, ParsedModule, Slice,
 };
-use passes::{check::CheckContext, compile::CompileContext};
+use passes::{parse, CheckContext, CompileContext};
+use serde_json::Value;
+use utils::Rcable;
 
-use crate::{model::errors::BagelError, utils::cli_label};
+use crate::{model::BagelError, passes::Compilable, utils::cli_label};
 
 pub const DEBUG_MODE: bool = true;
 
@@ -202,7 +210,8 @@ fn main() -> ExitCode {
                             .unwrap()
                             .wait()
                             .unwrap()
-                            .code();
+                            .code()
+                            .unwrap();
                     } else if deno {
                         let command = std::env::var("BAGEL_DENO_BIN").unwrap_or("deno".to_owned());
 
@@ -221,7 +230,8 @@ fn main() -> ExitCode {
                             .unwrap()
                             .wait()
                             .unwrap()
-                            .code();
+                            .code()
+                            .unwrap();
                     } else if bun {
                         let command = std::env::var("BAGEL_BUN_BIN").unwrap_or("bun".to_owned());
 
@@ -238,7 +248,8 @@ fn main() -> ExitCode {
                             .unwrap()
                             .wait()
                             .unwrap()
-                            .code();
+                            .code()
+                            .unwrap();
                     } else {
                         todo!()
                     }
@@ -336,7 +347,7 @@ fn bundle(entrypoint: &str, watch: bool, clean: bool) -> Result<PathBuf, ()> {
             let bundle_path =
                 entrypoint.with_extension(if MINIFY { "bundle.js" } else { "bundle.ts" });
 
-            std::fs::write(&bundle_path, modules_store.bundle());
+            std::fs::write(&bundle_path, crate::passes::bundle(&modules_store)).map_err(|_| ())?;
 
             let bundle_size = std::fs::metadata(&bundle_path).unwrap().len();
 
@@ -409,11 +420,11 @@ fn load_and_parse<'a, P: Borrow<PathBuf>, I: 'a + Iterator<Item = P>>(
     entrypoints: I,
     clean: bool,
 ) -> ModulesStore {
-    let mut modules_store = ModulesStore::new();
+    let mut modules_store = HashMap::new();
 
     for path in entrypoints {
         let module_id = ModuleID::try_from(path.borrow().as_path()).unwrap();
-        modules_store.load_module_and_dependencies(module_id, clean);
+        load_module_and_dependencies(&mut modules_store, module_id, clean);
     }
 
     modules_store
@@ -482,12 +493,172 @@ pub fn print_errors(errors: &HashMap<ModuleID, Vec<BagelError>>) {
 
         for (_, errors) in errors {
             for error in errors {
-                error.pretty_print(error_output_buf_ref, true);
+                error.pretty_print(error_output_buf_ref, true).unwrap();
                 error_output_buf_ref.push('\n');
                 error_output_buf_ref.push('\n');
             }
         }
 
         print!("{}", error_output_buf);
+    }
+}
+fn load_module_and_dependencies(
+    modules_store: &mut ModulesStore,
+    module_id: ModuleID,
+    clean: bool,
+) {
+    if let Some(mut module_src) = module_id.load(clean) {
+        module_src.push('\n'); // https://github.com/Geal/nom/issues/1573
+        let module_src = module_src.rc();
+
+        let module_type = ModuleType::from(&module_id);
+
+        match module_type {
+            ModuleType::JavaScript => {
+                modules_store.insert(
+                    module_id.clone(),
+                    Ok(ParsedModule::JavaScript {
+                        module_id: module_id.clone(),
+                    }),
+                );
+            }
+            ModuleType::JSON => {
+                let module_src = Slice::new(module_src);
+
+                let parsed: Value = serde_json::from_str(module_src.as_str()).unwrap();
+                let contents = json_value_to_ast(module_src, parsed);
+
+                modules_store.insert(
+                    module_id.clone(),
+                    Ok(ParsedModule::Singleton {
+                        module_id: module_id.clone(),
+                        contents,
+                    }),
+                );
+            }
+            ModuleType::Raw => {
+                let module_src = Slice::new(module_src);
+
+                modules_store.insert(
+                    module_id.clone(),
+                    Ok(ParsedModule::Singleton {
+                        module_id: module_id.clone(),
+                        contents: ExactStringLiteral {
+                            tag: None,
+                            value: module_src.clone(),
+                        }
+                        .as_ast(module_src)
+                        .recast::<Expression>(),
+                    }),
+                );
+            }
+            ModuleType::Bagel => {
+                let parsed = parse(module_id.clone(), module_src.clone());
+                modules_store.insert(
+                    module_id.clone(),
+                    parsed.map(|ast| ParsedModule::Bagel {
+                        module_id: module_id.clone(),
+                        ast,
+                    }),
+                );
+
+                if let Some(Module {
+                    module_id: _,
+                    declarations,
+                }) = modules_store
+                    .get(&module_id)
+                    .map(|res| {
+                        res.as_ref().ok().map(|module| match module {
+                            ParsedModule::Bagel { module_id: _, ast } => Some(ast.downcast()),
+                            ParsedModule::JavaScript { module_id: _ } => None,
+                            ParsedModule::Singleton {
+                                module_id: _,
+                                contents: _,
+                            } => None,
+                        })
+                    })
+                    .flatten()
+                    .flatten()
+                {
+                    let imported = declarations
+                        .iter()
+                        .filter_map(|decl| match decl.downcast() {
+                            Declaration::ImportAllDeclaration(ImportAllDeclaration {
+                                platforms: _,
+                                name: _,
+                                path,
+                            }) => Some(path.downcast().value.as_str().to_owned()),
+                            Declaration::ImportDeclaration(ImportDeclaration {
+                                platforms: _,
+                                imports: _,
+                                path,
+                            }) => Some(path.downcast().value.as_str().to_owned()),
+                            _ => None,
+                        });
+
+                    for path in imported {
+                        let other_module_id = module_id.imported(&path);
+
+                        if let Some(other_module_id) = other_module_id {
+                            if !modules_store.contains_key(&other_module_id) {
+                                load_module_and_dependencies(modules_store, other_module_id, clean);
+                            }
+                        } else {
+                            // TODO: Improve this, make it a proper error
+                            println!("ERROR: Malformed import path {:?}", path);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn json_value_to_ast(module_src: Slice, value: Value) -> AST<Expression> {
+    match value {
+        Value::Null => NilLiteral.as_ast(module_src).recast::<Expression>(),
+        Value::Bool(value) => BooleanLiteral(value)
+            .as_ast(module_src)
+            .recast::<Expression>(),
+        Value::Number(value) => {
+            NumberLiteral(Slice::new(value.to_string().rc())) // HACK: Not shared with module_src
+                .as_ast(module_src)
+                .recast::<Expression>()
+        }
+        Value::String(value) => ExactStringLiteral {
+            tag: None,
+            value: Slice::new(value.rc()), // HACK: Not shared with module_src
+        }
+        .as_ast(module_src)
+        .recast::<Expression>(),
+        Value::Array(members) => ArrayLiteral(
+            members
+                .into_iter()
+                .map(|member| {
+                    ElementOrSpread::Element(json_value_to_ast(module_src.clone(), member))
+                })
+                .collect(),
+        )
+        .as_ast(module_src)
+        .recast::<Expression>(),
+        Value::Object(entries) => ObjectLiteral(
+            entries
+                .into_iter()
+                .map(|(key, value)| {
+                    KeyValueOrSpread::KeyValue(
+                        ExactStringLiteral {
+                            tag: None,
+                            value: Slice::new(key.rc()),
+                        }
+                        .as_ast(module_src.clone())
+                        .recast::<Expression>(),
+                        json_value_to_ast(module_src.clone(), value),
+                        false,
+                    )
+                })
+                .collect(),
+        )
+        .as_ast(module_src)
+        .recast::<Expression>(),
     }
 }

@@ -1,11 +1,7 @@
+#[allow(unused_imports)]
+use crate::utils::Loggable;
 use crate::{
-    model::ast::*,
-    model::slice::Slice,
-    model::{
-        ast::{covering, Any, AST},
-        errors::ParseError,
-        module::ModuleID,
-    },
+    model::{ast::*, ModuleID, ParseError, Slice},
     DEBUG_MODE,
 };
 use memoize::memoize;
@@ -21,8 +17,6 @@ use nom::{
 };
 use std::str::FromStr;
 use std::{rc::Rc, time::SystemTime};
-
-use super::compile::INT;
 
 macro_rules! seq {
     ($( $s:expr ),* $(,)?) => {
@@ -1555,7 +1549,7 @@ fn if_else_expression(i: Slice) -> ParseResult<AST<IfElseExpression>> {
                 |(_, _, outcome, end)| (outcome, end),
             )),
         ),
-        |(mut cases, mut default_case)| {
+        |(mut cases, default_case)| {
             let cases_src = covering(&cases).unwrap();
 
             let end = default_case
@@ -1633,7 +1627,7 @@ fn switch_expression(i: Slice) -> ParseResult<AST<SwitchExpression>> {
 fn range_expression(i: Slice) -> ParseResult<AST<RangeExpression>> {
     map(
         seq!(number_literal, tag(".."), number_literal),
-        |(mut start, _, mut end)| {
+        |(start, _, end)| {
             let mut start = start.recast::<Expression>();
             let mut end = end.recast::<Expression>();
 
@@ -2044,7 +2038,7 @@ fn identifier_like(i: Slice) -> ParseResult<Slice> {
     )(i)
 }
 
-pub fn is_valid_identifier(s: &str) -> bool {
+fn is_valid_identifier(s: &str) -> bool {
     s.char_indices().all(|(index, ch)| {
         ch == '_'
             || ch == '$'

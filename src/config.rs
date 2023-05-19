@@ -8,10 +8,8 @@ pub struct BagelConfig {
 
     pub platforms: Option<Vec<String>>,
 
-    #[allow(non_snake_case)]
     pub checkerRuleOverrides: Option<HashMap<String, String>>,
 
-    #[allow(non_snake_case)]
     pub remappedModules: Option<HashMap<String, String>>,
     // pub formatting_options
 }

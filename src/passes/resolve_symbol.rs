@@ -1,16 +1,40 @@
-use crate::model::ast::{self, *};
+use crate::{
+    cli::ModulesStore,
+    model::{ast::*, ParsedModule},
+};
+
+#[derive(Clone, Copy, Debug)]
+pub struct ResolveSymbolContext<'a> {
+    pub modules: &'a ModulesStore,
+    pub current_module: &'a ParsedModule,
+    pub follow_imports: bool,
+}
+
+impl<'a> ResolveSymbolContext<'a> {
+    pub fn follow_imports(self, follow_imports: bool) -> Self {
+        Self {
+            modules: self.modules,
+            current_module: self.current_module,
+            follow_imports,
+        }
+    }
+}
 
 impl<TKind> AST<TKind>
 where
     TKind: Clone + TryFrom<Any>,
     Any: From<TKind>,
 {
-    pub fn resolve_symbol(&self, symbol: &str) -> Option<ASTAny> {
-        match self.parent().as_ref().map(|p| p.details()) {
-            Some(Any::Module(ast::Module {
+    pub fn resolve_symbol<'a>(
+        &self,
+        ctx: ResolveSymbolContext<'a>,
+        symbol: &str,
+    ) -> Option<ASTAny> {
+        match self.details() {
+            Any::Module(Module {
                 module_id: _,
                 declarations,
-            })) => {
+            }) => {
                 let self_index = if self.try_downcast::<ValueDeclaration>().is_some() {
                     declarations.iter().enumerate().find_map(|(index, decl)| {
                         if self.ptr_eq::<Declaration>(decl) {
@@ -34,16 +58,42 @@ where
                         Declaration::ImportAllDeclaration(ImportAllDeclaration {
                             platforms,
                             name,
-                            path: _,
+                            path,
                         }) => {
                             if name.downcast().0 == symbol {
-                                return Some(decl.clone());
+                                if !ctx.follow_imports {
+                                    return Some(decl.clone().upcast());
+                                } else {
+                                    return ctx
+                                        .current_module
+                                        .module_id()
+                                        .imported(&path.downcast().value.as_str())
+                                        .map(|other_module_id| {
+                                            ctx.modules
+                                                .get(&other_module_id)
+                                                .map(|res| res.as_ref().ok())
+                                        })
+                                        .flatten()
+                                        .flatten()
+                                        .map(|other_module| match other_module {
+                                            ParsedModule::Bagel {
+                                                module_id: _,
+                                                ast: _,
+                                            } => None,
+                                            ParsedModule::JavaScript { module_id: _ } => None,
+                                            ParsedModule::Singleton {
+                                                module_id: _,
+                                                contents,
+                                            } => Some(contents.clone().upcast()),
+                                        })
+                                        .flatten();
+                                }
                             }
                         }
                         Declaration::ImportDeclaration(ImportDeclaration {
                             platforms,
                             imports,
-                            path: _,
+                            path,
                         }) => {
                             if imports.iter().any(|item| {
                                 let item = item.downcast();
@@ -53,7 +103,35 @@ where
                                     None => item.name.downcast().0 == symbol,
                                 }
                             }) {
-                                return Some(decl.clone());
+                                if !ctx.follow_imports {
+                                    return Some(decl.clone().upcast());
+                                } else {
+                                    return ctx
+                                        .current_module
+                                        .module_id()
+                                        .imported(&path.downcast().value.as_str())
+                                        .map(|other_module_id| {
+                                            ctx.modules
+                                                .get(&other_module_id)
+                                                .map(|res| res.as_ref().ok())
+                                        })
+                                        .flatten()
+                                        .flatten()
+                                        .map(|other_module| match other_module {
+                                            ParsedModule::Bagel {
+                                                module_id: _,
+                                                ast: _,
+                                            } => other_module
+                                                .get_declaration(symbol, true)
+                                                .map(|decl| decl.upcast()),
+                                            ParsedModule::JavaScript { module_id: _ } => None,
+                                            ParsedModule::Singleton {
+                                                module_id: _,
+                                                contents: _,
+                                            } => None,
+                                        })
+                                        .flatten();
+                                }
                             }
                         }
                         Declaration::TypeDeclaration(TypeDeclaration {
@@ -62,7 +140,7 @@ where
                             exported: _,
                         }) => {
                             if name.downcast().0 == symbol {
-                                return Some(decl.clone());
+                                return Some(decl.clone().upcast());
                             }
                         }
                         Declaration::FuncDeclaration(FuncDeclaration {
@@ -73,7 +151,7 @@ where
                             decorators: _,
                         }) => {
                             if name.downcast().0 == symbol {
-                                return Some(decl.clone());
+                                return Some(decl.clone().upcast());
                             }
                         }
                         Declaration::ProcDeclaration(ProcDeclaration {
@@ -84,7 +162,7 @@ where
                             decorators: _,
                         }) => {
                             if name.downcast().0 == symbol {
-                                return Some(decl.clone());
+                                return Some(decl.clone().upcast());
                             }
                         }
                         Declaration::ValueDeclaration(ValueDeclaration {
@@ -101,12 +179,12 @@ where
                                 }) => name.downcast().0 == symbol,
                                 DeclarationDestination::Destructure(_) => todo!(),
                             } {
-                                return Some(decl.clone());
+                                return Some(decl.clone().upcast());
                             }
                         }
                         Declaration::SymbolDeclaration(SymbolDeclaration { name, exported: _ }) => {
                             if name.downcast().0 == symbol {
-                                return Some(decl.clone());
+                                return Some(decl.clone().upcast());
                             }
                         }
                         Declaration::TestExprDeclaration(_) => {}
@@ -116,15 +194,15 @@ where
 
                     None
                 }) {
-                    return Some(found.upcast());
+                    return Some(found);
                 }
             }
-            Some(Any::Func(Func {
+            Any::Func(Func {
                 type_annotation,
                 is_async: _,
                 is_pure: _,
                 body: _,
-            })) => {
+            }) => {
                 let func_type = type_annotation.downcast();
 
                 if let Some(found) = func_type
@@ -149,12 +227,12 @@ where
                     return Some(found.clone().upcast());
                 }
             }
-            Some(Any::Proc(Proc {
+            Any::Proc(Proc {
                 type_annotation,
                 is_async: _,
                 is_pure: _,
                 body: _,
-            })) => {
+            }) => {
                 let proc_type = type_annotation.downcast();
 
                 if let Some(found) = proc_type
@@ -179,10 +257,10 @@ where
                     return Some(found.clone().upcast());
                 }
             }
-            Some(Any::InlineConstGroup(InlineConstGroup {
+            Any::InlineConstGroup(InlineConstGroup {
                 declarations,
                 inner: _,
-            })) => {
+            }) => {
                 if let Some(found) =
                     declarations
                         .iter()
@@ -207,52 +285,44 @@ where
                     return Some(found.clone().upcast());
                 }
             }
-            Some(Any::Block(Block(statements))) => {
-                let self_index = statements
+            Any::Block(Block(statements)) => {
+                if let Some(found) = statements
                     .iter()
-                    .enumerate()
-                    .find(|(_, stmt)| self.ptr_eq::<Statement>(*stmt))
-                    .map(|(index, _)| index)
-                    .unwrap();
-
-                if let Some(found) =
-                    statements
-                        .iter()
-                        .take(self_index)
-                        .find(|stmt| match stmt.details() {
-                            Any::ValueDeclaration(ValueDeclaration {
-                                destination,
-                                value: _,
-                                is_const: _,
-                                exported: _,
-                                platforms: _,
-                            }) => match destination {
-                                DeclarationDestination::NameAndType(NameAndType {
-                                    name,
-                                    type_annotation,
-                                }) => name.downcast().0 == symbol,
-                                DeclarationDestination::Destructure(_) => todo!(),
-                            },
-                            _ => false,
-                        })
+                    .skip_while(|stmt| !self.ptr_eq::<Statement>(*stmt))
+                    .find(|stmt| match stmt.details() {
+                        Any::ValueDeclaration(ValueDeclaration {
+                            destination,
+                            value: _,
+                            is_const: _,
+                            exported: _,
+                            platforms: _,
+                        }) => match destination {
+                            DeclarationDestination::NameAndType(NameAndType {
+                                name,
+                                type_annotation,
+                            }) => name.downcast().0 == symbol,
+                            DeclarationDestination::Destructure(_) => todo!(),
+                        },
+                        _ => false,
+                    })
                 {
                     return Some(found.clone().upcast());
                 }
             }
-            Some(Any::ForLoop(ForLoop {
+            Any::ForLoop(ForLoop {
                 item_identifier,
                 iterable: _,
                 body: _,
-            })) => {
+            }) => {
                 if item_identifier.downcast().0 == symbol {
                     return self.parent();
                 }
             }
-            Some(Any::TryCatch(TryCatch {
+            Any::TryCatch(TryCatch {
                 try_block: _,
                 error_identifier,
                 catch_block,
-            })) => {
+            }) => {
                 if error_identifier.downcast().0 == symbol
                     && self
                         .clone()
@@ -262,14 +332,14 @@ where
                     return self.parent();
                 }
             }
-            Some(Any::FuncType(FuncType {
+            Any::FuncType(FuncType {
                 type_params,
                 args: _,
                 args_spread: _,
                 is_pure: _,
                 is_async: _,
                 returns: _,
-            })) => {
+            }) => {
                 if let Some(found) = type_params
                     .iter()
                     .find(|param| param.downcast().name.downcast().0 == symbol)
@@ -277,14 +347,14 @@ where
                     return Some(found.clone().upcast());
                 }
             }
-            Some(Any::ProcType(ProcType {
+            Any::ProcType(ProcType {
                 type_params,
                 args: _,
                 args_spread: _,
                 is_pure: _,
                 is_async: _,
                 throws: _,
-            })) => {
+            }) => {
                 if let Some(found) = type_params
                     .iter()
                     .find(|param| param.downcast().name.downcast().0 == symbol)
@@ -292,7 +362,7 @@ where
                     return Some(found.clone().upcast());
                 }
             }
-            Some(Any::GenericType(GenericType { type_params, inner })) => {
+            Any::GenericType(GenericType { type_params, inner }) => {
                 if let Some(found) = type_params
                     .iter()
                     .find(|param| param.downcast().name.downcast().0 == symbol)
@@ -304,7 +374,7 @@ where
         };
 
         self.parent()
-            .map(|parent| parent.resolve_symbol(symbol))
+            .map(|parent| parent.resolve_symbol(ctx, symbol))
             .flatten()
     }
 }

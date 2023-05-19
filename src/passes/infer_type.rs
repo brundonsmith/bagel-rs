@@ -1,21 +1,17 @@
 use std::rc::Rc;
 
 use crate::{
-    model::ast::*,
-    model::{
-        ast::Any,
-        bgl_type::{Mutability, Type},
-        module::Module,
-        slice::Slice,
-    },
-    passes::check::CheckContext,
-    ModulesStore,
+    cli::ModulesStore,
+    model::{ast::*, Mutability, ParsedModule, Slice, Type},
+    passes::{ResolveSymbolContext, INT},
+    utils::Rcable,
 };
 
-use super::{
-    compile::{CompileContext, INT},
-    resolve_type::ResolveContext,
-};
+#[derive(Clone, Copy, Debug)]
+pub struct InferTypeContext<'a> {
+    pub modules: &'a ModulesStore,
+    pub current_module: &'a ParsedModule,
+}
 
 impl AST<Expression> {
     pub fn infer_type<'a>(&self, ctx: InferTypeContext<'a>) -> Type {
@@ -30,59 +26,13 @@ impl AST<Expression> {
                         return Type::AnyType;
                     }
 
-                    let resolved = self.resolve_symbol(name.as_str());
+                    let resolved = self.resolve_symbol(
+                        ResolveSymbolContext::from(ctx).follow_imports(true),
+                        name.as_str(),
+                    );
 
                     if let Some(resolved) = resolved {
                         match resolved.details() {
-                            Any::ImportAllDeclaration(ImportAllDeclaration {
-                                platforms,
-                                name,
-                                path,
-                            }) => ctx
-                                .modules
-                                .import(
-                                    ctx.current_module.module_id(),
-                                    path.downcast().value.as_str(),
-                                )
-                                .map(|other_module| match other_module {
-                                    Module::Bagel {
-                                        module_id: _,
-                                        ast: _,
-                                    } => None,
-                                    Module::JavaScript { module_id: _ } => Some(Type::AnyType),
-                                    Module::Singleton {
-                                        module_id: _,
-                                        contents,
-                                    } => Some(contents.infer_type(ctx)),
-                                })
-                                .flatten()
-                                .unwrap_or(Type::PoisonedType),
-                            Any::ImportDeclaration(ImportDeclaration {
-                                platforms,
-                                imports: _,
-                                path,
-                            }) => ctx
-                                .modules
-                                .import(
-                                    ctx.current_module.module_id(),
-                                    path.downcast().value.as_str(),
-                                )
-                                .map(|other_module| match other_module {
-                                    Module::Bagel {
-                                        module_id: _,
-                                        ast: _,
-                                    } => other_module
-                                        .get_declaration(name.as_str(), true)
-                                        .map(|decl| decl.declaration_type(ctx))
-                                        .flatten(),
-                                    Module::JavaScript { module_id: _ } => Some(Type::AnyType),
-                                    Module::Singleton {
-                                        module_id: _,
-                                        contents: _,
-                                    } => None,
-                                })
-                                .flatten()
-                                .unwrap_or(Type::PoisonedType),
                             Any::ProcDeclaration(ProcDeclaration {
                                 name: _,
                                 proc,
@@ -149,19 +99,19 @@ impl AST<Expression> {
                                             .find(|(_, p)| p.downcast().0 == name)
                                         {
                                             Type::PropertyType {
-                                                subject: Rc::new(value.infer_type(ctx)),
+                                                subject: value.infer_type(ctx).rc(),
                                                 property: match destructure_kind {
-                                                    DestructureKind::Array => {
-                                                        Rc::new(Type::NumberType {
-                                                            min: Some(index as i32),
-                                                            max: Some(index as i32),
-                                                        })
+                                                    DestructureKind::Array => Type::NumberType {
+                                                        min: Some(index as i32),
+                                                        max: Some(index as i32),
                                                     }
-                                                    DestructureKind::Object => Rc::new(
+                                                    .rc(),
+                                                    DestructureKind::Object => {
                                                         identifier_to_string_type(property.clone())
                                                             .recast::<TypeExpression>()
-                                                            .resolve_type(ctx.into()),
-                                                    ),
+                                                            .resolve_type(ctx.into())
+                                                            .rc()
+                                                    }
                                                 },
                                             }
                                         } else {
@@ -285,12 +235,11 @@ impl AST<Expression> {
                             .map(|s| s.resolve_type(ctx.into()))
                             .map(Rc::new),
                         is_pure,
-                        returns: Rc::new(
-                            type_annotation
-                                .returns
-                                .map(|r| r.resolve_type(ctx.into()))
-                                .unwrap_or_else(|| body.infer_type(ctx)),
-                        ),
+                        returns: type_annotation
+                            .returns
+                            .map(|r| r.resolve_type(ctx.into()))
+                            .unwrap_or_else(|| body.infer_type(ctx))
+                            .rc(),
                     }
                 }
                 Expression::Proc(Proc {
@@ -334,12 +283,12 @@ impl AST<Expression> {
 
                     Type::SpecialType {
                         kind: SpecialTypeKind::Iterable,
-                        inner: Rc::new(Type::NumberType { min, max }),
+                        inner: Type::NumberType { min, max }.rc(),
                     }
                 }
                 Expression::AwaitExpression(AwaitExpression(inner)) => Type::InnerType {
                     kind: SpecialTypeKind::Plan,
-                    inner: Rc::new(inner.infer_type(ctx)),
+                    inner: inner.infer_type(ctx).rc(),
                 },
                 Expression::Invocation(Invocation {
                     subject,
@@ -350,7 +299,7 @@ impl AST<Expression> {
                     awaited_or_detached,
                 }) => {
                     if let Some(inv) = method_call_as_invocation(
-                        ctx.into(),
+                        ctx,
                         self.clone().upcast().try_recast::<Invocation>().unwrap(),
                     ) {
                         inv.infer_type(ctx)
@@ -390,13 +339,14 @@ impl AST<Expression> {
                     // TODO: optional
 
                     Type::PropertyType {
-                        subject: Rc::new(subject.infer_type(ctx)),
-                        property: Rc::new(match property {
+                        subject: subject.infer_type(ctx).rc(),
+                        property: match property {
                             Property::Expression(expr) => expr.infer_type(ctx.into()),
                             Property::PlainIdentifier(ident) => {
                                 Type::StringType(Some(ident.downcast().0.clone()))
                             }
-                        }),
+                        }
+                        .rc(),
                     }
                 }
                 Expression::IfElseExpression(IfElseExpression {
@@ -438,12 +388,12 @@ impl AST<Expression> {
                     mutability: Mutability::Literal,
                     entries: vec![
                         KeyValueOrSpread::KeyValue(
-                            Type::StringType(Some(Slice::new(Rc::new(String::from("tag"))))),
+                            Type::StringType(Some(Slice::new(String::from("tag").rc()))),
                             Type::StringType(Some(tag_name.downcast().0.clone())),
                             false,
                         ),
                         KeyValueOrSpread::KeyValue(
-                            Type::StringType(Some(Slice::new(Rc::new(String::from("attributes"))))),
+                            Type::StringType(Some(Slice::new(String::from("attributes").rc()))),
                             Type::ObjectType {
                                 mutability: Mutability::Literal,
                                 entries: attributes
@@ -463,7 +413,7 @@ impl AST<Expression> {
                             false,
                         ),
                         KeyValueOrSpread::KeyValue(
-                            Type::StringType(Some(Slice::new(Rc::new(String::from("children"))))),
+                            Type::StringType(Some(Slice::new(String::from("children").rc()))),
                             Type::TupleType {
                                 mutability: Mutability::Literal,
                                 members: children
@@ -485,7 +435,7 @@ impl AST<Expression> {
                 }) => Type::ANY_BOOLEAN,
                 Expression::ErrorExpression(ErrorExpression(inner)) => Type::SpecialType {
                     kind: SpecialTypeKind::Error,
-                    inner: Rc::new(inner.infer_type(ctx)),
+                    inner: inner.infer_type(ctx).rc(),
                 },
                 Expression::RegularExpression(RegularExpression { expr, flags }) => {
                     Type::RegularExpressionType
@@ -531,7 +481,7 @@ pub fn binary_operation_type<'a>(
             } else if let (Type::StringType(Some(left)), Type::StringType(Some(right))) =
                 (&left_type, &right_type)
             {
-                let result = Slice::new(Rc::new(left.as_str().to_owned() + right.as_str()));
+                let result = Slice::new((left.as_str().to_owned() + right.as_str()).rc());
 
                 Type::StringType(Some(result))
             } else if Type::ANY_NUMBER.subsumes(ctx.into(), &left_type) {
@@ -807,58 +757,6 @@ impl AST<Statement> {
                     _ => Some(Type::UnionType(all)),
                 }
             }
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug)]
-pub struct InferTypeContext<'a> {
-    pub modules: &'a ModulesStore,
-    pub current_module: &'a Module,
-}
-
-impl<'a> From<&CheckContext<'a>> for InferTypeContext<'a> {
-    fn from(
-        CheckContext {
-            modules,
-            current_module,
-            nearest_func_or_proc: _,
-        }: &CheckContext<'a>,
-    ) -> Self {
-        Self {
-            modules,
-            current_module,
-        }
-    }
-}
-
-impl<'a> From<ResolveContext<'a>> for InferTypeContext<'a> {
-    fn from(
-        ResolveContext {
-            modules,
-            current_module,
-        }: ResolveContext<'a>,
-    ) -> Self {
-        Self {
-            modules,
-            current_module,
-        }
-    }
-}
-
-impl<'a> From<CompileContext<'a>> for InferTypeContext<'a> {
-    fn from(
-        CompileContext {
-            modules,
-            current_module,
-            include_types: _,
-            qualify_identifiers_with: _,
-            qualify_all_identifiers: _,
-        }: CompileContext<'a>,
-    ) -> Self {
-        Self {
-            modules,
-            current_module,
         }
     }
 }

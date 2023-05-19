@@ -6,9 +6,7 @@ use std::{
 use colored::Colorize;
 use enum_variant_type::EnumVariantType;
 
-use crate::{model::bgl_type::SubsumationIssue, model::slice::Slice};
-
-use super::module::ModuleID;
+use crate::model::{ModuleID, Slice, SubsumationIssue};
 
 #[derive(Debug, Clone, PartialEq, EnumVariantType)]
 pub enum BagelError {

@@ -1,34 +1,21 @@
-use crate::model::{
-    ast::{self, *},
-    module::Module,
-};
+use crate::model::{ast::*, ParsedModule};
 use std::fmt::{Display, Formatter, Result, Write};
 
-impl Module {
-    pub fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
+pub trait Formattable {
+    fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result;
+}
+
+impl Formattable for ParsedModule {
+    fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
         match self {
-            Module::Bagel { module_id: _, ast } => ast.format(f, opts),
-            Module::JavaScript { module_id: _ } => Ok(()),
-            Module::Singleton {
+            ParsedModule::Bagel { module_id: _, ast } => ast.format(f, opts),
+            ParsedModule::JavaScript { module_id: _ } => Ok(()),
+            ParsedModule::Singleton {
                 module_id: _,
                 contents,
             } => f.write_str(contents.slice().as_str()),
         }
     }
-}
-
-impl<TKind> Display for AST<TKind>
-where
-    TKind: Clone + TryFrom<Any>,
-    Any: From<TKind>,
-{
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        self.format(f, FormatOptions::DEFAULT)
-    }
-}
-
-pub trait Formattable {
-    fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result;
 }
 
 impl<TKind> Formattable for AST<TKind>
@@ -38,7 +25,7 @@ where
 {
     fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
         match self.details() {
-            Any::Module(ast::Module {
+            Any::Module(Module {
                 module_id: _,
                 declarations,
             }) => {
@@ -424,7 +411,7 @@ where
                             f.write_str(", ")?;
                         }
 
-                        param.format(f, opts);
+                        param.format(f, opts)?;
                     }
                     f.write_char('>')?;
                 }
@@ -632,7 +619,7 @@ where
 {
     fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
         if let Some(sel) = self {
-            sel.format(f, opts);
+            sel.format(f, opts)?;
         }
 
         Ok(())
@@ -645,7 +632,7 @@ where
 {
     fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
         for el in self.iter() {
-            el.format(f, opts);
+            el.format(f, opts)?;
         }
 
         Ok(())
@@ -670,4 +657,14 @@ pub struct FormatOptions {}
 
 impl FormatOptions {
     pub const DEFAULT: FormatOptions = FormatOptions {};
+}
+
+impl<TKind> Display for AST<TKind>
+where
+    TKind: Clone + TryFrom<Any>,
+    Any: From<TKind>,
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        self.format(f, FormatOptions::DEFAULT)
+    }
 }

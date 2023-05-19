@@ -1,33 +1,34 @@
-use crate::{
-    model::{
-        ast::*,
-        bgl_type::{
-            any_array, any_error, any_iterable, any_object, any_plan, string_template_safe_types,
-            Mutability, SubsumationContext, Type,
-        },
-        errors::blue_string,
-        slice::Slice,
-    },
-    model::{
-        ast::{self, BinaryOperatorOp},
-        errors::BagelError,
-        module::{Module, ModulesStore},
-    },
-    DEBUG_MODE,
-};
 use std::fmt::Debug;
 use std::time::SystemTime;
 
-use super::{compile::INT, typeinfer::binary_operation_type};
+#[allow(unused_imports)]
+use crate::utils::Loggable;
+use crate::{
+    cli::ModulesStore,
+    model::{
+        any_array, any_error, any_iterable, any_object, any_plan, ast::*, blue_string,
+        string_template_safe_types, BagelError, ModuleType, Mutability, ParsedModule, Slice,
+        SubsumationContext, Type,
+    },
+    passes::{binary_operation_type, INT},
+    DEBUG_MODE,
+};
 
-impl Module {
+#[derive(Debug, Clone)]
+pub struct CheckContext<'a> {
+    pub modules: &'a ModulesStore,
+    pub current_module: &'a ParsedModule,
+    pub nearest_func_or_proc: Option<FuncOrProc>,
+}
+
+impl ParsedModule {
     pub fn check<'a, F: FnMut(BagelError)>(&self, ctx: &CheckContext<'a>, report_error: &mut F) {
         let start = SystemTime::now();
 
         match self {
-            Module::Bagel { module_id: _, ast } => ast.check(ctx, report_error),
-            Module::JavaScript { module_id } => {}
-            Module::Singleton {
+            ParsedModule::Bagel { module_id: _, ast } => ast.check(ctx, report_error),
+            ParsedModule::JavaScript { module_id } => {}
+            ParsedModule::Singleton {
                 module_id: _,
                 contents,
             } => contents.check(ctx, report_error),
@@ -133,7 +134,7 @@ where
         };
 
         match self.details() {
-            Any::Module(ast::Module {
+            Any::Module(Module {
                 module_id: _,
                 declarations,
             }) => {
@@ -152,25 +153,19 @@ where
                 let path_name = path.downcast();
                 let path_name = path_name.value.as_str();
 
-                match ctx.modules.import_raw(module_id, path_name) {
-                    Some(Ok(other_module)) => {
-                        if matches!(
-                            other_module,
-                            Module::Bagel {
-                                module_id: _,
-                                ast: _
-                            }
-                        ) {
-                            report_error(BagelError::MiscError {
-                                    module_id: module_id.clone(),
-                                    src: path.slice().clone(),
-                                    message: format!(
-                                        "Bagel modules don't have default-exports and can't be imported this way"
-                                    ),
-                                });
-                        }
+                let other_module_type =
+                    module_id.imported(path_name).as_ref().map(ModuleType::from);
+
+                match other_module_type {
+                    Some(ModuleType::Bagel) => {
+                        report_error(BagelError::MiscError {
+                            module_id: module_id.clone(),
+                            src: path.slice().clone(),
+                            message: format!(
+                                "Bagel modules don't have default-exports and can't be imported this way"
+                            ),
+                        });
                     }
-                    Some(Err(_)) => {}
                     None => {
                         report_error(BagelError::MiscError {
                             module_id: module_id.clone(),
@@ -182,6 +177,7 @@ where
                             ),
                         });
                     }
+                    _ => {}
                 }
             }
             Any::ImportDeclaration(ImportDeclaration {
@@ -221,17 +217,21 @@ where
                 //                 ),
                 //             });
                 //         } else {
-                let imported_module = ctx.modules.import_raw(module_id, path_name);
 
-                match imported_module {
-                    Some(Ok(imported_module)) => match imported_module {
-                        Module::Bagel { module_id, ast: _ } => {
+                let other_module_id = module_id.imported(path_name);
+
+                match other_module_id {
+                    Some(other_module_id) => match ModuleType::from(&other_module_id) {
+                        ModuleType::Bagel => {
+                            let other_module =
+                                ctx.modules.get(&other_module_id).unwrap().as_ref().unwrap();
+
                             for item in imports {
                                 let item_downcast = item.downcast();
                                 let item_name = item_downcast.name.downcast();
                                 let item_name = item_name.0.as_str();
 
-                                let decl = imported_module.get_declaration(item_name, true);
+                                let decl = other_module.get_declaration(item_name, true);
 
                                 if decl.is_none() {
                                     report_error(BagelError::MiscError {
@@ -246,11 +246,8 @@ where
                                 }
                             }
                         }
-                        Module::JavaScript { module_id: _ } => {}
-                        Module::Singleton {
-                            module_id,
-                            contents: _,
-                        } => {
+                        ModuleType::JavaScript => {}
+                        _ => {
                             report_error(BagelError::MiscError {
                                 module_id: module_id.clone(),
                                 src: path.slice().clone(),
@@ -261,7 +258,6 @@ where
                             });
                         }
                     },
-                    Some(Err(_)) => {}
                     None => report_error(BagelError::MiscError {
                         module_id: module_id.clone(),
                         src: path.slice().clone(),
@@ -272,9 +268,6 @@ where
                         ),
                     }),
                 }
-                //     }
-                // }
-                // }
             }
             Any::ImportItem(ImportItem { name, alias }) => {
                 name.check(ctx, report_error);
@@ -462,7 +455,7 @@ where
                         // do nothing; don't check this identifier
                     }
                 } else if name != JS_GLOBAL_IDENTIFIER {
-                    match self.resolve_symbol(name.as_str()) {
+                    match self.resolve_symbol(ctx.into(), name.as_str()) {
                         None => {
                             // Identifier can't be resolved
                             report_error(BagelError::MiscError {
@@ -588,7 +581,7 @@ where
                 let name = name.downcast();
                 let name_str = name.0.as_str();
                 if name.0.as_str() != JS_GLOBAL_IDENTIFIER
-                    && self.resolve_symbol(name_str).is_none()
+                    && self.resolve_symbol(ctx.into(), name_str).is_none()
                 {
                     report_error(BagelError::MiscError {
                         module_id: module_id.clone(),
@@ -945,14 +938,10 @@ where
                 check_subsumation(
                     &inner.infer_type(ctx.into()),
                     possible_type.resolve_type(ctx.into()),
-                    inner.slice(),
+                    possible_type.slice(),
                     report_error,
                 );
             }
-            Any::UnionType(UnionType(members)) => {
-                members.check(ctx, report_error);
-            }
-            Any::MaybeType(MaybeType(inner)) => inner.check(ctx, report_error),
             Any::GenericParamType(GenericParamType { name, extends }) => todo!(),
             Any::ProcType(ProcType {
                 type_params,
@@ -1120,7 +1109,7 @@ where
 
                 let (invalid_target, reason) = match target.details() {
                     Any::LocalIdentifier(ident) => {
-                        let resolved = target.resolve_symbol(ident.0.as_str());
+                        let resolved = target.resolve_symbol(ctx.into(), ident.0.as_str());
 
                         if let Some(resolved) = resolved {
                             match resolved.details() {
@@ -1518,13 +1507,6 @@ where
         self.0.check(ctx, report_error);
         self.1.check(ctx, report_error);
     }
-}
-
-#[derive(Debug, Clone)]
-pub struct CheckContext<'a> {
-    pub modules: &'a ModulesStore,
-    pub current_module: &'a Module,
-    pub nearest_func_or_proc: Option<FuncOrProc>,
 }
 
 impl<'a> CheckContext<'a> {
