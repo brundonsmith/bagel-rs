@@ -292,7 +292,7 @@ where
             Any::Block(Block(statements)) => {
                 if let Some(found) = statements
                     .iter()
-                    .skip_while(|stmt| !self.ptr_eq::<Statement>(*stmt))
+                    .take_while(|stmt| !self.ptr_eq::<Statement>(*stmt))
                     .find(|stmt| match stmt.details() {
                         Any::ValueDeclaration(ValueDeclaration {
                             destination,
