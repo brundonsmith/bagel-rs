@@ -481,9 +481,6 @@ pub struct Proc {
 pub struct Block(pub Vec<AST<Statement>>);
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct JavascriptEscape(pub Slice);
-
-#[derive(Debug, Clone, PartialEq)]
 pub struct RangeExpression {
     pub start: AST<Expression>,
     pub end: AST<Expression>,
@@ -1250,7 +1247,6 @@ union_type! {
         | Func
         | Proc
         | Block
-        | JavascriptEscape
         | RangeExpression
         | AwaitExpression
         | Invocation
@@ -1333,7 +1329,6 @@ union_subtype!(
         | InlineConstGroup
         | Func
         | Proc
-        | JavascriptEscape
         | RangeExpression
         | AwaitExpression
         | Invocation

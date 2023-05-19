@@ -114,9 +114,14 @@ impl AST<Expression> {
                                                     }
                                                 },
                                             }
+                                        } else if let Some(spread) = spread {
+                                            if spread.downcast().0 == name {
+                                                todo!()
+                                            } else {
+                                                unreachable!()
+                                            }
                                         } else {
-                                            // spread
-                                            todo!()
+                                            unreachable!()
                                         }
                                     }
                                 }
@@ -276,7 +281,6 @@ impl AST<Expression> {
                             .map(Rc::new),
                     }
                 }
-                Expression::JavascriptEscape(_) => Type::AnyType,
                 Expression::RangeExpression(RangeExpression { start, end }) => {
                     let min = start.infer_type(ctx).to_exact_number();
                     let max = end.infer_type(ctx).to_exact_number();
@@ -451,7 +455,10 @@ pub fn binary_operation_type<'a>(
     BinaryOperation { left, op, right }: &BinaryOperation,
 ) -> Type {
     match op.downcast().0 {
-        BinaryOperatorOp::NullishCoalescing => todo!(),
+        BinaryOperatorOp::NullishCoalescing => left
+            .infer_type(ctx)
+            .subtract(ctx.into(), &Type::NilType)
+            .union(right.infer_type(ctx)),
         BinaryOperatorOp::Or => left
             .infer_type(ctx)
             .narrow(ctx.into(), &Type::BooleanType(Some(true)))
@@ -720,7 +727,11 @@ impl AST<Statement> {
                 body.recast::<Statement>().throws(ctx)
             }
             Statement::Assignment(_) => None,
-            Statement::TryCatch(_) => todo!(),
+            Statement::TryCatch(TryCatch {
+                try_block,
+                error_identifier,
+                catch_block,
+            }) => catch_block.recast::<Statement>().throws(ctx),
             Statement::ThrowStatement(ThrowStatement { error_expression }) => {
                 Some(error_expression.infer_type(ctx))
             }

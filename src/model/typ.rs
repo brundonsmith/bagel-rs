@@ -736,7 +736,7 @@ impl Type {
     }
 
     pub fn simplify<'a>(self, ctx: SubsumationContext<'a>) -> Type {
-        println!("simplify {} {:?}", self, ctx.symbols_encountered);
+        // println!("simplify {} {:?}", self, ctx.symbols_encountered);
 
         match self {
             Type::NamedType { mutability, name } => {

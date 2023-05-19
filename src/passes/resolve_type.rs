@@ -27,7 +27,9 @@ impl AST<TypeExpression> {
                 kind,
                 inner: inner.resolve_type(ctx).rc(),
             },
-            TypeExpression::GenericParamType(GenericParamType { name, extends }) => todo!(),
+            TypeExpression::GenericParamType(GenericParamType { name, extends }) => extends
+                .map(|t| t.resolve_type(ctx))
+                .unwrap_or(Type::UnknownType(Mutability::Mutable)),
             TypeExpression::GenericType(GenericType { type_params, inner }) => todo!(),
             TypeExpression::BoundGenericType(BoundGenericType { type_args, generic }) => {
                 Type::BoundGenericType {

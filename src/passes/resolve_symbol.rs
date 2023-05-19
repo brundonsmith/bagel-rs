@@ -175,9 +175,13 @@ where
                             if match destination {
                                 DeclarationDestination::NameAndType(NameAndType {
                                     name,
-                                    type_annotation,
+                                    type_annotation: _,
                                 }) => name.downcast().0 == symbol,
-                                DeclarationDestination::Destructure(_) => todo!(),
+                                DeclarationDestination::Destructure(Destructure {
+                                    properties,
+                                    spread,
+                                    destructure_kind,
+                                }) => todo!(),
                             } {
                                 return Some(decl.clone().upcast());
                             }

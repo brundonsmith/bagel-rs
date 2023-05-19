@@ -1636,10 +1636,6 @@ fn range_expression(i: Slice) -> ParseResult<AST<RangeExpression>> {
     )(i)
 }
 
-fn javascript_escape_expression(i: Slice) -> ParseResult<AST<JavascriptEscape>> {
-    todo!()
-}
-
 fn proc(i: Slice) -> ParseResult<AST<Proc>> {
     map(
         seq!(

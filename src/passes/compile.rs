@@ -521,8 +521,13 @@ where
                 }
                 f.write_str("\n}")
             }
-            Any::JavascriptEscape(_) => todo!(),
-            Any::RangeExpression(RangeExpression { start, end }) => todo!(),
+            Any::RangeExpression(RangeExpression { start, end }) => {
+                f.write_str("___range(")?;
+                start.compile(ctx, f)?;
+                f.write_char(',')?;
+                end.compile(ctx, f)?;
+                f.write_char(')')
+            }
             Any::AwaitExpression(AwaitExpression(inner)) => todo!(),
             Any::Invocation(Invocation {
                 subject,
@@ -651,7 +656,15 @@ where
                 inner.compile(ctx, f)?;
                 f.write_str(" }")
             }
-            Any::RegularExpression(RegularExpression { expr, flags }) => todo!(),
+            Any::RegularExpression(RegularExpression { expr, flags }) => {
+                f.write_char('/')?;
+                f.write_str(expr.as_str())?;
+                f.write_char('/')?;
+                for flag in flags {
+                    f.write_str(flag.into())?;
+                }
+                f.write_char(' ')
+            }
             Any::AnyLiteral(_) => f.write_str("null"),
             Any::UnionType(UnionType(members)) => {
                 for (index, member) in members.iter().enumerate() {
@@ -668,7 +681,16 @@ where
                 f.write_str(" | null | undefined)")
             }
             Any::NamedType(NamedType(name)) => name.compile(ctx, f),
-            Any::GenericParamType(GenericParamType { name, extends }) => todo!(),
+            Any::GenericParamType(GenericParamType { name, extends }) => {
+                name.compile(ctx, f)?;
+
+                if let Some(extends) = extends {
+                    f.write_str(" extends ")?;
+                    extends.compile(ctx, f)?;
+                }
+
+                Ok(())
+            }
             Any::ProcType(ProcType {
                 type_params,
                 args,
@@ -837,8 +859,10 @@ where
                 f.write_str(value.as_str())?;
                 f.write_char('\'')
             }
-            Any::NumberLiteralType(_) => todo!(),
-            Any::BooleanLiteralType(_) => todo!(),
+            Any::NumberLiteralType(NumberLiteralType(value)) => f.write_str(value.as_str()),
+            Any::BooleanLiteralType(BooleanLiteralType(value)) => {
+                f.write_str(if *value { "true" } else { "false" })
+            }
             Any::StringType(_) => f.write_str("string"),
             Any::NumberType(_) => f.write_str("number"),
             Any::BooleanType(_) => f.write_str("boolean"),
@@ -850,16 +874,25 @@ where
                 inner.compile(ctx, f)?;
                 f.write_char('>')
             }
-            Any::ParenthesizedType(_) => todo!(),
+            Any::ParenthesizedType(ParenthesizedType(inner)) => {
+                f.write_char('(')?;
+                inner.compile(ctx, f)?;
+                f.write_char(')')
+            }
             Any::TypeofType(_) => todo!(),
             Any::ModifierType(ModifierType { kind, inner }) => todo!(),
             Any::UnknownType(_) => f.write_str("unknown"),
-            Any::RegularExpressionType(_) => todo!(),
+            Any::RegularExpressionType(_) => f.write_str("RegExp"),
             Any::PropertyType(PropertyType {
                 subject,
                 property,
                 optional,
-            }) => todo!(),
+            }) => {
+                subject.compile(ctx, f)?;
+                f.write_char('[')?;
+                property.compile(ctx, f)?;
+                f.write_char(']')
+            }
             Any::IfElseStatement(IfElseStatement {
                 cases,
                 default_case,
@@ -897,7 +930,12 @@ where
                 f.write_str(".inner) ")?;
                 body.compile(ctx, f)
             }
-            Any::WhileLoop(WhileLoop { condition, body }) => todo!(),
+            Any::WhileLoop(WhileLoop { condition, body }) => {
+                f.write_str("while (")?;
+                condition.compile(ctx, f)?;
+                f.write_char(')')?;
+                body.compile(ctx, f)
+            }
             Any::Assignment(Assignment {
                 target,
                 value,

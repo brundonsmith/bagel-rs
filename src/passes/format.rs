@@ -236,7 +236,6 @@ where
                 }
                 f.write_char('}')
             }
-            Any::JavascriptEscape(JavascriptEscape(_)) => todo!(),
             Any::RangeExpression(RangeExpression { start, end }) => {
                 start.format(f, opts)?;
                 f.write_str("..")?;

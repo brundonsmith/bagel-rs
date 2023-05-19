@@ -1298,7 +1298,6 @@ where
             // intentionally have nothing to check
             Any::SymbolDeclaration(_) => {}
 
-            Any::JavascriptEscape(_) => {}
             Any::NilLiteral(_) => {}
             Any::NumberLiteral(_) => {}
             Any::BooleanLiteral(_) => {}
