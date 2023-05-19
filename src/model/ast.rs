@@ -528,19 +528,25 @@ pub fn method_call_as_invocation<'a>(
                 if !optional {
                     if let Property::PlainIdentifier(identifier) = property {
                         let subject: AST<LocalIdentifier> = identifier.into();
-                        return Some(
-                            Expression::Invocation(Invocation {
-                                subject: subject.recast::<Expression>(),
-                                args: std::iter::once(property_subject)
-                                    .chain(args.into_iter())
-                                    .collect(),
-                                spread_args,
-                                type_args,
-                                bubbles,
-                                awaited_or_detached,
-                            })
-                            .as_ast(invocation.slice().clone()),
-                        );
+
+                        if subject
+                            .resolve_symbol(subject.downcast().0.as_str())
+                            .is_some()
+                        {
+                            return Some(
+                                Expression::Invocation(Invocation {
+                                    subject: subject.recast::<Expression>(),
+                                    args: std::iter::once(property_subject)
+                                        .chain(args.into_iter())
+                                        .collect(),
+                                    spread_args,
+                                    type_args,
+                                    bubbles,
+                                    awaited_or_detached,
+                                })
+                                .as_ast(invocation.slice().clone()),
+                            );
+                        }
                     }
                 }
             }
