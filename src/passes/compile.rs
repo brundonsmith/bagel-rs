@@ -82,12 +82,10 @@ where
                 path,
             }) => {
                 if ctx.qualify_identifiers_with.is_none() {
-                    //             import { a, b as otherb } from \"./foo.bgl.ts\";
-                    //   import * as bar from \"./bar.bgl.ts\";
                     f.write_str("import * as ")?;
                     name.compile(ctx, f)?;
                     f.write_str(" from \"")?;
-                    f.write_str(path.downcast().value.as_str())?; // TODO: Get the correct path for the current build mode
+                    f.write_str(path.downcast().value.as_str())?;
                     f.write_str(".ts")?;
                     f.write_str("\"")
                 } else {
@@ -109,7 +107,7 @@ where
                         import.compile(ctx, f)?;
                     }
                     f.write_str(" } from \"")?;
-                    f.write_str(path.downcast().value.as_str())?; // TODO: Get the correct path for the current build mode
+                    f.write_str(path.downcast().value.as_str())?;
                     f.write_str(".ts")?;
                     f.write_str("\"")
                 } else {
@@ -522,7 +520,8 @@ where
                 f.write_str("\n}")
             }
             Any::RangeExpression(RangeExpression { start, end }) => {
-                f.write_str("___range(")?;
+                f.write_str(INT)?;
+                f.write_str("range(")?;
                 start.compile(ctx, f)?;
                 f.write_char(',')?;
                 end.compile(ctx, f)?;
@@ -648,8 +647,8 @@ where
                 f.write_str("instanceOf(")?;
                 inner.compile(ctx, f)?;
                 f.write_str(", ")?;
-                todo!();
-                // f.write_str(")")
+                compile_runtime_type(f, possible_type)?;
+                f.write_str(")")
             }
             Any::ErrorExpression(ErrorExpression(inner)) => {
                 f.write_str("{ kind: ___ERROR_SYM, value: ")?;
@@ -1012,7 +1011,8 @@ where
                 effect_block,
                 until,
             }) => {
-                f.write_str("___autorun(() => {")?;
+                f.write_str(INT)?;
+                f.write_str("autorun(() => {")?;
                 effect_block.compile(ctx, f)?;
                 f.write_str("});")
             }
@@ -1034,15 +1034,83 @@ fn compile_string_contents<W: Write>(f: &mut W, contents: &Slice) -> Result {
     Ok(())
 }
 
-// impl<'a, TKind> Compilable for AST<TKind>
-// where
-//     TKind: 'a,
-//     &'a TKind: From<&'a Any>,
-//     Any: TryInto<TKind>,
-// {
-//     fn compile<'a, W: Write>(&self, ctx: CompileContext<'a>, f: &mut W) -> Result {
-//         self.into().compile(ctx, f)
+fn compile_runtime_type<W: Write>(f: &mut W, typ: &AST<TypeExpression>) -> Result {
+    match typ.downcast() {
+        TypeExpression::UnionType(_) => todo!(),
+        TypeExpression::MaybeType(_) => todo!(),
+        TypeExpression::NamedType(_) => todo!(),
+        TypeExpression::GenericParamType(_) => todo!(),
+        TypeExpression::ProcType(_) => todo!(),
+        TypeExpression::FuncType(_) => todo!(),
+        TypeExpression::GenericType(_) => todo!(),
+        TypeExpression::BoundGenericType(_) => todo!(),
+        TypeExpression::ObjectType(_) => todo!(),
+        TypeExpression::RecordType(_) => todo!(),
+        TypeExpression::ArrayType(_) => todo!(),
+        TypeExpression::TupleType(_) => todo!(),
+        TypeExpression::SpecialType(_) => todo!(),
+        TypeExpression::ModifierType(_) => todo!(),
+        TypeExpression::TypeofType(_) => todo!(),
+        TypeExpression::RegularExpressionType(_) => todo!(),
+        TypeExpression::PropertyType(_) => todo!(),
+        TypeExpression::StringLiteralType(StringLiteralType(value)) => {
+            f.write_char('"')?;
+            f.write_str(value.as_str())?;
+            f.write_char('"')
+        }
+        TypeExpression::NumberLiteralType(NumberLiteralType(value)) => f.write_str(value.as_str()),
+        TypeExpression::BooleanLiteralType(BooleanLiteralType(value)) => {
+            f.write_str(if value { "true" } else { "false" })
+        }
+        TypeExpression::ParenthesizedType(ParenthesizedType(inner)) => {
+            f.write_char('(')?;
+            compile_runtime_type(f, &inner)?;
+            f.write_char(')')
+        }
+        TypeExpression::StringType(_) => {
+            f.write_str(INT)?;
+            f.write_str("RT_STRING")
+        }
+        TypeExpression::NumberType(_) => {
+            f.write_str(INT)?;
+            f.write_str("RT_NUMBER")
+        }
+        TypeExpression::BooleanType(_) => {
+            f.write_str(INT)?;
+            f.write_str("RT_BOOLEAN")
+        }
+        TypeExpression::NilType(_) => {
+            f.write_str(INT)?;
+            f.write_str("RT_NIL")
+        }
+        TypeExpression::UnknownType(_) => {
+            f.write_str(INT)?;
+            f.write_str("RT_UNKNOWN")
+        }
+    }
+}
+
+// function compileRuntimeType(type: TypeExpression): string {
+//     switch (type.kind) {
+//         case 'unknown-type': return INT + 'RT_UNKNOWN';
+//         case 'nil-type': return INT + 'RT_NIL';
+//         case 'boolean-type': return INT + 'RT_BOOLEAN';
+//         case 'number-type': return INT + 'RT_NUMBER';
+//         case 'string-type': return INT + 'RT_STRING';
+//         case 'literal-type': return `{ kind: ${INT}RT_LITERAL, value: ${JSON.stringify(type.value.value)} }`;
+//         case 'array-type': return `{ kind: ${INT}RT_ARRAY, inner: ${compileRuntimeType(type.element)} }`;
+//         case 'record-type': return `{ kind: ${INT}RT_RECORD, key: ${compileRuntimeType(type.keyType)}, value: ${compileRuntimeType(type.valueType)} }`;
+//         case 'object-type': return `{ kind: ${INT}RT_OBJECT, entries: [${type.entries.map(({ name, type, optional }) =>
+//             `{ key: '${getName(name)}', value: ${compileRuntimeType(type)}, optional: ${optional} }`
+//         )}] }`;
+//         case 'nominal-type': return `{ kind: ${INT}RT_NOMINAL, nominal: ${type.name}.sym }`
+//         case 'error-type': return `{ kind: ${INT}RT_ERROR, inner: ${compileRuntimeType(type.inner)} }`
+//         case 'iterator-type': return `{ kind: ${INT}RT_ITERATOR, inner: ${compileRuntimeType(type.inner)} }`
+//         case 'plan-type': return `{ kind: ${INT}RT_PLAN, inner: ${compileRuntimeType(type.inner)} }`
+//         case 'union-type': return `[ ${type.members.map(compileRuntimeType).join(', ')} ]`;
 //     }
+
+//     throw Error(`Couldn't runtime-compile type ${format(type)}`)
 // }
 
 impl Compilable for Arg {
@@ -1166,7 +1234,7 @@ fn compile_function<'a, W: Write>(
     f.write_str("function ")?;
 
     if let Some(name) = name {
-        f.write_str("___fn_")?;
+        f.write_str(INT_FN)?;
         f.write_str(name)?;
     }
 
