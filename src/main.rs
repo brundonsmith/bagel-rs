@@ -340,7 +340,7 @@ fn bundle(entrypoint: &str, watch: bool, clean: bool) -> Result<PathBuf, ()> {
             let errors = gather_errors(&modules_store);
             print_error_results(&errors);
 
-            if errors.values().any(|errors| errors.len() > 0) {
+            if !DEBUG_MODE && errors.values().any(|errors| errors.len() > 0) {
                 return Err(());
             }
 

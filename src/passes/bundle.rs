@@ -60,7 +60,7 @@ pub fn bundle<'a>(modules_store: &ModulesStore) -> String {
     buf.write_str("\n\nmain();").unwrap();
 
     if MINIFY {
-        minify(&buf)
+        minify(&buf.replace("export ", ""))
     } else {
         buf
     }

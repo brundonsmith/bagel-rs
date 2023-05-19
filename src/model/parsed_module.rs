@@ -164,6 +164,7 @@ impl From<&ModuleID> for ModuleType {
             "bgl" => ModuleType::Bagel,
             "js" => ModuleType::JavaScript,
             "jsx" => ModuleType::JavaScript,
+            "mjs" => ModuleType::JavaScript,
             "ts" => ModuleType::JavaScript,
             "tsx" => ModuleType::JavaScript,
             "json" => ModuleType::JSON,

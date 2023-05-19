@@ -51,7 +51,7 @@ impl Compilable for ParsedModule {
                 module_id: _,
                 contents,
             } => {
-                f.write_str("export default ")?;
+                f.write_str("\nexport default ")?;
                 contents.compile(ctx, f)
             }
         }
@@ -131,7 +131,7 @@ where
             }) => {
                 if ctx.include_types {
                     if *exported {
-                        f.write_str("export ")?;
+                        f.write_str("\nexport ")?;
                     }
 
                     f.write_str("type ")?;
@@ -156,7 +156,7 @@ where
                 let type_annotation = func.type_annotation.downcast();
 
                 if *exported {
-                    f.write_str("export ")?;
+                    f.write_str("\nexport ")?;
                 }
                 f.write_str("const ")?;
                 name.compile(ctx, f)?;
@@ -185,7 +185,7 @@ where
                 let type_annotation = proc.type_annotation.downcast();
 
                 if *exported {
-                    f.write_str("export ")?;
+                    f.write_str("\nexport ")?;
                 }
                 f.write_str("const ")?;
                 name.compile(ctx, f)?;
@@ -214,7 +214,7 @@ where
                 platforms,
             }) => {
                 if *exported {
-                    f.write_str("export ")?;
+                    f.write_str("\nexport ")?;
                 }
                 f.write_str("const ")?;
                 destination.compile(ctx.qualifying_all_identifiers(), f)?;
@@ -231,7 +231,7 @@ where
             }
             Any::SymbolDeclaration(SymbolDeclaration { name, exported }) => {
                 if *exported {
-                    f.write_str("export ")?;
+                    f.write_str("\nexport ")?;
                 }
                 f.write_str("const ")?;
                 name.compile(ctx, f)?;
