@@ -601,6 +601,12 @@ impl Type {
             (_, Type::AnyType) => {
                 return None;
             }
+            (Type::PoisonedType, _) => {
+                return None;
+            }
+            (_, Type::PoisonedType) => {
+                return None;
+            }
             _ => {}
         };
 

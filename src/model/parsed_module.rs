@@ -114,6 +114,7 @@ impl ParsedModule {
 pub enum ModuleType {
     Bagel,
     JavaScript,
+    Npm,
     JSON,
     Raw,
 }
@@ -146,6 +147,7 @@ impl From<&ModuleID> for ModuleType {
                     ""
                 }
             }
+            ModuleID::Npm(_) => return ModuleType::Npm,
             ModuleID::Artificial(name) => {
                 let dot = name[..name.len() - 1]
                     .char_indices()

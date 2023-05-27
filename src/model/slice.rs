@@ -1,6 +1,7 @@
 use std::ops::{RangeFrom, RangeTo};
 use std::{fmt::Debug, rc::Rc};
 
+use memoize::memoize;
 use nom::{AsChar, Compare, InputIter, InputLength, InputTake, Offset, UnspecializedInput};
 
 #[derive(Clone, Eq)]
@@ -8,6 +9,11 @@ pub struct Slice {
     pub full_string: Rc<String>,
     pub start: usize,
     pub end: usize,
+}
+
+#[memoize]
+pub fn nothing_slice() -> Slice {
+    Slice::new(Rc::new("".to_owned()))
 }
 
 impl core::hash::Hash for Slice {

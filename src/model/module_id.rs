@@ -14,6 +14,7 @@ use crate::utils::{cli_label, Rcable};
 pub enum ModuleID {
     Local(Rc<PathBuf>),
     Remote(Rc<Url>),
+    Npm(Rc<String>),
     Artificial(Rc<String>),
 }
 
@@ -73,6 +74,7 @@ impl ModuleID {
 
                 None
             }
+            ModuleID::Npm(_) => None,
             ModuleID::Artificial(_) => unreachable!(),
         }
         .map(|raw_string| {
@@ -89,6 +91,8 @@ impl ModuleID {
             Url::parse(imported).ok().map(ModuleID::from)
         } else if imported.starts_with("/") {
             ModuleID::try_from(Path::new(imported)).ok()
+        } else if imported.starts_with("npm:") {
+            Some(ModuleID::Npm(imported.to_owned().rc()))
         } else {
             match self {
                 ModuleID::Local(this) => this
@@ -98,6 +102,7 @@ impl ModuleID {
                     .map(|path| ModuleID::try_from(path.as_path()).ok())
                     .flatten(),
                 ModuleID::Remote(this) => this.join(imported).ok().map(ModuleID::from),
+                ModuleID::Npm(this) => Some(ModuleID::Npm(this.clone())),
                 ModuleID::Artificial(_) => Some(ModuleID::Artificial(imported.to_owned().rc())),
             }
         }
@@ -111,6 +116,7 @@ impl ModuleID {
             ModuleID::Remote(url) => url.as_str().starts_with(
                 "https://raw.githubusercontent.com/brundonsmith/bagel-rs/master/lib/bgl",
             ),
+            ModuleID::Npm(_) => false,
             ModuleID::Artificial(_) => false,
         }
     }
@@ -121,6 +127,7 @@ impl Display for ModuleID {
         match self {
             ModuleID::Local(p) => f.write_str(&p.to_string_lossy()),
             ModuleID::Remote(s) => f.write_str(s.as_str()),
+            ModuleID::Npm(s) => f.write_str(s.as_str()),
             ModuleID::Artificial(s) => f.write_str(s.as_str()),
         }
     }

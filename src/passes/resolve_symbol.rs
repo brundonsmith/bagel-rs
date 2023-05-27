@@ -1,6 +1,6 @@
 use crate::{
     cli::ModulesStore,
-    model::{ast::*, ParsedModule},
+    model::{ast::*, nothing_slice, ParsedModule},
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -80,7 +80,9 @@ where
                                                 module_id: _,
                                                 ast: _,
                                             } => None,
-                                            ParsedModule::JavaScript { module_id: _ } => None,
+                                            ParsedModule::JavaScript { module_id: _ } => {
+                                                Some(AnyLiteral.as_ast(nothing_slice()).upcast())
+                                            }
                                             ParsedModule::Singleton {
                                                 module_id: _,
                                                 contents,

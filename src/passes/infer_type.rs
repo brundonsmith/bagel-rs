@@ -156,6 +156,7 @@ impl AST<Expression> {
                                     None => Type::PoisonedType,
                                 }
                             }
+                            Any::AnyLiteral(_) => Type::AnyType,
                             _ => Type::PoisonedType,
                         }
                     } else {

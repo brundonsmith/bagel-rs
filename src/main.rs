@@ -507,11 +507,20 @@ fn load_module_and_dependencies(
     module_id: ModuleID,
     clean: bool,
 ) {
+    let module_type = ModuleType::from(&module_id);
+
+    if module_type == ModuleType::Npm {
+        modules_store.insert(
+            module_id.clone(),
+            Ok(ParsedModule::JavaScript {
+                module_id: module_id.clone(),
+            }),
+        );
+    }
+
     if let Some(mut module_src) = module_id.load(clean) {
         module_src.push('\n'); // https://github.com/Geal/nom/issues/1573
         let module_src = module_src.rc();
-
-        let module_type = ModuleType::from(&module_id);
 
         match module_type {
             ModuleType::JavaScript => {
@@ -522,6 +531,7 @@ fn load_module_and_dependencies(
                     }),
                 );
             }
+            ModuleType::Npm => {}
             ModuleType::JSON => {
                 let module_src = Slice::new(module_src);
 

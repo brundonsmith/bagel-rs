@@ -81,18 +81,6 @@ where
 
             let module_id = &ctx.current_module.module_id().clone();
             let subsumation_context = SubsumationContext::from(ctx);
-            let check_subsumation =
-                |destination: &Type, value: Type, slice: &Slice, report_error: &mut F| {
-                    let issues = destination.subsumation_issues(subsumation_context, &value);
-
-                    if let Some(issues) = issues {
-                        report_error(BagelError::AssignmentError {
-                            module_id: module_id.clone(),
-                            src: slice.clone(),
-                            issues,
-                        });
-                    }
-                };
 
             let left_type = left.infer_type(ctx.into());
             let right_type = right.infer_type(ctx.into());
