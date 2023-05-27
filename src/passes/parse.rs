@@ -2,8 +2,10 @@
 use crate::utils::Loggable;
 use crate::{
     model::{ast::*, ModuleID, ParseError, Slice},
+    utils::cli_label,
     DEBUG_MODE,
 };
+use colored::Color;
 use memoize::memoize;
 use nom::{
     branch::alt,
@@ -15,8 +17,7 @@ use nom::{
     sequence::{pair, preceded, terminated, tuple},
     IResult, Parser,
 };
-use std::str::FromStr;
-use std::{rc::Rc, time::SystemTime};
+use std::{rc::Rc, str::FromStr, time::SystemTime};
 
 macro_rules! seq {
     ($( $s:expr ),* $(,)?) => {
@@ -64,7 +65,8 @@ pub fn parse(module_id: ModuleID, module_src: Rc<String>) -> Result<AST<Module>,
 
     if DEBUG_MODE {
         println!(
-            "* Parsing  {} took {}ms",
+            "{} Parsing {} took {}ms",
+            cli_label("Debug", Color::Blue),
             module_id,
             start.elapsed().unwrap().as_millis()
         );
@@ -102,32 +104,6 @@ pub fn parse(module_id: ModuleID, module_src: Rc<String>) -> Result<AST<Module>,
             nom::Err::Incomplete(_) => unreachable!(),
         },
     }
-}
-
-macro_rules! parse_level {
-    ($level:expr, $this_level:expr, $i:expr, $a:expr) => {
-        $this_level += 1;
-        if $level <= $this_level {
-            let res = $a($i.clone());
-
-            if res.is_ok() {
-                return res;
-            }
-        }
-    };
-}
-
-macro_rules! parse_level_expression {
-    ($level:expr, $this_level:expr, $i:expr, $a:expr) => {
-        $this_level += 1;
-        if $level <= $this_level {
-            let res = map($a, AST::recast::<Expression>)($i.clone());
-
-            if res.is_ok() {
-                return res;
-            }
-        }
-    };
 }
 
 fn module(i: Slice, module_id: ModuleID) -> ParseResult<AST<Module>> {
@@ -237,7 +213,7 @@ fn type_declaration(i: Slice) -> ParseResult<AST<TypeDeclaration>> {
             tag("type"),
             plain_identifier,
             tag("="),
-            type_expression(0),
+            type_expression(None),
         ),
         |(export, keyword, mut name, _, mut declared_type)| {
             let mut exported = export.is_some();
@@ -267,7 +243,7 @@ fn func_declaration(i: Slice) -> ParseResult<AST<FuncDeclaration>> {
             args_parenthesized,
             opt(type_annotation),
             tag("=>"),
-            expression(0),
+            expression(None),
         ),
         |(
             mut platforms,
@@ -491,7 +467,7 @@ fn type_param(i: Slice) -> ParseResult<AST<TypeParam>> {
                 whitespace_required,
                 tag("extends"),
                 whitespace_required,
-                type_expression(0),
+                type_expression(None),
             ))),
         )),
         |(mut name, extends)| {
@@ -514,7 +490,7 @@ fn decorator(i: Slice) -> ParseResult<AST<Decorator>> {
             plain_identifier,
             opt(seq!(
                 tag("("),
-                separated_list0(w(tag(",")), w(expression(0))),
+                separated_list0(w(tag(",")), w(expression(None))),
                 tag(")")
             )),
         )),
@@ -547,7 +523,7 @@ fn value_declaration(i: Slice) -> ParseResult<AST<ValueDeclaration>> {
             terminated(alt((tag("const"), tag("let"))), whitespace_required),
             declaration_destination,
             tag("="),
-            expression(0),
+            expression(None),
         ),
         |(mut platforms, export, keyword, mut destination, _, mut value)| {
             let mut exported = export.is_some();
@@ -591,7 +567,7 @@ fn test_expr_declaration(i: Slice) -> ParseResult<AST<TestExprDeclaration>> {
             tag("expr"),
             exact_string_literal,
             tag("=>"),
-            expression(0),
+            expression(None),
         ),
         |(mut platforms, start, _, mut name, _, mut expr)| {
             make_node!(
@@ -644,206 +620,145 @@ fn declaration_platforms(i: Slice) -> ParseResult<AST<DeclarationPlatforms>> {
 }
 
 fn type_annotation(i: Slice) -> ParseResult<AST<TypeExpression>> {
-    preceded(tag(":"), w(type_expression(0)))(i)
+    preceded(tag(":"), w(type_expression(None)))(i)
 }
 
 // --- TypeExpression ---
 
-fn type_expression(l: usize) -> impl Fn(Slice) -> ParseResult<AST<TypeExpression>> {
-    move |i: Slice| -> ParseResult<AST<TypeExpression>> { type_expression_inner(l, i) }
+fn type_expression(
+    after: Option<fn(Slice) -> ParseResult<AST<TypeExpression>>>,
+) -> impl Fn(Slice) -> ParseResult<AST<TypeExpression>> {
+    move |i: Slice| {
+        precedence(
+            &[
+                &[typeof_type],
+                &[modifier_type],
+                &[union_type],
+                &[maybe_type],
+                &[array_type],
+                &[bound_generic_type],
+                &[
+                    func_type,
+                    proc_type,
+                    record_type,
+                    object_or_interface_type,
+                    tuple_type,
+                    parenthesized_type,
+                    string_lilteral_type,
+                    number_literal_type,
+                ],
+                &[named_type],
+            ],
+            after,
+            i,
+        )
+    }
 }
 
-#[memoize]
-fn type_expression_inner(l: usize, i: Slice) -> ParseResult<AST<TypeExpression>> {
-    let mut tl = 0;
-
-    parse_level!(
-        l,
-        tl,
-        i,
-        map(seq!(tag("typeof"), expression(0)), |(keyword, mut expr)| {
+fn typeof_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
+    map(
+        seq!(tag("typeof"), expression(None)),
+        |(keyword, mut expr)| {
             make_node_tuple!(TypeofType, keyword.spanning(&expr), expr).recast::<TypeExpression>()
-        })
-    );
+        },
+    )(i)
+}
 
-    parse_level!(
-        l,
-        tl,
-        i,
-        map(
-            seq!(
-                alt((
-                    tag(ModifierTypeKind::Keyof.into()),
-                    tag(ModifierTypeKind::Valueof.into()),
-                    tag(ModifierTypeKind::Elementof.into()),
-                    tag(ModifierTypeKind::Readonly.into())
-                )),
-                type_expression(0)
-            ),
-            |(keyword, mut inner)| {
-                let mut kind: ModifierTypeKind = keyword.as_str().try_into().unwrap();
-                let src = keyword.spanning(&inner);
+fn modifier_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
+    map(
+        seq!(
+            alt((
+                tag(ModifierTypeKind::Keyof.into()),
+                tag(ModifierTypeKind::Valueof.into()),
+                tag(ModifierTypeKind::Elementof.into()),
+                tag(ModifierTypeKind::Readonly.into())
+            )),
+            type_expression(None)
+        ),
+        |(keyword, mut inner)| {
+            let mut kind: ModifierTypeKind = keyword.as_str().try_into().unwrap();
+            let src = keyword.spanning(&inner);
 
-                make_node!(ModifierType, src, kind, inner).recast::<TypeExpression>()
-            }
-        )
-    );
+            make_node!(ModifierType, src, kind, inner).recast::<TypeExpression>()
+        },
+    )(i)
+}
 
-    parse_level!(
-        l,
-        tl,
-        i,
-        map(
-            preceded(
-                opt(w(tag("|"))),
-                separated_list2(w(tag("|")), w(type_expression(tl + 1))),
-            ),
-            |mut members| {
-                make_node_tuple!(UnionType, covering(&members).unwrap(), members)
-                    .recast::<TypeExpression>()
-            }
-        )
-    );
+fn union_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
+    map(
+        preceded(
+            opt(w(tag("|"))),
+            separated_list2(w(tag("|")), w(type_expression(Some(union_type)))),
+        ),
+        |mut members| {
+            make_node_tuple!(UnionType, covering(&members).unwrap(), members)
+                .recast::<TypeExpression>()
+        },
+    )(i)
+}
 
-    parse_level!(
-        l,
-        tl,
-        i,
-        map(
-            seq!(type_expression(tl + 1), tag("?")),
-            |(mut inner, end)| {
-                make_node_tuple!(MaybeType, inner.spanning(&end), inner).recast::<TypeExpression>()
-            }
-        )
-    );
+fn maybe_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
+    map(
+        seq!(type_expression(Some(maybe_type)), tag("?")),
+        |(mut inner, end)| {
+            make_node_tuple!(MaybeType, inner.spanning(&end), inner).recast::<TypeExpression>()
+        },
+    )(i)
+}
 
-    // boundGenericType
+fn array_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
+    map(
+        seq!(type_expression(Some(array_type)), tag("[]")),
+        |(mut element, end)| {
+            make_node_tuple!(ArrayType, element.spanning(&end), element).recast::<TypeExpression>()
+        },
+    )(i)
+}
 
-    parse_level!(
-        l,
-        tl,
-        i,
-        map(
-            seq!(type_expression(tl + 1), tag("[]")),
-            |(mut element, end)| {
-                make_node_tuple!(ArrayType, element.spanning(&end), element)
-                    .recast::<TypeExpression>()
-            }
-        )
-    );
+fn bound_generic_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
+    map(
+        seq!(
+            type_expression(Some(bound_generic_type)),
+            tag("<"),
+            separated_list1(w(tag(",")), w(type_expression(None))),
+            tag(">"),
+        ),
+        |(generic, _, mut type_args, end)| {
+            let mut generic = generic.recast::<TypeExpression>();
+            let src = generic.spanning(&end);
 
-    parse_level!(
-        l,
-        tl,
-        i,
-        map(
-            seq!(
-                type_expression(tl + 1),
-                tag("<"),
-                separated_list1(w(tag(",")), w(type_expression(0))),
-                tag(">"),
-            ),
-            |(generic, _, mut type_args, end)| {
-                let mut generic = generic.recast::<TypeExpression>();
-                let src = generic.spanning(&end);
+            if let Some(name) = generic.try_downcast::<NamedType>() {
+                if type_args.len() == 1 {
+                    let kind = match name.0.downcast().0.as_str() {
+                        "Plan" => Some(SpecialTypeKind::Plan),
+                        "Iterable" => Some(SpecialTypeKind::Iterable),
+                        "Error" => Some(SpecialTypeKind::Error),
+                        _ => None,
+                    };
 
-                if let Some(name) = generic.try_downcast::<NamedType>() {
-                    if type_args.len() == 1 {
-                        let kind = match name.0.downcast().0.as_str() {
-                            "Plan" => Some(SpecialTypeKind::Plan),
-                            "Iterable" => Some(SpecialTypeKind::Iterable),
-                            "Error" => Some(SpecialTypeKind::Error),
-                            _ => None,
-                        };
+                    if let Some(mut kind) = kind {
+                        let mut inner = type_args.into_iter().next().unwrap();
 
-                        if let Some(mut kind) = kind {
-                            let mut inner = type_args.into_iter().next().unwrap();
-
-                            return make_node!(SpecialType, src, kind, inner)
-                                .recast::<TypeExpression>();
-                        }
+                        return make_node!(SpecialType, src, kind, inner)
+                            .recast::<TypeExpression>();
                     }
                 }
-
-                return make_node!(BoundGenericType, src, generic, type_args)
-                    .recast::<TypeExpression>();
             }
-        )
-    );
 
-    parse_level!(
-        l,
-        tl,
-        i,
-        alt((
-            map(func_type, AST::recast::<TypeExpression>),
-            map(proc_type, AST::recast::<TypeExpression>),
-            map(record_type, AST::recast::<TypeExpression>),
-            map(object_or_interface_type, AST::recast::<TypeExpression>),
-            map(tuple_type, AST::recast::<TypeExpression>),
-            map(
-                seq!(tag("("), type_expression(0), tag(")")),
-                |(open, mut inner, close)| {
-                    make_node_tuple!(ParenthesizedType, open.spanning(&close), inner)
-                        .recast::<TypeExpression>()
-                }
-            ),
-            map(
-                tuple((tag("\'"), string_contents, tag("\'"))),
-                |(open_quote, value, close_quote)| {
-                    StringLiteralType(value)
-                        .as_ast(open_quote.spanning(&close_quote))
-                        .recast::<TypeExpression>()
-                },
-            ),
-            map(seq!(opt(tag("-")), numeric), |(neg, int)| {
-                let src = neg.as_ref().unwrap_or(&int).spanning(&int);
-                NumberLiteralType(src.clone())
-                    .as_ast(src)
-                    .recast::<TypeExpression>()
-            }),
-        ))
-    );
-
-    parse_level!(
-        l,
-        tl,
-        i,
-        map(named_type, |named_type| {
-            let s = named_type.slice().clone();
-
-            match named_type.downcast().0.downcast().0.as_str() {
-                "RegExp" => RegularExpressionType.as_ast(s).recast::<TypeExpression>(),
-                "true" => BooleanLiteralType(true)
-                    .as_ast(s)
-                    .recast::<TypeExpression>(),
-                "false" => BooleanLiteralType(false)
-                    .as_ast(s)
-                    .recast::<TypeExpression>(),
-                "string" => StringType.as_ast(s).recast::<TypeExpression>(),
-                "number" => NumberType.as_ast(s).recast::<TypeExpression>(),
-                "boolean" => BooleanType.as_ast(s).recast::<TypeExpression>(),
-                "unknown" => UnknownType.as_ast(s).recast::<TypeExpression>(),
-                "nil" => NilType.as_ast(s).recast::<TypeExpression>(),
-                _ => named_type.recast::<TypeExpression>(),
-            }
-        })
-    );
-
-    Err(nom::Err::Error(RawParseError {
-        src: i,
-        details: RawParseErrorDetails::Kind(ErrorKind::Fail),
-    }))
+            return make_node!(BoundGenericType, src, generic, type_args)
+                .recast::<TypeExpression>();
+        },
+    )(i)
 }
 
-fn func_type(i: Slice) -> ParseResult<AST<FuncType>> {
+fn func_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
     map(
         seq!(
             opt(terminated(tag("pure"), whitespace_required)),
             type_params,
             args_parenthesized,
             tag("=>"),
-            type_expression(0)
+            type_expression(None)
         ),
         |(pure, mut type_params, (mut args, mut args_spread), _, returns)| {
             // TODO: func type with 0 arguments will have weird src
@@ -867,11 +782,12 @@ fn func_type(i: Slice) -> ParseResult<AST<FuncType>> {
                 is_async,
                 returns
             )
+            .recast::<TypeExpression>()
         },
     )(i)
 }
 
-fn proc_type(i: Slice) -> ParseResult<AST<ProcType>> {
+fn proc_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
     map(
         seq!(
             opt(terminated(tag("pure"), whitespace_required)),
@@ -903,34 +819,36 @@ fn proc_type(i: Slice) -> ParseResult<AST<ProcType>> {
                 is_async,
                 throws
             )
+            .recast::<TypeExpression>()
         },
     )(i)
 }
 
 fn throws_clause(i: Slice) -> ParseResult<AST<TypeExpression>> {
-    map(seq!(tag("throws"), type_expression(0)), |(_, throws)| {
+    map(seq!(tag("throws"), type_expression(None)), |(_, throws)| {
         throws
     })(i)
 }
 
-fn record_type(i: Slice) -> ParseResult<AST<RecordType>> {
+fn record_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
     map(
         seq!(
             tag("{"),
             tag("["),
-            type_expression(0),
+            type_expression(None),
             tag("]"),
             tag(":"),
-            type_expression(0),
+            type_expression(None),
             tag("}"),
         ),
         |(open, _, mut key_type, _, _, mut value_type, close)| {
             make_node!(RecordType, open.spanning(&close), key_type, value_type)
+                .recast::<TypeExpression>()
         },
     )(i)
 }
 
-fn object_or_interface_type(i: Slice) -> ParseResult<AST<ObjectType>> {
+fn object_or_interface_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
     map(
         seq!(
             opt(tag("interface")),
@@ -940,7 +858,7 @@ fn object_or_interface_type(i: Slice) -> ParseResult<AST<ObjectType>> {
                     w(tag(",")),
                     w(alt((
                         map(
-                            preceded(tag("..."), type_expression(0)),
+                            preceded(tag("..."), type_expression(None)),
                             KeyValueOrSpread::Spread
                         ),
                         key_value_type,
@@ -959,6 +877,7 @@ fn object_or_interface_type(i: Slice) -> ParseResult<AST<ObjectType>> {
                 entries,
                 is_interface
             )
+            .recast::<TypeExpression>()
         },
     )(i)
 }
@@ -969,7 +888,7 @@ fn key_value_type(i: Slice) -> ParseResult<KeyValueOrSpread<AST<TypeExpression>>
             plain_identifier,
             opt(tag("?")),
             tag(":"),
-            type_expression(0)
+            type_expression(None)
         ),
         |(key, optional, _, value)| {
             KeyValueOrSpread::KeyValue(
@@ -981,7 +900,7 @@ fn key_value_type(i: Slice) -> ParseResult<KeyValueOrSpread<AST<TypeExpression>>
     )(i)
 }
 
-fn tuple_type(i: Slice) -> ParseResult<AST<TupleType>> {
+fn tuple_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
     map(
         seq!(
             tag("["),
@@ -990,23 +909,73 @@ fn tuple_type(i: Slice) -> ParseResult<AST<TupleType>> {
                     w(tag(",")),
                     w(alt((
                         map(
-                            preceded(tag("..."), type_expression(0)),
+                            preceded(tag("..."), type_expression(None)),
                             ElementOrSpread::Spread
                         ),
-                        map(type_expression(0), ElementOrSpread::Element),
+                        map(type_expression(None), ElementOrSpread::Element),
                     )))
                 ),
                 opt(w(tag(",")))
             ),
             tag("]"),
         ),
-        |(open, mut members, close)| make_node_tuple!(TupleType, open.spanning(&close), members),
+        |(open, mut members, close)| {
+            make_node_tuple!(TupleType, open.spanning(&close), members).recast::<TypeExpression>()
+        },
     )(i)
 }
 
-fn named_type(i: Slice) -> ParseResult<AST<NamedType>> {
+fn parenthesized_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
+    map(
+        seq!(tag("("), type_expression(None), tag(")")),
+        |(open, mut inner, close)| {
+            make_node_tuple!(ParenthesizedType, open.spanning(&close), inner)
+                .recast::<TypeExpression>()
+        },
+    )(i)
+}
+
+fn string_lilteral_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
+    map(
+        tuple((tag("\'"), string_contents, tag("\'"))),
+        |(open_quote, value, close_quote)| {
+            StringLiteralType(value)
+                .as_ast(open_quote.spanning(&close_quote))
+                .recast::<TypeExpression>()
+        },
+    )(i)
+}
+
+fn number_literal_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
+    map(seq!(opt(tag("-")), numeric), |(neg, int)| {
+        let src = neg.as_ref().unwrap_or(&int).spanning(&int);
+        NumberLiteralType(src.clone())
+            .as_ast(src)
+            .recast::<TypeExpression>()
+    })(i)
+}
+
+fn named_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
     map(local_identifier, |mut ident| {
-        make_node_tuple!(NamedType, ident.slice().clone(), ident)
+        let s = ident.slice().clone();
+
+        match s.as_str() {
+            "RegExp" => RegularExpressionType.as_ast(s).recast::<TypeExpression>(),
+            "true" => BooleanLiteralType(true)
+                .as_ast(s)
+                .recast::<TypeExpression>(),
+            "false" => BooleanLiteralType(false)
+                .as_ast(s)
+                .recast::<TypeExpression>(),
+            "string" => StringType.as_ast(s).recast::<TypeExpression>(),
+            "number" => NumberType.as_ast(s).recast::<TypeExpression>(),
+            "boolean" => BooleanType.as_ast(s).recast::<TypeExpression>(),
+            "unknown" => UnknownType.as_ast(s).recast::<TypeExpression>(),
+            "nil" => NilType.as_ast(s).recast::<TypeExpression>(),
+            _ => {
+                make_node_tuple!(NamedType, ident.slice().clone(), ident).recast::<TypeExpression>()
+            }
+        }
     })(i)
 }
 
@@ -1028,10 +997,7 @@ fn statement(i: Slice) -> ParseResult<AST<Statement>> {
         map(autorun, AST::recast::<Statement>),
         map(block, AST::recast::<Statement>),
         map(
-            seq!(
-                invocation_accessor_chain(14), // HACK: Has to be kept in sync with expression() function!
-                tag(";")
-            ),
+            seq!(invocation_accessor_chain, tag(";")),
             |(invocation, _)| {
                 invocation
                     .try_recast::<Invocation>()
@@ -1063,7 +1029,7 @@ fn if_else_statement(i: Slice) -> ParseResult<AST<IfElseStatement>> {
 
 fn if_else_statement_case(i: Slice) -> ParseResult<AST<IfElseStatementCase>> {
     map(
-        seq!(tag("if"), expression(0), block),
+        seq!(tag("if"), expression(None), block),
         |(start, mut condition, mut outcome)| {
             make_node!(
                 IfElseStatementCase,
@@ -1081,7 +1047,7 @@ fn for_loop(i: Slice) -> ParseResult<AST<ForLoop>> {
             tag("for"),
             plain_identifier,
             tag("of"),
-            expression(0),
+            expression(None),
             block,
         ),
         |(start, mut item_identifier, _, mut iterable, mut body)| {
@@ -1098,7 +1064,7 @@ fn for_loop(i: Slice) -> ParseResult<AST<ForLoop>> {
 
 fn while_loop(i: Slice) -> ParseResult<AST<WhileLoop>> {
     map(
-        seq!(tag("while"), expression(0), block),
+        seq!(tag("while"), expression(None), block),
         |(start, mut condition, mut body)| {
             make_node!(WhileLoop, start.spanning(&body), condition, body)
         },
@@ -1109,7 +1075,7 @@ fn assignment(i: Slice) -> ParseResult<AST<Assignment>> {
     map(
         seq!(
             alt((
-                map(invocation_accessor_chain(14), AST::recast::<Expression>),
+                map(invocation_accessor_chain, AST::recast::<Expression>),
                 map(local_identifier, AST::recast::<Expression>)
             )),
             pair(
@@ -1130,7 +1096,7 @@ fn assignment(i: Slice) -> ParseResult<AST<Assignment>> {
                 )),
                 tag("=")
             ),
-            expression(0),
+            expression(None),
             tag(";")
         ),
         |(mut target, (mut operator, _), mut value, end)| {
@@ -1156,7 +1122,7 @@ fn try_catch(i: Slice) -> ParseResult<AST<TryCatch>> {
 
 fn throw_statement(i: Slice) -> ParseResult<AST<ThrowStatement>> {
     map(
-        seq!(tag("throw"), expression(0), tag(";")),
+        seq!(tag("throw"), expression(None), tag(";")),
         |(start, mut error_expression, end)| {
             make_node!(ThrowStatement, start.spanning(&end), error_expression)
         },
@@ -1171,7 +1137,7 @@ fn autorun(i: Slice) -> ParseResult<AST<Autorun>> {
             alt((
                 map(tag("forever"), |_| None),
                 map(
-                    seq!(tag("until"), tag("=>"), expression(0)),
+                    seq!(tag("until"), tag("=>"), expression(None)),
                     |(_, _, until)| Some(until),
                 ),
             )),
@@ -1185,105 +1151,53 @@ fn autorun(i: Slice) -> ParseResult<AST<Autorun>> {
 
 // --- Expression ---
 
-fn expression(l: usize) -> impl Fn(Slice) -> ParseResult<AST<Expression>> {
-    move |i: Slice| -> ParseResult<AST<Expression>> { expression_inner(l, i) }
+fn expression(
+    after: Option<fn(Slice) -> ParseResult<AST<Expression>>>,
+) -> impl Fn(Slice) -> ParseResult<AST<Expression>> {
+    move |i: Slice| {
+        precedence(
+            &[
+                &[element_tag],
+                &[func, proc],
+                &[binary_operation_1],
+                &[binary_operation_2],
+                &[binary_operation_3],
+                &[binary_operation_4],
+                &[binary_operation_5],
+                &[binary_operation_6],
+                &[binary_operation_7],
+                &[as_cast, instance_of],
+                // TODO: await expression
+                &[negation_operation],
+                &[error_expression],
+                &[invocation_accessor_chain],
+                &[range_expression],
+                &[parenthesis],
+                &[
+                    if_else_expression,
+                    switch_expression,
+                    inline_const_group,
+                    object_literal,
+                    array_literal,
+                    exact_string_literal_expr,
+                    string_literal,
+                    number_literal,
+                    boolean_literal,
+                    nil_literal,
+                ],
+                &[local_identifier_expr, regular_expression],
+            ],
+            after,
+            i,
+        )
+    }
 }
 
-#[memoize]
-fn expression_inner(l: usize, i: Slice) -> ParseResult<AST<Expression>> {
-    let mut tl = 0;
-
-    parse_level_expression!(l, tl, i, element_tag);
-
-    parse_level_expression!(
-        l,
-        tl,
-        i,
-        alt((
-            map(func, AST::recast::<Expression>),
-            map(proc, AST::recast::<Expression>)
-        ))
-    );
-    parse_level_expression!(l, tl, i, binary_operation_1(tl, "??"));
-    parse_level_expression!(l, tl, i, binary_operation_1(tl, "||"));
-    parse_level_expression!(l, tl, i, binary_operation_1(tl, "&&"));
-    parse_level_expression!(l, tl, i, binary_operation_2(tl, "==", "!="));
-    parse_level_expression!(l, tl, i, binary_operation_4(tl, "<=", ">=", "<", ">"));
-    parse_level_expression!(l, tl, i, binary_operation_2(tl, "+", "-"));
-    parse_level_expression!(l, tl, i, binary_operation_2(tl, "*", "/"));
-    parse_level_expression!(
-        l,
-        tl,
-        i,
-        alt((
-            map(as_cast(tl), AST::recast::<Expression>),
-            map(instance_of(tl), AST::recast::<Expression>)
-        ))
-    );
-
-    parse_level_expression!(
-        l,
-        tl,
-        i,
-        map(seq!(tag("await"), expression(tl)), |(keyword, mut expr)| {
-            make_node_tuple!(AwaitExpression, keyword.spanning(&expr), expr).recast::<Expression>()
-        })
-    );
-
-    parse_level_expression!(l, tl, i, negation_operation(tl));
-
-    // indexer
-
-    parse_level_expression!(l, tl, i, error_expression);
-
-    parse_level_expression!(l, tl, i, invocation_accessor_chain(tl));
-
-    parse_level_expression!(l, tl, i, range_expression);
-
-    parse_level_expression!(l, tl, i, parenthesis);
-
-    parse_level_expression!(
-        l,
-        tl,
-        i,
-        alt((
-            map(if_else_expression, AST::recast::<Expression>),
-            map(switch_expression, AST::recast::<Expression>),
-            map(inline_const_group, AST::recast::<Expression>),
-            map(object_literal, AST::recast::<Expression>),
-            map(array_literal, AST::recast::<Expression>),
-            map(exact_string_literal, AST::recast::<Expression>),
-            map(string_literal, AST::recast::<Expression>),
-            map(number_literal, AST::recast::<Expression>),
-            map(boolean_literal, AST::recast::<Expression>),
-            map(nil_literal, AST::recast::<Expression>),
-        ),)
-    );
-    parse_level_expression!(
-        l,
-        tl,
-        i,
-        alt((
-            map(local_identifier, AST::recast::<Expression>),
-            map(regular_expression, AST::recast::<Expression>),
-        ))
-    );
-
-    Err(nom::Err::Error(RawParseError {
-        src: i,
-        details: RawParseErrorDetails::Kind(ErrorKind::Fail),
-    }))
-}
-
-fn invocation_accessor_chain(level: usize) -> impl Fn(Slice) -> ParseResult<AST<Expression>> {
-    move |i: Slice| -> ParseResult<AST<Expression>> { invocation_accessor_chain_inner(level, i) }
-}
-
-fn invocation_accessor_chain_inner(level: usize, i: Slice) -> ParseResult<AST<Expression>> {
+fn invocation_accessor_chain(i: Slice) -> ParseResult<AST<Expression>> {
     map(
         seq!(
             await_or_detach,
-            expression(level + 1),
+            expression(Some(invocation_accessor_chain)),
             many1(alt((
                 invocation_args,
                 indexer_expression,
@@ -1351,13 +1265,13 @@ fn invocation_args(i: Slice) -> ParseResult<InvocationOrPropertyAccess> {
             opt(map(
                 seq!(
                     tag("<"),
-                    separated_list0(w(tag(",")), w(type_expression(0))),
+                    separated_list0(w(tag(",")), w(type_expression(None))),
                     tag(">")
                 ),
                 |(_, type_args, _)| type_args
             )),
             tag("("),
-            separated_list0(w(tag(",")), w(expression(0))),
+            separated_list0(w(tag(",")), w(expression(None))),
             tag(")")
         ),
         |(type_args, open, args, close)| {
@@ -1372,7 +1286,7 @@ fn invocation_args(i: Slice) -> ParseResult<InvocationOrPropertyAccess> {
 
 fn indexer_expression(i: Slice) -> ParseResult<InvocationOrPropertyAccess> {
     map(
-        tuple((opt(tag("?.")), tag("["), w(expression(0)), w(tag("]")))),
+        tuple((opt(tag("?.")), tag("["), w(expression(None)), w(tag("]")))),
         |(question_dot, open, property, close)| InvocationOrPropertyAccess::Accessing {
             property: Property::Expression(property),
             optional: question_dot.is_some(),
@@ -1414,13 +1328,16 @@ enum InvocationOrPropertyAccess {
     },
 }
 
-macro_rules! parse_binary_operation {
-    ($level:expr, $operator:expr) => {
-        move |i: Slice| -> ParseResult<AST<Expression>> {
+macro_rules! binary_operation {
+    ($name:ident, $( $operator:expr ),* $(,)?) => {
+        fn $name(i: Slice) -> ParseResult<AST<Expression>> {
             map(
                 tuple((
-                    expression($level + 1),
-                    many1(pair(w($operator), w(expression($level + 1)))),
+                    expression(Some($name)),
+                    many1(pair(
+                        w(alt(($(tag($operator),)*))),
+                        w(expression(Some($name))),
+                    )),
                 )),
                 |(base, clauses)| {
                     let mut next_left: AST<Expression> = base;
@@ -1443,37 +1360,20 @@ macro_rules! parse_binary_operation {
 
                     next_left
                 },
-            )(i.clone())
+            )(i)
         }
     };
 }
 
-fn binary_operation_1(
-    level: usize,
-    a: &'static str,
-) -> impl Fn(Slice) -> ParseResult<AST<Expression>> {
-    parse_binary_operation!(level, tag(a))
-}
+binary_operation!(binary_operation_1, "??");
+binary_operation!(binary_operation_2, "||");
+binary_operation!(binary_operation_3, "&&");
+binary_operation!(binary_operation_4, "==", "!=");
+binary_operation!(binary_operation_5, "<=", ">=", "<", ">");
+binary_operation!(binary_operation_6, "+", "-");
+binary_operation!(binary_operation_7, "*", "/");
 
-fn binary_operation_2(
-    level: usize,
-    a: &'static str,
-    b: &'static str,
-) -> impl Fn(Slice) -> ParseResult<AST<Expression>> {
-    parse_binary_operation!(level, alt((tag(a), tag(b))))
-}
-
-fn binary_operation_4(
-    level: usize,
-    a: &'static str,
-    b: &'static str,
-    c: &'static str,
-    d: &'static str,
-) -> impl Fn(Slice) -> ParseResult<AST<Expression>> {
-    parse_binary_operation!(level, alt((tag(a), tag(b), tag(c), tag(d))))
-}
-
-fn regular_expression(i: Slice) -> ParseResult<AST<RegularExpression>> {
+fn regular_expression(i: Slice) -> ParseResult<AST<Expression>> {
     map(
         tuple((
             tag("/"),
@@ -1486,7 +1386,7 @@ fn regular_expression(i: Slice) -> ParseResult<AST<RegularExpression>> {
             many0(regular_expression_flag),
         )),
         |(start, mut expr, end, mut flags)| {
-            make_node!(RegularExpression, start.spanning(&end), expr, flags)
+            make_node!(RegularExpression, start.spanning(&end), expr, flags).recast::<Expression>()
         },
     )(i)
 }
@@ -1506,46 +1406,49 @@ fn regular_expression_flag(i: Slice) -> ParseResult<RegularExpressionFlag> {
     )(i)
 }
 
-fn error_expression(i: Slice) -> ParseResult<AST<ErrorExpression>> {
+fn error_expression(i: Slice) -> ParseResult<AST<Expression>> {
     map(
-        seq!(tag("Error"), tag("("), expression(0), tag(")")),
-        |(start, _, mut inner, end)| make_node_tuple!(ErrorExpression, start.spanning(&end), inner,),
+        seq!(tag("Error"), tag("("), expression(None), tag(")")),
+        |(start, _, mut inner, end)| {
+            make_node_tuple!(ErrorExpression, start.spanning(&end), inner,).recast::<Expression>()
+        },
     )(i)
 }
 
-fn instance_of(level: usize) -> impl Fn(Slice) -> ParseResult<AST<InstanceOf>> {
-    move |i: Slice| -> ParseResult<AST<InstanceOf>> {
-        map(
-            seq!(expression(level + 1), tag("instanceof"), type_expression(0)),
-            |(mut inner, _, mut possible_type)| {
-                make_node!(
-                    InstanceOf,
-                    inner.spanning(&possible_type),
-                    inner,
-                    possible_type
-                )
-            },
-        )(i)
-    }
+fn instance_of(i: Slice) -> ParseResult<AST<Expression>> {
+    map(
+        seq!(
+            expression(Some(instance_of)),
+            tag("instanceof"),
+            type_expression(None)
+        ),
+        |(mut inner, _, mut possible_type)| {
+            make_node!(
+                InstanceOf,
+                inner.spanning(&possible_type),
+                inner,
+                possible_type
+            )
+            .recast::<Expression>()
+        },
+    )(i)
 }
 
-fn as_cast(level: usize) -> impl Fn(Slice) -> ParseResult<AST<AsCast>> {
-    move |i: Slice| -> ParseResult<AST<AsCast>> {
-        map(
-            seq!(expression(level + 1), tag("as"), type_expression(0)),
-            |(mut inner, _, mut as_type)| {
-                make_node!(AsCast, inner.spanning(&as_type), inner, as_type)
-            },
-        )(i)
-    }
+fn as_cast(i: Slice) -> ParseResult<AST<Expression>> {
+    map(
+        seq!(expression(Some(as_cast)), tag("as"), type_expression(None)),
+        |(mut inner, _, mut as_type)| {
+            make_node!(AsCast, inner.spanning(&as_type), inner, as_type).recast::<Expression>()
+        },
+    )(i)
 }
 
-fn if_else_expression(i: Slice) -> ParseResult<AST<IfElseExpression>> {
+fn if_else_expression(i: Slice) -> ParseResult<AST<Expression>> {
     map(
         seq!(
             separated_list1(w(tag("else")), w(if_else_expression_case)),
             opt(map(
-                seq!(tag("else"), tag("{"), expression(0), tag("}")),
+                seq!(tag("else"), tag("{"), expression(None), tag("}")),
                 |(_, _, outcome, end)| (outcome, end),
             )),
         ),
@@ -1564,13 +1467,20 @@ fn if_else_expression(i: Slice) -> ParseResult<AST<IfElseExpression>> {
                 cases,
                 default_case
             )
+            .recast::<Expression>()
         },
     )(i)
 }
 
 fn if_else_expression_case(i: Slice) -> ParseResult<AST<IfElseExpressionCase>> {
     map(
-        seq!(tag("if"), expression(0), tag("{"), expression(0), tag("}"),),
+        seq!(
+            tag("if"),
+            expression(None),
+            tag("{"),
+            expression(None),
+            tag("}"),
+        ),
         |(start, mut condition, _, mut outcome, end)| {
             make_node!(
                 IfElseExpressionCase,
@@ -1582,16 +1492,21 @@ fn if_else_expression_case(i: Slice) -> ParseResult<AST<IfElseExpressionCase>> {
     )(i)
 }
 
-fn switch_expression(i: Slice) -> ParseResult<AST<SwitchExpression>> {
+fn switch_expression(i: Slice) -> ParseResult<AST<Expression>> {
     map(
         seq!(
             tag("switch"),
-            expression(0),
+            expression(None),
             tag("{"),
             separated_list1(
                 w(tag(",")),
                 w(map(
-                    seq!(tag("case"), type_expression(0), tag(":"), expression(0)),
+                    seq!(
+                        tag("case"),
+                        type_expression(None),
+                        tag(":"),
+                        expression(None)
+                    ),
                     |(keyword, mut type_filter, _, mut outcome)| {
                         make_node!(
                             SwitchExpressionCase,
@@ -1605,7 +1520,7 @@ fn switch_expression(i: Slice) -> ParseResult<AST<SwitchExpression>> {
             opt(preceded(
                 whitespace,
                 map(
-                    seq!(tag(","), tag("default"), tag(":"), expression(0)),
+                    seq!(tag(","), tag("default"), tag(":"), expression(None)),
                     |(_, _, _, expr)| expr
                 ),
             )),
@@ -1620,23 +1535,24 @@ fn switch_expression(i: Slice) -> ParseResult<AST<SwitchExpression>> {
                 cases,
                 default_case
             )
+            .recast::<Expression>()
         },
     )(i)
 }
 
-fn range_expression(i: Slice) -> ParseResult<AST<RangeExpression>> {
+fn range_expression(i: Slice) -> ParseResult<AST<Expression>> {
     map(
         seq!(number_literal, tag(".."), number_literal),
         |(start, _, end)| {
             let mut start = start.recast::<Expression>();
             let mut end = end.recast::<Expression>();
 
-            make_node!(RangeExpression, start.spanning(&end), start, end)
+            make_node!(RangeExpression, start.spanning(&end), start, end).recast::<Expression>()
         },
     )(i)
 }
 
-fn proc(i: Slice) -> ParseResult<AST<Proc>> {
+fn proc(i: Slice) -> ParseResult<AST<Expression>> {
     map(
         seq!(
             opt(tag("pure")),
@@ -1671,12 +1587,12 @@ fn proc(i: Slice) -> ParseResult<AST<Proc>> {
                 throws
             );
 
-            make_node!(Proc, src, type_annotation, is_async, is_pure, body)
+            make_node!(Proc, src, type_annotation, is_async, is_pure, body).recast::<Expression>()
         },
     )(i)
 }
 
-fn element_tag(i: Slice) -> ParseResult<AST<ElementTag>> {
+fn element_tag(i: Slice) -> ParseResult<AST<Expression>> {
     map(
         tuple((
             tag("<"),
@@ -1684,7 +1600,7 @@ fn element_tag(i: Slice) -> ParseResult<AST<ElementTag>> {
             many0(preceded(
                 whitespace_required,
                 map(
-                    tuple((plain_identifier, tag("={"), expression(0), tag("}"))),
+                    tuple((plain_identifier, tag("={"), expression(None), tag("}"))),
                     |(key, _, value, _)| (key, value),
                 ),
             )),
@@ -1694,7 +1610,10 @@ fn element_tag(i: Slice) -> ParseResult<AST<ElementTag>> {
                         w(tag(">")),
                         many0(w(alt((
                             map(element_tag, |el| el.recast::<Expression>()),
-                            map(seq!(tag("{"), expression(0), tag("}")), |(_, expr, _)| expr),
+                            map(
+                                seq!(tag("{"), expression(None), tag("}")),
+                                |(_, expr, _)| expr,
+                            ),
                         )))),
                         w(tag("</")),
                         plain_identifier,
@@ -1708,12 +1627,12 @@ fn element_tag(i: Slice) -> ParseResult<AST<ElementTag>> {
         |(start, mut tag_name, mut attributes, (mut children, closing_tag, end))| {
             let src = start.spanning(&end);
 
-            make_node!(ElementTag, src, tag_name, attributes, children)
+            make_node!(ElementTag, src, tag_name, attributes, children).recast::<Expression>()
         },
     )(i)
 }
 
-fn func(i: Slice) -> ParseResult<AST<Func>> {
+fn func(i: Slice) -> ParseResult<AST<Expression>> {
     map(
         seq!(
             opt(tag("pure")),
@@ -1722,7 +1641,7 @@ fn func(i: Slice) -> ParseResult<AST<Func>> {
             alt((args_parenthesized, arg_singleton)),
             opt(type_annotation),
             tag("=>"),
-            expression(0),
+            expression(None),
         ),
         |(pure, asyn, mut type_params, (mut args, mut args_spread), mut returns, _, mut body)| {
             let mut is_async = asyn.is_some();
@@ -1748,14 +1667,14 @@ fn func(i: Slice) -> ParseResult<AST<Func>> {
                 returns
             );
 
-            make_node!(Func, src, type_annotation, is_async, is_pure, body)
+            make_node!(Func, src, type_annotation, is_async, is_pure, body).recast::<Expression>()
         },
     )(i)
 }
 
-fn inline_const_group(i: Slice) -> ParseResult<AST<InlineConstGroup>> {
+fn inline_const_group(i: Slice) -> ParseResult<AST<Expression>> {
     map(
-        seq!(many1(inline_declaration), expression(0)),
+        seq!(many1(inline_declaration), expression(None)),
         |(mut declarations, mut inner)| {
             make_node!(
                 InlineConstGroup,
@@ -1763,6 +1682,7 @@ fn inline_const_group(i: Slice) -> ParseResult<AST<InlineConstGroup>> {
                 declarations,
                 inner
             )
+            .recast::<Expression>()
         },
     )(i)
 }
@@ -1773,7 +1693,7 @@ fn inline_declaration(i: Slice) -> ParseResult<AST<InlineDeclaration>> {
             tag("const"),
             declaration_destination,
             tag("="),
-            expression(0),
+            expression(None),
             tag(",")
         ),
         |(start, mut destination, _, mut value, end)| {
@@ -1818,7 +1738,7 @@ fn declaration_destination(i: Slice) -> ParseResult<DeclarationDestination> {
             seq!(
                 plain_identifier,
                 opt(map(
-                    seq!(tag(":"), type_expression(0)),
+                    seq!(tag(":"), type_expression(None)),
                     |(_, type_annotation)| type_annotation
                 ))
             ),
@@ -1832,25 +1752,26 @@ fn declaration_destination(i: Slice) -> ParseResult<DeclarationDestination> {
     ))(i)
 }
 
-fn negation_operation(level: usize) -> impl Fn(Slice) -> ParseResult<AST<NegationOperation>> {
-    move |i: Slice| -> ParseResult<AST<NegationOperation>> {
-        map(
-            pair(tag("!"), expression(level + 1)),
-            |(start, mut expr)| make_node_tuple!(NegationOperation, start.spanning(&expr), expr),
-        )(i)
-    }
-}
-
-fn parenthesis(i: Slice) -> ParseResult<AST<Parenthesis>> {
+fn negation_operation(i: Slice) -> ParseResult<AST<Expression>> {
     map(
-        seq!(tag("("), expression(0), tag(")")),
-        |(open_paren, mut inner, close_paren)| {
-            make_node_tuple!(Parenthesis, open_paren.spanning(&close_paren), inner)
+        pair(tag("!"), expression(Some(negation_operation))),
+        |(start, mut expr)| {
+            make_node_tuple!(NegationOperation, start.spanning(&expr), expr).recast::<Expression>()
         },
     )(i)
 }
 
-fn object_literal(i: Slice) -> ParseResult<AST<ObjectLiteral>> {
+fn parenthesis(i: Slice) -> ParseResult<AST<Expression>> {
+    map(
+        seq!(tag("("), expression(None), tag(")")),
+        |(open_paren, mut inner, close_paren)| {
+            make_node_tuple!(Parenthesis, open_paren.spanning(&close_paren), inner)
+                .recast::<Expression>()
+        },
+    )(i)
+}
+
+fn object_literal(i: Slice) -> ParseResult<AST<Expression>> {
     map(
         seq!(
             tag("{"),
@@ -1859,7 +1780,7 @@ fn object_literal(i: Slice) -> ParseResult<AST<ObjectLiteral>> {
                     w(char(',')),
                     w(alt((
                         map(
-                            preceded(tag("..."), expression(0)),
+                            preceded(tag("..."), expression(None)),
                             KeyValueOrSpread::Spread
                         ),
                         key_value_expression,
@@ -1875,13 +1796,14 @@ fn object_literal(i: Slice) -> ParseResult<AST<ObjectLiteral>> {
                 open_bracket.spanning(&close_bracket),
                 entries
             )
+            .recast::<Expression>()
         },
     )(i)
 }
 
 fn key_value_expression(i: Slice) -> ParseResult<KeyValueOrSpread<AST<Expression>>> {
     map(
-        seq!(plain_identifier, tag(":"), expression(0)),
+        seq!(plain_identifier, tag(":"), expression(None)),
         |(key, _, value)| {
             KeyValueOrSpread::KeyValue(
                 identifier_to_string(key).recast::<Expression>(),
@@ -1892,7 +1814,7 @@ fn key_value_expression(i: Slice) -> ParseResult<KeyValueOrSpread<AST<Expression
     )(i)
 }
 
-fn array_literal(i: Slice) -> ParseResult<AST<ArrayLiteral>> {
+fn array_literal(i: Slice) -> ParseResult<AST<Expression>> {
     map(
         seq!(
             tag("["),
@@ -1900,8 +1822,11 @@ fn array_literal(i: Slice) -> ParseResult<AST<ArrayLiteral>> {
                 separated_list0(
                     w(char(',')),
                     w(alt((
-                        map(preceded(tag("..."), expression(0)), ElementOrSpread::Spread),
-                        map(expression(0), ElementOrSpread::Element),
+                        map(
+                            preceded(tag("..."), expression(None)),
+                            ElementOrSpread::Spread
+                        ),
+                        map(expression(None), ElementOrSpread::Element),
                     )))
                 ),
                 opt(w(tag(",")))
@@ -1910,11 +1835,12 @@ fn array_literal(i: Slice) -> ParseResult<AST<ArrayLiteral>> {
         ),
         |(open_bracket, mut entries, close_bracket)| {
             make_node_tuple!(ArrayLiteral, open_bracket.spanning(&close_bracket), entries)
+                .recast::<Expression>()
         },
     )(i)
 }
 
-fn string_literal(i: Slice) -> ParseResult<AST<StringLiteral>> {
+fn string_literal(i: Slice) -> ParseResult<AST<Expression>> {
     map(
         pair(
             opt(plain_identifier),
@@ -1930,8 +1856,13 @@ fn string_literal(i: Slice) -> ParseResult<AST<StringLiteral>> {
                 tag,
                 segments
             )
+            .recast::<Expression>()
         },
     )(i)
+}
+
+fn exact_string_literal_expr(i: Slice) -> ParseResult<AST<Expression>> {
+    map(exact_string_literal, AST::recast::<Expression>)(i)
 }
 
 fn exact_string_literal(i: Slice) -> ParseResult<AST<ExactStringLiteral>> {
@@ -1957,14 +1888,14 @@ fn exact_string_literal(i: Slice) -> ParseResult<AST<ExactStringLiteral>> {
 fn string_literal_segment(i: Slice) -> ParseResult<StringLiteralSegment> {
     alt((
         map(
-            tuple((tag("${"), w(expression(0)), w(tag("}")))),
+            tuple((tag("${"), w(expression(None)), w(tag("}")))),
             |(_, expr, _)| expr.into(),
         ),
         map(string_contents, |s| s.into()),
     ))(i)
 }
 
-fn number_literal(i: Slice) -> ParseResult<AST<NumberLiteral>> {
+fn number_literal(i: Slice) -> ParseResult<AST<Expression>> {
     map(
         tuple((opt(tag("-")), numeric, opt(tuple((tag("."), numeric))))),
         |(neg, int, tail)| {
@@ -1972,20 +1903,32 @@ fn number_literal(i: Slice) -> ParseResult<AST<NumberLiteral>> {
             let back = tail.map(|(_, decimal)| decimal).unwrap_or(int);
             let full = front.spanning(&back);
 
-            NumberLiteral(full.clone()).as_ast(full)
+            NumberLiteral(full.clone())
+                .as_ast(full)
+                .recast::<Expression>()
         },
     )(i)
 }
 
-fn boolean_literal(input: Slice) -> ParseResult<AST<BooleanLiteral>> {
+fn boolean_literal(input: Slice) -> ParseResult<AST<Expression>> {
     alt((
-        map(tag("true"), |src: Slice| BooleanLiteral(true).as_ast(src)),
-        map(tag("false"), |src: Slice| BooleanLiteral(false).as_ast(src)),
+        map(tag("true"), |src: Slice| {
+            BooleanLiteral(true).as_ast(src).recast::<Expression>()
+        }),
+        map(tag("false"), |src: Slice| {
+            BooleanLiteral(false).as_ast(src).recast::<Expression>()
+        }),
     ))(input)
 }
 
-fn nil_literal(input: Slice) -> ParseResult<AST<NilLiteral>> {
-    map(tag("nil"), |src: Slice| NilLiteral.as_ast(src))(input)
+fn nil_literal(input: Slice) -> ParseResult<AST<Expression>> {
+    map(tag("nil"), |src: Slice| {
+        NilLiteral.as_ast(src).recast::<Expression>()
+    })(input)
+}
+
+fn local_identifier_expr(i: Slice) -> ParseResult<AST<Expression>> {
+    map(local_identifier, AST::recast::<Expression>)(i)
 }
 
 fn local_identifier(i: Slice) -> ParseResult<AST<LocalIdentifier>> {
@@ -2135,5 +2078,146 @@ impl<E> nom::error::FromExternalError<Slice, E> for RawParseError {
             src: input,
             details: RawParseErrorDetails::Kind(kind),
         }
+    }
+}
+
+use precedence::precedence;
+mod precedence {
+    use nom::error::ErrorKind;
+
+    use crate::model::{
+        ast::{ASTAny, Any, AST},
+        Slice,
+    };
+
+    use super::{precedence_index, ParseResult, RawParseError, RawParseErrorDetails};
+
+    fn precedence_inner<TKind>(
+        levels: &'static [&'static [fn(Slice) -> ParseResult<AST<TKind>>]],
+        after: Option<fn(Slice) -> ParseResult<AST<TKind>>>,
+        i: Slice,
+    ) -> ParseResult<AST<TKind>>
+    where
+        TKind: 'static + Clone + TryFrom<Any>,
+        Any: From<TKind>,
+    {
+        let start_index = precedence_index(levels, after);
+        for level in &levels[start_index..] {
+            for f in *level {
+                let res = f(i.clone());
+
+                if res.is_ok() {
+                    return res;
+                }
+            }
+        }
+
+        Err(nom::Err::Error(RawParseError {
+            src: i,
+            details: RawParseErrorDetails::Kind(ErrorKind::Fail),
+        }))
+    }
+
+    std::thread_local! {
+      static MEMOIZED_MAPPING_PRECEDENCE: std::cell::RefCell<std::collections::HashMap<(*const u8, Option<*const u8>, Slice), ParseResult<ASTAny>>>  = std::cell::RefCell::new(std::collections::HashMap::new());
+    }
+
+    #[allow(unused_variables)]
+    pub fn precedence<TKind>(
+        levels: &'static [&'static [fn(Slice) -> ParseResult<AST<TKind>>]],
+        after: Option<fn(Slice) -> ParseResult<AST<TKind>>>,
+        i: Slice,
+    ) -> ParseResult<AST<TKind>>
+    where
+        TKind: 'static + Clone + TryFrom<Any>,
+        Any: From<TKind>,
+    {
+        let levels_ptr = levels.as_ptr().cast::<u8>();
+        let after_ptr = after.map(|after| after as *const u8);
+
+        let r = MEMOIZED_MAPPING_PRECEDENCE.with(|hm| {
+            let hm = hm.borrow_mut();
+            hm.get(&(levels_ptr, after_ptr, i.clone())).cloned()
+        });
+        if let Some(r) = r {
+            return r.map(|(s, ast)| (s, ast.try_recast::<TKind>().unwrap()));
+        }
+        let r = precedence_inner(levels, after, i.clone());
+        MEMOIZED_MAPPING_PRECEDENCE.with(|hm| {
+            let mut hm: std::cell::RefMut<
+                std::collections::HashMap<
+                    (*const u8, Option<*const u8>, Slice),
+                    ParseResult<ASTAny>,
+                >,
+            > = hm.borrow_mut();
+            hm.insert(
+                (levels_ptr, after_ptr, i),
+                r.clone().map(|(s, ast)| (s, ast.upcast())),
+            );
+        });
+        r
+    }
+}
+
+use precedence_index::precedence_index;
+mod precedence_index {
+    use crate::model::{
+        ast::{Any, AST},
+        Slice,
+    };
+
+    use super::ParseResult;
+
+    fn precedence_index_inner<TKind>(
+        levels: &'static [&'static [fn(Slice) -> ParseResult<AST<TKind>>]],
+        after: Option<fn(Slice) -> ParseResult<AST<TKind>>>,
+    ) -> usize
+    where
+        TKind: 'static + Clone + TryFrom<Any>,
+        Any: From<TKind>,
+    {
+        match after {
+            Some(after) => {
+                levels
+                    .iter()
+                    .take_while(|level| !level.contains(&after))
+                    .count()
+                    + 1
+            }
+            None => 0,
+        }
+    }
+
+    std::thread_local! {
+      static MEMOIZED_MAPPING_PRECEDENCE_INDEX: std::cell::RefCell<std::collections::HashMap<(*const u8, Option<*const u8>), usize>>  = std::cell::RefCell::new(std::collections::HashMap::new());
+    }
+
+    #[allow(unused_variables)]
+    pub fn precedence_index<TKind>(
+        levels: &'static [&'static [fn(Slice) -> ParseResult<AST<TKind>>]],
+        after: Option<fn(Slice) -> ParseResult<AST<TKind>>>,
+    ) -> usize
+    where
+        TKind: 'static + Clone + TryFrom<Any>,
+        Any: From<TKind>,
+    {
+        let levels_ptr = levels.as_ptr().cast::<u8>();
+        let after_ptr = after.map(|after| after as *const u8);
+
+        let r = MEMOIZED_MAPPING_PRECEDENCE_INDEX.with(|hm| {
+            let hm = hm.borrow_mut();
+            hm.get(&(levels_ptr, after_ptr)).cloned()
+        });
+        if let Some(r) = r {
+            return r;
+        }
+        let r = precedence_index_inner(levels, after);
+        MEMOIZED_MAPPING_PRECEDENCE_INDEX.with(|hm| {
+            let mut hm: std::cell::RefMut<
+                std::collections::HashMap<(*const u8, Option<*const u8>), usize>,
+            > = hm.borrow_mut();
+            hm.insert((levels_ptr, after_ptr), r);
+        });
+        r
     }
 }
