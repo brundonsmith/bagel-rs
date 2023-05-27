@@ -1,6 +1,8 @@
 use std::fmt::Debug;
 use std::time::SystemTime;
 
+use colored::Color;
+
 #[allow(unused_imports)]
 use crate::utils::Loggable;
 use crate::{
@@ -11,6 +13,7 @@ use crate::{
         SubsumationContext, Type,
     },
     passes::{binary_operation_type, INT},
+    utils::cli_label,
     DEBUG_MODE,
 };
 
@@ -36,7 +39,8 @@ impl ParsedModule {
 
         if DEBUG_MODE {
             println!(
-                "* Checking {} took {}ms",
+                "{} Checking {} took {}ms",
+                cli_label("Debug", Color::Blue),
                 self.module_id(),
                 start.elapsed().unwrap().as_millis()
             );
