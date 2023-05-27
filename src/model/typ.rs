@@ -1268,14 +1268,17 @@ impl Type {
                 .find_map(|entry| match entry {
                     KeyValueOrSpread::KeyValue(key, value, optional) => {
                         if key.subsumes(ctx, &property) {
-                            Some(value)
+                            if *optional {
+                                Some(value.clone().union(Type::NilType))
+                            } else {
+                                Some(value.clone())
+                            }
                         } else {
                             None
                         }
                     }
                     KeyValueOrSpread::Spread(_) => None,
                 })
-                .cloned()
                 .map(|t| t.with_mutability(mutability)),
             Type::RecordType {
                 mutability,
