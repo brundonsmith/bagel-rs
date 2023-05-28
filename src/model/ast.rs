@@ -12,7 +12,7 @@ use crate::utils::Rcable;
 
 macro_rules! union_type {
     ($name:ident = $( $s:ident )|*) => {
-        #[derive(Clone, Debug, PartialEq)]
+        #[derive(Debug, Clone, PartialEq, Eq)]
         pub enum $name {
             $($s($s)),*
         }
@@ -67,11 +67,21 @@ macro_rules! union_subtype {
     };
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct AST<TKind>(Rc<ASTInner>, PhantomData<TKind>)
 where
     TKind: Clone + TryFrom<Any>,
     Any: From<TKind>;
+
+impl<TKind> std::hash::Hash for AST<TKind>
+where
+    TKind: Clone + TryFrom<Any> + Debug,
+    Any: From<TKind>,
+{
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        Rc::as_ptr(&self.0).hash(state);
+    }
+}
 
 impl<TKind> Debug for AST<TKind>
 where
@@ -279,41 +289,43 @@ impl PartialEq for ASTInner {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+impl Eq for ASTInner {}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Module {
     pub module_id: ModuleID,
     pub declarations: Vec<AST<Declaration>>,
 }
 
 // --- Declarations ---
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImportAllDeclaration {
     pub platforms: Option<AST<DeclarationPlatforms>>,
     pub name: AST<PlainIdentifier>,
     pub path: AST<ExactStringLiteral>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImportDeclaration {
     pub platforms: Option<AST<DeclarationPlatforms>>,
     pub imports: Vec<AST<ImportItem>>,
     pub path: AST<ExactStringLiteral>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImportItem {
     pub name: AST<PlainIdentifier>,
     pub alias: Option<AST<PlainIdentifier>>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TypeDeclaration {
     pub name: AST<PlainIdentifier>,
     pub declared_type: AST<TypeExpression>,
     pub exported: bool,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FuncDeclaration {
     pub platforms: Option<AST<DeclarationPlatforms>>,
     pub name: AST<PlainIdentifier>,
@@ -322,7 +334,7 @@ pub struct FuncDeclaration {
     pub decorators: Vec<AST<Decorator>>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProcDeclaration {
     pub platforms: Option<AST<DeclarationPlatforms>>,
     pub name: AST<PlainIdentifier>,
@@ -331,13 +343,13 @@ pub struct ProcDeclaration {
     pub decorators: Vec<AST<Decorator>>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Decorator {
     pub name: AST<PlainIdentifier>,
     pub arguments: Option<Vec<AST<Expression>>>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ValueDeclaration {
     pub platforms: Option<AST<DeclarationPlatforms>>,
     pub destination: DeclarationDestination,
@@ -346,34 +358,34 @@ pub struct ValueDeclaration {
     pub exported: bool,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SymbolDeclaration {
     pub name: AST<PlainIdentifier>,
     pub exported: bool,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TestExprDeclaration {
     pub platforms: Option<AST<DeclarationPlatforms>>,
     pub name: AST<ExactStringLiteral>,
     pub expr: AST<Expression>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TestBlockDeclaration {
     pub platforms: Option<AST<DeclarationPlatforms>>,
     pub name: AST<ExactStringLiteral>,
     pub block: AST<Block>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TestTypeDeclaration {
     pub name: AST<ExactStringLiteral>,
     pub destination_type: AST<TypeExpression>,
     pub value_type: AST<TypeExpression>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DeclarationPlatforms {
     pub platforms: Vec<AST<PlainIdentifier>>,
 }
@@ -403,91 +415,91 @@ pub const JS_FILE_EXTENSIONS: [&str; 2] = ["js", "ts"];
 pub const VALID_PLATFORMS: [&str; 4] = ["deno", "node", "bun", "browser"];
 
 // --- Expressions ---
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NilLiteral;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BooleanLiteral(pub bool);
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NumberLiteral(pub Slice);
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StringLiteral {
     pub tag: Option<AST<PlainIdentifier>>,
     pub segments: Vec<StringLiteralSegment>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExactStringLiteral {
     pub tag: Option<AST<PlainIdentifier>>,
     pub value: Slice,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ArrayLiteral(pub Vec<ElementOrSpread<AST<Expression>>>);
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ObjectLiteral(pub Vec<KeyValueOrSpread<AST<Expression>>>);
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BinaryOperation {
     pub left: AST<Expression>,
     pub op: AST<BinaryOperator>,
     pub right: AST<Expression>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BinaryOperator(pub BinaryOperatorOp);
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NegationOperation(pub AST<Expression>);
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Parenthesis(pub AST<Expression>);
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LocalIdentifier(pub Slice);
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InlineConstGroup {
     pub declarations: Vec<AST<InlineDeclaration>>,
     pub inner: AST<Expression>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InlineDeclaration {
     pub destination: DeclarationDestination,
     pub value: AST<Expression>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Func {
     pub type_annotation: AST<FuncType>,
     pub is_async: bool,
     pub body: AST<Expression>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Proc {
     pub type_annotation: AST<ProcType>,
     pub is_async: bool,
     pub body: AST<Statement>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Block(pub Vec<AST<Statement>>);
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RangeExpression {
     pub start: AST<Expression>,
     pub end: AST<Expression>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AwaitExpression(pub AST<Expression>);
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Invocation {
     pub subject: AST<Expression>,
     pub args: Vec<AST<Expression>>,
@@ -497,7 +509,7 @@ pub struct Invocation {
     pub awaited_or_detached: Option<AwaitOrDetach>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PropertyAccessor {
     pub subject: AST<Expression>,
     pub property: Property,
@@ -577,76 +589,76 @@ impl From<AST<PlainIdentifier>> for AST<LocalIdentifier> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IfElseExpression {
     pub cases: Vec<AST<IfElseExpressionCase>>,
     pub default_case: Option<AST<Expression>>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IfElseExpressionCase {
     pub condition: AST<Expression>,
     pub outcome: AST<Expression>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SwitchExpression {
     pub value: AST<Expression>,
     pub cases: Vec<AST<SwitchExpressionCase>>,
     pub default_case: Option<AST<Expression>>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SwitchExpressionCase {
     pub type_filter: AST<TypeExpression>,
     pub outcome: AST<Expression>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SpreadExpression(pub AST<Expression>);
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ElementTag {
     pub tag_name: AST<PlainIdentifier>,
     pub attributes: Vec<(AST<PlainIdentifier>, AST<Expression>)>,
     pub children: Vec<AST<Expression>>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AsCast {
     pub inner: AST<Expression>,
     pub as_type: AST<TypeExpression>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InstanceOf {
     pub inner: AST<Expression>,
     pub possible_type: AST<TypeExpression>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ErrorExpression(pub AST<Expression>);
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RegularExpression {
     pub expr: Slice,
     pub flags: Vec<RegularExpressionFlag>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AnyLiteral;
 
 // --- Type expressions ---
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnionType(pub Vec<AST<TypeExpression>>);
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MaybeType(pub AST<TypeExpression>);
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NamedType(pub AST<LocalIdentifier>);
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GenericParamType {
     pub name: AST<PlainIdentifier>,
     pub extends: Option<AST<TypeExpression>>,
@@ -654,7 +666,7 @@ pub struct GenericParamType {
 
 // TODO: Args as an AST node
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProcType {
     pub type_params: Vec<AST<TypeParam>>,
     pub args: Vec<AST<Arg>>,
@@ -663,7 +675,7 @@ pub struct ProcType {
     pub throws: Option<AST<TypeExpression>>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FuncType {
     pub type_params: Vec<AST<TypeParam>>,
     pub args: Vec<AST<Arg>>,
@@ -671,95 +683,95 @@ pub struct FuncType {
     pub returns: Option<AST<TypeExpression>>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Arg {
     pub name: AST<PlainIdentifier>,
     pub type_annotation: Option<AST<TypeExpression>>,
     pub optional: bool,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GenericType {
     pub type_params: Vec<AST<TypeParam>>,
     pub inner: AST<TypeExpression>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TypeParam {
     pub name: AST<PlainIdentifier>,
     pub extends: Option<AST<TypeExpression>>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BoundGenericType {
     pub type_args: Vec<AST<TypeExpression>>,
     pub generic: AST<TypeExpression>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ObjectType {
     pub entries: Vec<KeyValueOrSpread<AST<TypeExpression>>>,
     pub is_interface: bool,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RecordType {
     pub key_type: AST<TypeExpression>,
     pub value_type: AST<TypeExpression>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ArrayType(pub AST<TypeExpression>);
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TupleType(pub Vec<ElementOrSpread<AST<TypeExpression>>>);
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StringLiteralType(pub Slice);
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NumberLiteralType(pub Slice);
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BooleanLiteralType(pub bool);
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StringType;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NumberType;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BooleanType;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NilType;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParenthesizedType(pub AST<TypeExpression>);
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SpecialType {
     pub kind: SpecialTypeKind,
     pub inner: AST<TypeExpression>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModifierType {
     pub kind: ModifierTypeKind,
     pub inner: AST<TypeExpression>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TypeofType(pub AST<Expression>);
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnknownType;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RegularExpressionType; // TODO: Number of match groups?
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PropertyType {
     pub subject: AST<TypeExpression>,
     pub property: AST<TypeExpression>,
@@ -767,57 +779,57 @@ pub struct PropertyType {
 }
 
 // --- Statements ---
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IfElseStatement {
     pub cases: Vec<AST<IfElseStatementCase>>,
     pub default_case: Option<AST<Block>>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IfElseStatementCase {
     pub condition: AST<Expression>,
     pub outcome: AST<Block>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ForLoop {
     pub item_identifier: AST<PlainIdentifier>,
     pub iterable: AST<Expression>,
     pub body: AST<Block>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WhileLoop {
     pub condition: AST<Expression>,
     pub body: AST<Block>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Assignment {
     pub target: AST<Expression>,
     pub value: AST<Expression>,
     pub operator: Option<AST<BinaryOperator>>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TryCatch {
     pub try_block: AST<Block>,
     pub error_identifier: AST<PlainIdentifier>,
     pub catch_block: AST<Block>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ThrowStatement {
     pub error_expression: AST<Expression>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Autorun {
     pub effect_block: AST<Block>,
     pub until: Option<AST<Expression>>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlainIdentifier(pub Slice);
 
 // --- Pieces of AST nodes ---
@@ -841,7 +853,7 @@ pub enum ModifierTypeKind {
     Elementof,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StringLiteralSegment {
     Slice(Slice),
     AST(AST<Expression>),
@@ -869,13 +881,13 @@ impl Parentable for StringLiteralSegment {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KeyValueType {
     pub key: ASTAny,
     pub value: AST<TypeExpression>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SpreadType(pub AST<TypeExpression>);
 
 union_type!(DeclarationDestination = NameAndType | Destructure);
@@ -922,13 +934,13 @@ impl Parentable for DeclarationDestination {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NameAndType {
     pub name: AST<PlainIdentifier>,
     pub type_annotation: Option<AST<TypeExpression>>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Destructure {
     pub properties: Vec<AST<PlainIdentifier>>,
     pub spread: Option<AST<PlainIdentifier>>,
@@ -1108,7 +1120,7 @@ impl Display for PlatformSet {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Property {
     Expression(AST<Expression>),
     PlainIdentifier(AST<PlainIdentifier>),
@@ -1142,7 +1154,7 @@ where
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum KeyValueOrSpread<T> {
     KeyValue(T, T, bool),
     Spread(T),
@@ -1169,7 +1181,7 @@ where
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ElementOrSpread<T> {
     Element(T),
     Spread(T),
