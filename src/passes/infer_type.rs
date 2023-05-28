@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use crate::{
     cli::ModulesStore,
-    model::{ast::*, Mutability, ParsedModule, Slice, Type},
+    model::{ast::*, MetaTypeKind, Mutability, ParsedModule, Slice, Type},
     passes::{ResolveSymbolContext, INT},
     utils::Rcable,
 };
@@ -133,8 +133,8 @@ impl AST<Expression> {
                             }) => {
                                 let iterable_type = iterable.infer_type(ctx);
 
-                                if let Type::SpecialType {
-                                    kind: SpecialTypeKind::Iterable,
+                                if let Type::MetaType {
+                                    kind: MetaTypeKind::Iterable,
                                     inner,
                                 } = iterable_type
                                 {
@@ -222,15 +222,23 @@ impl AST<Expression> {
                     body,
                 }) => {
                     let type_annotation = type_annotation.downcast();
+                    let expected_arg_types = infer_expected_type(ctx, self).map(|t| t.parameters());
+                    let expected_arg_types = &expected_arg_types;
 
                     Type::FuncType {
                         args: type_annotation
                             .args
                             .into_iter()
-                            .map(|a| {
+                            .enumerate()
+                            .map(|(index, a)| {
                                 a.downcast()
                                     .type_annotation
                                     .map(|a| a.resolve_type(ctx.into()))
+                                    .or_else(|| {
+                                        expected_arg_types.as_ref().map(|args| {
+                                            args.clone().property(Type::exact_number(index as i32))
+                                        })
+                                    })
                             })
                             .collect(),
                         args_spread: type_annotation
@@ -255,15 +263,23 @@ impl AST<Expression> {
                     body,
                 }) => {
                     let type_annotation = type_annotation.downcast();
+                    let expected_arg_types = infer_expected_type(ctx, self).map(|t| t.parameters());
+                    let expected_arg_types = &expected_arg_types;
 
                     Type::ProcType {
                         args: type_annotation
                             .args
                             .into_iter()
-                            .map(|a| {
+                            .enumerate()
+                            .map(|(index, a)| {
                                 a.downcast()
                                     .type_annotation
                                     .map(|a| a.resolve_type(ctx.into()))
+                                    .or_else(|| {
+                                        expected_arg_types.as_ref().map(|args| {
+                                            args.clone().property(Type::exact_number(index as i32))
+                                        })
+                                    })
                             })
                             .collect(),
                         args_spread: type_annotation
@@ -286,13 +302,13 @@ impl AST<Expression> {
                     let min = start.infer_type(ctx).to_exact_number();
                     let max = end.infer_type(ctx).to_exact_number();
 
-                    Type::SpecialType {
-                        kind: SpecialTypeKind::Iterable,
+                    Type::MetaType {
+                        kind: MetaTypeKind::Iterable,
                         inner: Type::NumberType { min, max }.rc(),
                     }
                 }
-                Expression::AwaitExpression(AwaitExpression(inner)) => Type::InnerType {
-                    kind: SpecialTypeKind::Plan,
+                Expression::AwaitExpression(AwaitExpression(inner)) => Type::MetaType {
+                    kind: MetaTypeKind::Awaited,
                     inner: inner.infer_type(ctx).rc(),
                 },
                 Expression::Invocation(Invocation {
@@ -309,31 +325,7 @@ impl AST<Expression> {
                     ) {
                         inv.infer_type(ctx)
                     } else {
-                        let subject_type = subject.infer_type(ctx);
-
-                        match subject_type.simplify(ctx.into()) {
-                            Type::FuncType {
-                                args: _,
-                                args_spread: _,
-                                is_pure: _,
-                                returns,
-                            } => returns.as_ref().clone(),
-                            Type::GenericType { type_params, inner } => {
-                                if let Type::FuncType {
-                                    args,
-                                    args_spread,
-                                    is_pure,
-                                    returns,
-                                } = inner.as_ref()
-                                {
-                                    returns.as_ref().clone()
-                                } else {
-                                    Type::PoisonedType
-                                }
-                            }
-                            Type::AnyType => Type::AnyType,
-                            _ => Type::PoisonedType,
-                        }
+                        subject.infer_type(ctx).return_type()
                     }
                 }
                 Expression::PropertyAccessor(PropertyAccessor {
@@ -438,8 +430,8 @@ impl AST<Expression> {
                     inner: _,
                     possible_type: _,
                 }) => Type::ANY_BOOLEAN,
-                Expression::ErrorExpression(ErrorExpression(inner)) => Type::SpecialType {
-                    kind: SpecialTypeKind::Error,
+                Expression::ErrorExpression(ErrorExpression(inner)) => Type::MetaType {
+                    kind: MetaTypeKind::Error,
                     inner: inner.infer_type(ctx).rc(),
                 },
                 Expression::RegularExpression(RegularExpression { expr, flags }) => {
@@ -449,6 +441,53 @@ impl AST<Expression> {
             },
         )
     }
+}
+
+fn infer_expected_type<'a>(ctx: InferTypeContext<'a>, expr: &AST<Expression>) -> Option<Type> {
+    if let Some(parent) = expr.parent() {
+        match parent.details() {
+            Any::Invocation(Invocation {
+                subject,
+                args,
+                spread_args,
+                type_args,
+                bubbles,
+                awaited_or_detached,
+            }) => {
+                let this_arg_index = args
+                    .iter()
+                    .enumerate()
+                    .find(|(_, arg)| *arg == expr)
+                    .map(|(index, _)| index);
+
+                if let Some(this_arg_index) = this_arg_index {
+                    match subject.infer_type(ctx) {
+                        Type::FuncType {
+                            args,
+                            args_spread,
+                            is_pure,
+                            returns,
+                        } => {
+                            return args[this_arg_index].clone();
+                        }
+                        Type::ProcType {
+                            args,
+                            args_spread,
+                            is_pure,
+                            is_async,
+                            throws,
+                        } => {
+                            return args[this_arg_index].clone();
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    None
 }
 
 pub fn binary_operation_type<'a>(

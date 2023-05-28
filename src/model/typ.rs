@@ -24,15 +24,10 @@ use crate::{
 
 #[derive(Clone, Debug, PartialEq, EnumVariantType)]
 pub enum Type {
-    ModifierType {
-        kind: ModifierTypeKind,
+    MetaType {
+        kind: MetaTypeKind,
         inner: Rc<Type>,
     },
-    InnerType {
-        kind: SpecialTypeKind,
-        inner: Rc<Type>,
-    },
-    ReturnType(Rc<Type>), // Funcs
     PropertyType {
         subject: Rc<Type>,
         property: Rc<Type>,
@@ -70,10 +65,6 @@ pub enum Type {
     UnionType(Vec<Type>),
 
     // data structures
-    SpecialType {
-        kind: SpecialTypeKind,
-        inner: Rc<Type>,
-    },
     ObjectType {
         mutability: Mutability,
         entries: Vec<KeyValueOrSpread<Type>>,
@@ -113,6 +104,41 @@ pub enum Type {
     AnyType,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum MetaTypeKind {
+    Iterable,
+    Plan,
+    Error,
+    Readonly,
+    Keyof,
+    Valueof,
+    Elementof,
+    Parameters,
+    ReturnType,
+    Awaited,
+}
+
+impl From<ModifierTypeKind> for MetaTypeKind {
+    fn from(value: ModifierTypeKind) -> Self {
+        match value {
+            ModifierTypeKind::Readonly => MetaTypeKind::Readonly,
+            ModifierTypeKind::Keyof => MetaTypeKind::Keyof,
+            ModifierTypeKind::Valueof => MetaTypeKind::Valueof,
+            ModifierTypeKind::Elementof => MetaTypeKind::Elementof,
+        }
+    }
+}
+
+impl From<SpecialTypeKind> for MetaTypeKind {
+    fn from(value: SpecialTypeKind) -> Self {
+        match value {
+            SpecialTypeKind::Iterable => MetaTypeKind::Iterable,
+            SpecialTypeKind::Plan => MetaTypeKind::Plan,
+            SpecialTypeKind::Error => MetaTypeKind::Error,
+        }
+    }
+}
+
 impl Eq for Type {}
 
 impl PartialOrd for Type {
@@ -133,10 +159,23 @@ pub fn string_template_safe_types() -> Type {
 }
 
 #[memoize]
+pub fn number_or_string() -> Type {
+    Type::ANY_NUMBER.union(Type::ANY_STRING)
+}
+
+#[memoize]
 pub fn any_array() -> Type {
     Type::ArrayType {
         mutability: Mutability::Readonly,
         element_type: Type::AnyType.rc(),
+    }
+}
+
+#[memoize]
+pub fn unknown_array() -> Type {
+    Type::ArrayType {
+        mutability: Mutability::Readonly,
+        element_type: Type::UnknownType(Mutability::Literal).rc(),
     }
 }
 
@@ -151,26 +190,52 @@ pub fn any_object() -> Type {
 
 #[memoize]
 pub fn any_iterable() -> Type {
-    Type::SpecialType {
-        kind: SpecialTypeKind::Iterable,
+    Type::MetaType {
+        kind: MetaTypeKind::Iterable,
         inner: Type::AnyType.rc(),
     }
 }
 
 #[memoize]
 pub fn any_error() -> Type {
-    Type::SpecialType {
-        kind: SpecialTypeKind::Error,
+    Type::MetaType {
+        kind: MetaTypeKind::Error,
         inner: Type::AnyType.rc(),
     }
 }
 
 #[memoize]
 pub fn any_plan() -> Type {
-    Type::SpecialType {
-        kind: SpecialTypeKind::Plan,
+    Type::MetaType {
+        kind: MetaTypeKind::Plan,
         inner: Type::AnyType.rc(),
     }
+}
+
+#[memoize]
+pub fn any_function() -> Type {
+    Type::FuncType {
+        args: Vec::new(),
+        args_spread: Some(any_array().rc()),
+        is_pure: false,
+        returns: Type::AnyType.rc(),
+    }
+}
+
+#[memoize]
+pub fn any_procedure() -> Type {
+    Type::ProcType {
+        args: Vec::new(),
+        args_spread: Some(any_array().rc()),
+        is_pure: false,
+        is_async: false,
+        throws: Some(Type::AnyType.rc()),
+    }
+}
+
+#[memoize]
+pub fn any_callable() -> Type {
+    any_function().union(any_procedure())
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -187,51 +252,6 @@ impl Type {
         max: None,
     };
     pub const ANY_BOOLEAN: Type = Type::BooleanType(None);
-
-    // export const FALSY: UnionType = {
-    //     kind: "union-type",
-    //     members: [
-    //         FALSE_TYPE,
-    //         NIL_TYPE,
-    //         ERROR_OF_ANY
-    //     ],
-    //     ...TYPE_AST_NOISE
-    // }
-
-    pub fn callable_arg_types(&self) -> Option<(&Vec<Option<Type>>, Option<Rc<Type>>)> {
-        match &self {
-            Type::FuncType {
-                args,
-                args_spread,
-                is_pure: _,
-                returns: _,
-            } => Some((args, args_spread.clone())),
-            Type::ProcType {
-                args,
-                args_spread,
-                is_pure: _,
-                is_async: _,
-                throws: _,
-            } => Some((args, args_spread.clone())),
-            Type::GenericType { type_params, inner } => match inner.as_ref() {
-                Type::FuncType {
-                    args,
-                    args_spread,
-                    is_pure: _,
-                    returns: _,
-                } => Some((args, args_spread.clone())),
-                Type::ProcType {
-                    args,
-                    args_spread,
-                    is_pure: _,
-                    is_async: _,
-                    throws: _,
-                } => Some((args, args_spread.clone())),
-                _ => None,
-            },
-            _ => None,
-        }
-    }
 
     pub fn subsumes<'a>(&self, ctx: SubsumationContext<'a>, other: &Self) -> bool {
         self.subsumation_issues(ctx, other).is_none()
@@ -537,11 +557,11 @@ impl Type {
                 }
             }
             (
-                Type::SpecialType {
+                Type::MetaType {
                     kind: destination_kind,
                     inner: destination_inner,
                 },
-                Type::SpecialType {
+                Type::MetaType {
                     kind: value_kind,
                     inner: value_inner,
                 },
@@ -551,8 +571,8 @@ impl Type {
                 }
             }
             (
-                Type::SpecialType {
-                    kind: SpecialTypeKind::Iterable,
+                Type::MetaType {
+                    kind: MetaTypeKind::Iterable,
                     inner: destination_inner,
                 },
                 Type::ArrayType {
@@ -563,8 +583,8 @@ impl Type {
                 return destination_inner.subsumation_issues(ctx, value_element_type);
             }
             (
-                Type::SpecialType {
-                    kind: SpecialTypeKind::Iterable,
+                Type::MetaType {
+                    kind: MetaTypeKind::Iterable,
                     inner: destination_inner,
                 },
                 Type::TupleType {
@@ -578,19 +598,6 @@ impl Type {
                 }) {
                     return None;
                 }
-            }
-            (
-                destination,
-                Type::InnerType {
-                    kind: value_kind,
-                    inner: value_inner,
-                },
-            ) => {
-                return Type::SpecialType {
-                    kind: *value_kind,
-                    inner: destination.clone().rc(),
-                }
-                .subsumation_issues(ctx, value_inner)
             }
             (Type::UnknownType(destination_mutability), value) => {
                 return None;
@@ -610,24 +617,52 @@ impl Type {
             _ => {}
         };
 
-        //     let resolved = name
-        //     .src
-        //     .map(|src| ctx.module.resolve_symbol_within(&name.node.name, &src))
-        //     .flatten();
-
-        // match resolved {
-        //     Some(Binding::TypeDeclaration(binding)) => binding.declared_type.resolve(ctx),
-        //     _ => Type::PoisonedType,
-        // }
-
         Some(SubsumationIssue::Assignment(vec![(
             destination.clone(),
             value.clone(),
         )]))
     }
 
+    pub fn mutability<'a>(&self, ctx: SubsumationContext<'a>) -> Option<Mutability> {
+        match self.clone().simplify(ctx) {
+            Type::ObjectType {
+                mutability,
+                entries: _,
+                is_interface: _,
+            } => Some(mutability),
+            Type::RecordType {
+                mutability,
+                key_type: _,
+                value_type: _,
+            } => Some(mutability),
+            Type::ArrayType {
+                mutability,
+                element_type: _,
+            } => Some(mutability),
+            Type::TupleType {
+                mutability,
+                members: _,
+            } => Some(mutability),
+            _ => None,
+        }
+    }
+
     pub fn union(self, other: Self) -> Self {
         Type::UnionType(vec![self, other])
+    }
+
+    pub fn parameters(self) -> Self {
+        Type::MetaType {
+            kind: MetaTypeKind::Parameters,
+            inner: self.rc(),
+        }
+    }
+
+    pub fn return_type(self) -> Self {
+        Type::MetaType {
+            kind: MetaTypeKind::ReturnType,
+            inner: self.rc(),
+        }
     }
 
     pub fn exact_number(n: i32) -> Type {
@@ -637,50 +672,12 @@ impl Type {
         }
     }
 
-    // pub fn indexed(&self, other: &Self) -> Option<Type> {
-    //     match (self, other) {
-    //         (Type::ArrayType(element), Type::NumberType { min: _, max: _ }) => {
-    //             Some(element.as_ref().clone().union(Type::NilType))
-    //         }
-    //         (Type::TupleType(members), Type::NumberType { min, max }) => match min {
-    //             Some(min) => match max {
-    //                 Some(max) => {
-    //                     if *min as usize > members.len() || *max < 0 {
-    //                         Some(Type::PoisonedType)
-    //                     } else if min == max {
-    //                         members.get(*min as usize).cloned()
-    //                     } else {
-    //                         Some(Type::UnionType(
-    //                             (&members[*min as usize..*max as usize])
-    //                                 .iter()
-    //                                 .map(|m| m.clone())
-    //                                 .collect(),
-    //                         ))
-    //                     }
-    //                 }
-    //                 None => Some(Type::UnionType(
-    //                     (&members[*min as usize..])
-    //                         .iter()
-    //                         .map(|m| m.clone())
-    //                         .chain(std::iter::once(Type::NilType))
-    //                         .collect(),
-    //                 )),
-    //             },
-    //             None => match max {
-    //                 Some(max) => Some(Type::UnionType(
-    //                     (&members[..*max as usize])
-    //                         .iter()
-    //                         .map(|m| m.clone())
-    //                         .chain(std::iter::once(Type::NilType))
-    //                         .collect(),
-    //                 )),
-    //                 None => Some(Type::UnionType(members.clone())),
-    //             },
-    //         },
-    //         // (Type::RecordType { key_type, value_type }, index) =>
-    //         _ => None,
-    //     }
-    // }
+    pub fn property(self, property: Self) -> Self {
+        Type::PropertyType {
+            subject: self.rc(),
+            property: property.rc(),
+        }
+    }
 
     pub fn broaden_for_mutation(self) -> Type {
         match self {
@@ -741,7 +738,7 @@ impl Type {
         }
     }
 
-    pub fn simplify<'a>(self, ctx: SubsumationContext<'a>) -> Type {
+    fn simplify<'a>(self, ctx: SubsumationContext<'a>) -> Type {
         // println!("simplify {} {:?}", self, ctx.symbols_encountered);
 
         match self {
@@ -841,16 +838,27 @@ impl Type {
                     Type::UnionType(members)
                 }
             }
-            Type::PropertyType { subject, property } => subject
-                .get_property(ctx, property.as_ref())
+            Type::PropertyType { subject, property } => get_property(ctx, &subject, &property)
                 .unwrap_or(Type::PoisonedType)
                 .simplify(ctx),
-            Type::ModifierType { kind, inner } => {
+            Type::MetaType { kind, inner } => {
                 let inner = inner.as_ref().clone().simplify(ctx);
 
                 match kind {
-                    ModifierTypeKind::Readonly => inner.with_mutability(Mutability::Readonly),
-                    ModifierTypeKind::Keyof => match inner {
+                    MetaTypeKind::Iterable => Type::MetaType {
+                        kind,
+                        inner: inner.rc(),
+                    },
+                    MetaTypeKind::Plan => Type::MetaType {
+                        kind,
+                        inner: inner.rc(),
+                    },
+                    MetaTypeKind::Error => Type::MetaType {
+                        kind,
+                        inner: inner.rc(),
+                    },
+                    MetaTypeKind::Readonly => inner.with_mutability(Mutability::Readonly),
+                    MetaTypeKind::Keyof => match inner {
                         Type::RecordType {
                             mutability,
                             key_type,
@@ -872,7 +880,7 @@ impl Type {
                         .with_mutability(mutability),
                         _ => Type::PoisonedType,
                     },
-                    ModifierTypeKind::Valueof => match inner {
+                    MetaTypeKind::Valueof => match inner {
                         Type::RecordType {
                             mutability,
                             key_type: _,
@@ -894,7 +902,7 @@ impl Type {
                         .with_mutability(mutability),
                         _ => Type::PoisonedType,
                     },
-                    ModifierTypeKind::Elementof => match inner {
+                    MetaTypeKind::Elementof => match inner {
                         Type::ArrayType {
                             mutability,
                             element_type,
@@ -914,24 +922,91 @@ impl Type {
                         .with_mutability(mutability),
                         _ => Type::PoisonedType,
                     },
-                }
-            }
-            Type::InnerType { kind, inner } => {
-                let inner = inner.as_ref().clone().simplify(ctx);
 
-                match inner {
-                    Type::SpecialType {
-                        kind: inner_kind,
-                        inner,
-                    } => match (inner_kind, kind) {
-                        (SpecialTypeKind::Iterable, SpecialTypeKind::Iterable) => {
-                            inner.as_ref().clone()
+                    MetaTypeKind::Parameters => {
+                        let args_and_spread = match &inner {
+                            Type::FuncType {
+                                args,
+                                args_spread,
+                                is_pure: _,
+                                returns: _,
+                            } => Some((args, args_spread.clone())),
+                            Type::ProcType {
+                                args,
+                                args_spread,
+                                is_pure: _,
+                                is_async: _,
+                                throws: _,
+                            } => Some((args, args_spread.clone())),
+                            Type::GenericType { type_params, inner } => match inner.as_ref() {
+                                Type::FuncType {
+                                    args,
+                                    args_spread,
+                                    is_pure: _,
+                                    returns: _,
+                                } => Some((args, args_spread.clone())),
+                                Type::ProcType {
+                                    args,
+                                    args_spread,
+                                    is_pure: _,
+                                    is_async: _,
+                                    throws: _,
+                                } => Some((args, args_spread.clone())),
+                                _ => None,
+                            },
+                            _ => None,
+                        };
+
+                        if let Some((args, spread)) = args_and_spread {
+                            Type::TupleType {
+                                mutability: Mutability::Literal,
+                                members: args
+                                    .into_iter()
+                                    .map(|t| {
+                                        ElementOrSpread::Element(
+                                            t.clone()
+                                                .unwrap_or(Type::UnknownType(Mutability::Literal)),
+                                        )
+                                    })
+                                    .chain(
+                                        spread.map(|s| ElementOrSpread::Spread(s.as_ref().clone())),
+                                    )
+                                    .collect(),
+                            }
+                        } else {
+                            unknown_array()
                         }
-                        (SpecialTypeKind::Plan, SpecialTypeKind::Plan) => inner.as_ref().clone(),
-                        (SpecialTypeKind::Error, SpecialTypeKind::Error) => inner.as_ref().clone(),
+                    }
+                    MetaTypeKind::ReturnType => match inner.simplify(ctx.into()) {
+                        Type::FuncType {
+                            args: _,
+                            args_spread: _,
+                            is_pure: _,
+                            returns,
+                        } => returns.as_ref().clone(),
+                        Type::GenericType { type_params, inner } => {
+                            if let Type::FuncType {
+                                args,
+                                args_spread,
+                                is_pure,
+                                returns,
+                            } = inner.as_ref()
+                            {
+                                returns.as_ref().clone()
+                            } else {
+                                Type::PoisonedType
+                            }
+                        }
+                        Type::AnyType => Type::AnyType,
                         _ => Type::PoisonedType,
                     },
-                    _ => Type::PoisonedType,
+                    MetaTypeKind::Awaited => match inner {
+                        Type::MetaType {
+                            kind: MetaTypeKind::Plan,
+                            inner,
+                        } => inner.as_ref().clone().simplify(ctx),
+                        _ => Type::PoisonedType,
+                    },
                 }
             }
             Type::ObjectType {
@@ -1039,10 +1114,6 @@ impl Type {
                 mutability,
                 element_type: element_type.as_ref().clone().simplify(ctx).rc(),
             },
-            Type::SpecialType { kind, inner } => Type::SpecialType {
-                kind,
-                inner: inner.as_ref().clone().simplify(ctx).rc(),
-            },
             Type::BoundGenericType { type_args, generic } => {
                 if let Type::GenericType { type_params, inner } = generic.as_ref() {
                     // let params_to_args = type_params.iter().zip(type_args.iter()).collect();
@@ -1057,9 +1128,7 @@ impl Type {
 
     fn order(&self) -> u8 {
         match self {
-            Type::ModifierType { kind: _, inner: _ } => 3,
-            Type::InnerType { kind: _, inner: _ } => 4,
-            Type::ReturnType(_) => 5,
+            Type::MetaType { kind: _, inner: _ } => 3,
             Type::PropertyType {
                 subject: _,
                 property: _,
@@ -1082,7 +1151,6 @@ impl Type {
                 returns: _,
             } => 9,
             Type::UnionType(_) => 10,
-            Type::SpecialType { kind: _, inner: _ } => 11,
             Type::ObjectType {
                 mutability: _,
                 entries: _,
@@ -1166,13 +1234,10 @@ impl Type {
             },
 
             // recursive
-            Type::ModifierType { kind, inner } => Type::ModifierType {
+            Type::MetaType { kind, inner } => Type::MetaType {
                 kind,
                 inner: inner.as_ref().clone().with_mutability(new_mutability).rc(),
             },
-            Type::ReturnType(inner) => {
-                Type::ReturnType(inner.as_ref().clone().with_mutability(new_mutability).rc())
-            }
             Type::UnionType(members) => Type::UnionType(
                 members
                     .into_iter()
@@ -1201,131 +1266,176 @@ impl Type {
         }
     }
 
-    pub fn get_property<'a>(&self, ctx: SubsumationContext<'a>, property: &Type) -> Option<Type> {
-        let subject = self.clone().simplify(ctx);
+    pub fn property_exists<'a>(&self, ctx: SubsumationContext<'a>, property: &Type) -> bool {
+        get_property(ctx, self, property).is_some()
+    }
+}
 
-        if subject == Type::AnyType || property == &Type::AnyType {
-            return Some(Type::AnyType);
+fn get_property<'a>(ctx: SubsumationContext<'a>, subject: &Type, property: &Type) -> Option<Type> {
+    let subject = subject.clone().simplify(ctx);
+
+    if subject == Type::AnyType || property == &Type::AnyType {
+        return Some(Type::AnyType);
+    }
+
+    if subject == Type::PoisonedType || property == &Type::PoisonedType {
+        return Some(Type::PoisonedType);
+    }
+
+    if let Type::UnionType(members) = subject {
+        let property_type_members: Vec<Option<Type>> = members
+            .into_iter()
+            .map(|member| get_property(ctx, &member, property))
+            .collect();
+
+        if property_type_members.iter().any(|member| member.is_some()) {
+            return Some(Type::UnionType(
+                property_type_members
+                    .into_iter()
+                    .map(|member| member.unwrap_or(Type::NilType))
+                    .collect(),
+            ));
+        } else {
+            return None;
         }
+    }
 
-        if subject == Type::PoisonedType || property == &Type::PoisonedType {
-            return Some(Type::PoisonedType);
-        }
+    let property = property.clone().simplify(ctx);
 
-        if let Type::UnionType(members) = subject {
-            let property_type_members: Vec<Option<Type>> = members
-                .into_iter()
-                .map(|member| member.get_property(ctx, property))
-                .collect();
-
-            if property_type_members.iter().any(|member| member.is_some()) {
-                return Some(Type::UnionType(
-                    property_type_members
-                        .into_iter()
-                        .map(|member| member.unwrap_or(Type::NilType))
-                        .collect(),
-                ));
-            } else {
-                return None;
-            }
-        }
-
-        let property = property.clone().simplify(ctx);
-
-        // specific named properties
-        if let Type::StringType(Some(s)) = &property {
-            if s == "length" {
-                match subject {
-                    Type::ArrayType {
-                        mutability: _,
-                        element_type: _,
-                    } => return Some(Type::ANY_NUMBER),
-                    Type::TupleType {
-                        mutability: _,
-                        members,
-                    } => return Some(Type::exact_number(members.len() as i32)),
-                    Type::StringType(string) => {
-                        return match string {
-                            Some(string) => Some(Type::exact_number(string.len() as i32)),
-                            None => Some(Type::ANY_NUMBER),
-                        }
+    // specific named properties
+    if let Type::StringType(Some(s)) = &property {
+        if s == "length" {
+            match subject {
+                Type::ArrayType {
+                    mutability: _,
+                    element_type: _,
+                } => return Some(Type::ANY_NUMBER),
+                Type::TupleType {
+                    mutability: _,
+                    members,
+                } => return Some(Type::exact_number(members.len() as i32)),
+                Type::StringType(string) => {
+                    return match string {
+                        Some(string) => Some(Type::exact_number(string.len() as i32)),
+                        None => Some(Type::ANY_NUMBER),
                     }
-                    _ => {}
-                };
-            }
-            if s == "value" {
-                match subject {
-                    Type::SpecialType {
-                        kind: SpecialTypeKind::Error,
-                        inner,
-                    } => return Some(inner.as_ref().clone()),
-                    _ => {}
                 }
+                _ => {}
+            };
+        }
+        if s == "value" {
+            match subject {
+                Type::MetaType {
+                    kind: MetaTypeKind::Error,
+                    inner,
+                } => return Some(inner.as_ref().clone()),
+                _ => {}
             }
         }
+    }
 
-        match subject {
-            Type::ObjectType {
-                mutability,
-                entries,
-                is_interface: _,
-            } => entries
-                .iter()
-                .find_map(|entry| match entry {
-                    KeyValueOrSpread::KeyValue(key, value, optional) => {
-                        if key.subsumes(ctx, &property) {
-                            if *optional {
-                                Some(value.clone().union(Type::NilType))
-                            } else {
-                                Some(value.clone())
-                            }
+    match subject {
+        Type::ObjectType {
+            mutability,
+            entries,
+            is_interface: _,
+        } => entries
+            .iter()
+            .find_map(|entry| match entry {
+                KeyValueOrSpread::KeyValue(key, value, optional) => {
+                    if key.subsumes(ctx, &property) {
+                        if *optional {
+                            Some(value.clone().union(Type::NilType))
                         } else {
-                            None
+                            Some(value.clone())
                         }
-                    }
-                    KeyValueOrSpread::Spread(_) => None,
-                })
-                .map(|t| t.with_mutability(mutability)),
-            Type::RecordType {
-                mutability,
-                key_type,
-                value_type,
-            } => {
-                if key_type.subsumes(ctx, &property) {
-                    Some(value_type.as_ref().clone())
-                } else {
-                    None
-                }
-            }
-            Type::TupleType {
-                mutability,
-                members,
-            } => if let Type::NumberType { min, max } = property {
-                let len = members.len() as i32;
-                let min = min.unwrap_or(0);
-                let max = max.unwrap_or(len - 1);
-
-                if min == max {
-                    if min >= 0 && max < len {
-                        members
-                            .get(min as usize)
-                            .map(|member| match member {
-                                ElementOrSpread::Element(element) => element,
-                                ElementOrSpread::Spread(_) => unreachable!(),
-                            })
-                            .cloned()
                     } else {
                         None
                     }
-                } else {
-                    let mut members_type: Vec<Type> = members
-                        [(min as usize).max(0)..(max as usize).min(members.len() - 1)]
-                        .iter()
+                }
+                KeyValueOrSpread::Spread(_) => None,
+            })
+            .map(|t| t.with_mutability(mutability)),
+        Type::RecordType {
+            mutability,
+            key_type,
+            value_type,
+        } => {
+            if key_type.subsumes(ctx, &property) {
+                Some(value_type.as_ref().clone())
+            } else {
+                None
+            }
+        }
+        Type::TupleType {
+            mutability,
+            members,
+        } => if let Type::NumberType { min, max } = property {
+            let len = members.len() as i32;
+            let min = min.unwrap_or(0);
+            let max = max.unwrap_or(len - 1);
+
+            if min == max {
+                if min >= 0 && max < len {
+                    members
+                        .get(min as usize)
                         .map(|member| match member {
                             ElementOrSpread::Element(element) => element,
                             ElementOrSpread::Spread(_) => unreachable!(),
                         })
                         .cloned()
+                } else {
+                    None
+                }
+            } else {
+                let mut members_type: Vec<Type> = members
+                    [(min as usize).max(0)..(max as usize).min(members.len() - 1)]
+                    .iter()
+                    .map(|member| match member {
+                        ElementOrSpread::Element(element) => element,
+                        ElementOrSpread::Spread(_) => unreachable!(),
+                    })
+                    .cloned()
+                    .collect();
+
+                if min < 0 || max > len - 1 {
+                    members_type.push(Type::NilType);
+                }
+
+                Some(Type::UnionType(members_type))
+            }
+        } else {
+            None
+        }
+        .map(|t| t.with_mutability(mutability)),
+        Type::StringType(Some(string)) => {
+            if let Type::NumberType { min, max } = property {
+                let len = string.len() as i32;
+                let min = min.unwrap_or(0);
+                let max = max.unwrap_or(len - 1);
+
+                if min == max {
+                    if min >= 0 && max < len {
+                        Some(Type::StringType(Some(
+                            string
+                                .clone()
+                                .slice_range(min as usize, Some(min as usize + 1)),
+                        )))
+                    } else {
+                        None
+                    }
+                } else {
+                    let mut members_type: Vec<Type> = string
+                        .clone()
+                        .as_str()
+                        .char_indices()
+                        .skip((min as usize).max(0))
+                        .take((max as usize).min(string.len() - 1))
+                        .map(move |(index, _)| {
+                            Type::StringType(Some(
+                                string.clone().slice_range(index, Some(index + 1)),
+                            ))
+                        })
                         .collect();
 
                     if min < 0 || max > len - 1 {
@@ -1337,85 +1447,93 @@ impl Type {
             } else {
                 None
             }
-            .map(|t| t.with_mutability(mutability)),
-            Type::StringType(Some(string)) => {
-                if let Type::NumberType { min, max } = property {
-                    let len = string.len() as i32;
-                    let min = min.unwrap_or(0);
-                    let max = max.unwrap_or(len - 1);
-
-                    if min == max {
-                        if min >= 0 && max < len {
-                            Some(Type::StringType(Some(
-                                string
-                                    .clone()
-                                    .slice_range(min as usize, Some(min as usize + 1)),
-                            )))
-                        } else {
-                            None
-                        }
-                    } else {
-                        let mut members_type: Vec<Type> = string
-                            .clone()
-                            .as_str()
-                            .char_indices()
-                            .skip((min as usize).max(0))
-                            .take((max as usize).min(string.len() - 1))
-                            .map(move |(index, _)| {
-                                Type::StringType(Some(
-                                    string.clone().slice_range(index, Some(index + 1)),
-                                ))
-                            })
-                            .collect();
-
-                        if min < 0 || max > len - 1 {
-                            members_type.push(Type::NilType);
-                        }
-
-                        Some(Type::UnionType(members_type))
-                    }
-                } else {
-                    None
-                }
-            }
-            Type::StringType(None) => {
-                if let Type::NumberType { min: _, max: _ } = property {
-                    Some(Type::ANY_STRING.union(Type::NilType))
-                } else {
-                    None
-                }
-            }
-            Type::ArrayType {
-                mutability,
-                element_type,
-            } => {
-                if let Type::NumberType { min: _, max: _ } = property {
-                    Some(
-                        element_type
-                            .as_ref()
-                            .clone()
-                            .union(Type::NilType)
-                            .with_mutability(mutability),
-                    )
-                } else {
-                    None
-                }
-            }
-            _ => None,
         }
+        Type::StringType(None) => {
+            if let Type::NumberType { min: _, max: _ } = property {
+                Some(Type::ANY_STRING.union(Type::NilType))
+            } else {
+                None
+            }
+        }
+        Type::ArrayType {
+            mutability,
+            element_type,
+        } => {
+            if let Type::NumberType { min: _, max: _ } = property {
+                Some(
+                    element_type
+                        .as_ref()
+                        .clone()
+                        .union(Type::NilType)
+                        .with_mutability(mutability),
+                )
+            } else {
+                None
+            }
+        }
+        _ => None,
     }
 }
+// pub fn indexed(&self, other: &Self) -> Option<Type> {
+//     match (self, other) {
+//         (Type::ArrayType(element), Type::NumberType { min: _, max: _ }) => {
+//             Some(element.as_ref().clone().union(Type::NilType))
+//         }
+//         (Type::TupleType(members), Type::NumberType { min, max }) => match min {
+//             Some(min) => match max {
+//                 Some(max) => {
+//                     if *min as usize > members.len() || *max < 0 {
+//                         Some(Type::PoisonedType)
+//                     } else if min == max {
+//                         members.get(*min as usize).cloned()
+//                     } else {
+//                         Some(Type::UnionType(
+//                             (&members[*min as usize..*max as usize])
+//                                 .iter()
+//                                 .map(|m| m.clone())
+//                                 .collect(),
+//                         ))
+//                     }
+//                 }
+//                 None => Some(Type::UnionType(
+//                     (&members[*min as usize..])
+//                         .iter()
+//                         .map(|m| m.clone())
+//                         .chain(std::iter::once(Type::NilType))
+//                         .collect(),
+//                 )),
+//             },
+//             None => match max {
+//                 Some(max) => Some(Type::UnionType(
+//                     (&members[..*max as usize])
+//                         .iter()
+//                         .map(|m| m.clone())
+//                         .chain(std::iter::once(Type::NilType))
+//                         .collect(),
+//                 )),
+//                 None => Some(Type::UnionType(members.clone())),
+//             },
+//         },
+//         // (Type::RecordType { key_type, value_type }, index) =>
+//         _ => None,
+//     }
+// }
 
 impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Type::ModifierType { kind, inner } => {
-                f.write_str(kind.into())?;
-                f.write_char(' ')?;
-                f.write_fmt(format_args!("{}", inner))
-            }
-            Type::InnerType { kind, inner } => todo!(),
-            Type::ReturnType(inner) => todo!(),
+            Type::MetaType { kind, inner } => match kind {
+                MetaTypeKind::Iterable => f.write_fmt(format_args!("Iterable<{}>", inner)),
+                MetaTypeKind::Plan => f.write_fmt(format_args!("Plan<{}>", inner)),
+                MetaTypeKind::Error => f.write_fmt(format_args!("Error<{}>", inner)),
+                MetaTypeKind::Readonly => f.write_fmt(format_args!("readonly {}", inner)),
+                MetaTypeKind::Keyof => f.write_fmt(format_args!("keyof {}", inner)),
+                MetaTypeKind::Valueof => f.write_fmt(format_args!("valueof {}", inner)),
+                MetaTypeKind::Elementof => f.write_fmt(format_args!("elementof {}", inner)),
+                MetaTypeKind::Parameters => f.write_fmt(format_args!("Parameters<{}>", inner)),
+                MetaTypeKind::ReturnType => f.write_fmt(format_args!("ReturnType<{}>", inner)),
+                MetaTypeKind::Awaited => f.write_fmt(format_args!("Awaited<{}>", inner)),
+            },
             Type::PropertyType { subject, property } => {
                 if let Type::StringType(Some(exact)) = property.as_ref() {
                     f.write_fmt(format_args!("{}.{}", subject, exact.as_str()))
@@ -1517,7 +1635,6 @@ impl Display for Type {
 
                 Ok(())
             }
-
             Type::UnionType(members) => {
                 for (index, member) in members.iter().enumerate() {
                     if index > 0 {
@@ -1528,11 +1645,6 @@ impl Display for Type {
                 }
 
                 Ok(())
-            }
-
-            Type::SpecialType { kind, inner } => {
-                let kind: &'static str = kind.into();
-                f.write_fmt(format_args!("{}<{}>", kind, inner))
             }
             Type::ObjectType {
                 mutability,

@@ -8,9 +8,9 @@ use crate::utils::Loggable;
 use crate::{
     cli::ModulesStore,
     model::{
-        any_array, any_error, any_iterable, any_object, any_plan, ast::*, blue_string,
-        string_template_safe_types, BagelError, ModuleType, Mutability, ParsedModule, Slice,
-        SubsumationContext, Type,
+        any_array, any_callable, any_error, any_iterable, any_object, any_plan, ast::*,
+        blue_string, number_or_string, string_template_safe_types, BagelError, ModuleType,
+        Mutability, ParsedModule, Slice, SubsumationContext, Type,
     },
     passes::{binary_operation_type, INT},
     utils::cli_label,
@@ -85,15 +85,7 @@ where
             let left_type = left.infer_type(ctx.into());
             let right_type = right.infer_type(ctx.into());
 
-            let simplified_left_type = left_type.clone().simplify(ctx.into());
-            let simplified_right_type = right_type.clone().simplify(ctx.into());
-            if simplified_left_type == Type::PoisonedType
-                || simplified_right_type == Type::PoisonedType
-            {
-                return;
-            }
-
-            let number_or_string = Type::ANY_NUMBER.union(Type::ANY_STRING);
+            let number_or_string = number_or_string();
 
             let operator = op.downcast().0;
 
@@ -717,33 +709,16 @@ where
                 args.check(ctx, report_error);
                 spread_args.check(ctx, report_error);
 
-                let subject_type = subject.infer_type(ctx.into());
-
-                if let Some((arg_types, args_spread_type)) = subject_type.callable_arg_types() {
-                    // if subject is callable, check that all argument types match
-                    for (i, arg) in args.iter().enumerate() {
-                        if let Some(arg_type) = arg_types.get(i) {
-                            if let Some(type_annotation) = &arg_type {
-                                check_subsumation(
-                                    type_annotation,
-                                    arg.infer_type(ctx.into()),
-                                    arg.slice(),
-                                    report_error,
-                                );
-                            }
-                        }
-                    }
-                } else if let Some(inv) = method_call_as_invocation(
+                if let Some(inv) = method_call_as_invocation(
                     ctx.into(),
                     self.clone().upcast().try_recast::<Invocation>().unwrap(),
                 ) {
                     // if this is a method-style call that can be transformed to a plain invocation, check that instead
                     inv.check(ctx, report_error);
                 } else {
-                    let simplified_subject_type = subject_type.clone().simplify(ctx.into());
-                    if simplified_subject_type != Type::AnyType
-                        && simplified_subject_type != Type::PoisonedType
-                    {
+                    let subject_type = subject.infer_type(ctx.into());
+
+                    if !any_callable().subsumes(ctx.into(), &subject_type) {
                         report_error(BagelError::MiscError {
                             module_id: module_id.clone(),
                             src: subject.slice().clone(),
@@ -753,6 +728,22 @@ where
                                 blue_string(&subject_type),
                             ),
                         });
+                    } else {
+                        let args_type = Type::TupleType {
+                            mutability: Mutability::Literal,
+                            members: args
+                                .iter()
+                                .map(|arg| arg.infer_type(ctx.into()))
+                                .map(ElementOrSpread::Element)
+                                .collect(),
+                        };
+
+                        check_subsumation(
+                            &subject_type.parameters(),
+                            args_type,
+                            self.slice(),
+                            report_error,
+                        );
                     }
                 }
 
@@ -799,11 +790,7 @@ where
                     .flatten()
                     .is_some();
 
-                if !is_method_call
-                    && subject_type
-                        .get_property(ctx.into(), &property_type)
-                        .is_none()
-                {
+                if !is_method_call && !subject_type.property_exists(ctx.into(), &property_type) {
                     // doesn't have the property
 
                     match property {
@@ -1136,31 +1123,9 @@ where
                                 Some("?. can't be used on the left side of an assignment"),
                             )
                         } else {
-                            let subject_type = subject.infer_type(ctx.into()).simplify(ctx.into());
+                            let subject_type = subject.infer_type(ctx.into());
 
-                            let mutability = match subject_type {
-                                Type::ObjectType {
-                                    mutability,
-                                    entries: _,
-                                    is_interface: _,
-                                } => Some(mutability),
-                                Type::RecordType {
-                                    mutability,
-                                    key_type: _,
-                                    value_type: _,
-                                } => Some(mutability),
-                                Type::ArrayType {
-                                    mutability,
-                                    element_type: _,
-                                } => Some(mutability),
-                                Type::TupleType {
-                                    mutability,
-                                    members: _,
-                                } => Some(mutability),
-                                _ => None,
-                            };
-
-                            if let Some(mutability) = mutability {
+                            if let Some(mutability) = subject_type.mutability(ctx.into()) {
                                 match mutability {
                                     Mutability::Constant => (true, Some("")),
                                     Mutability::Readonly => (true, Some("")),
@@ -1387,10 +1352,9 @@ fn check_declaration_destination<'a, F: FnMut(BagelError)>(
                     );
 
                     for (index, property) in properties.iter().enumerate() {
-                        let property_type =
-                            value_type.get_property(ctx.into(), &Type::exact_number(index as i32));
-
-                        if property_type.is_none() {
+                        if !value_type
+                            .property_exists(ctx.into(), &Type::exact_number(index as i32))
+                        {
                             report_error(BagelError::MiscError {
                                 module_id: module_id.clone(),
                                 src: property.slice().clone(),
@@ -1413,10 +1377,10 @@ fn check_declaration_destination<'a, F: FnMut(BagelError)>(
 
                     for property in properties {
                         let name = property.downcast().0.clone();
-                        let property_type = value_type
-                            .get_property(ctx.into(), &Type::StringType(Some(name.clone())));
 
-                        if property_type.is_none() {
+                        if !value_type
+                            .property_exists(ctx.into(), &Type::StringType(Some(name.clone())))
+                        {
                             report_error(BagelError::MiscError {
                                 module_id: module_id.clone(),
                                 src: property.slice().clone(),

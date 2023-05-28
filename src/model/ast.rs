@@ -532,10 +532,9 @@ pub fn method_call_as_invocation<'a>(
                 }
             };
 
-            if property_subject
+            if !property_subject
                 .infer_type(ctx)
-                .get_property(ctx.into(), &property_type)
-                .is_none()
+                .property_exists(ctx.into(), &property_type)
             {
                 if !optional {
                     if let Property::PlainIdentifier(identifier) = property {

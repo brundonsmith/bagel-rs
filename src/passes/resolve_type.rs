@@ -23,8 +23,8 @@ pub struct ResolveTypeContext<'a> {
 impl AST<TypeExpression> {
     pub fn resolve_type<'a>(&self, ctx: ResolveTypeContext<'a>) -> Type {
         match self.downcast() {
-            TypeExpression::ModifierType(ModifierType { kind, inner }) => Type::ModifierType {
-                kind,
+            TypeExpression::ModifierType(ModifierType { kind, inner }) => Type::MetaType {
+                kind: kind.into(),
                 inner: inner.resolve_type(ctx).rc(),
             },
             TypeExpression::GenericParamType(GenericParamType { name, extends }) => extends
@@ -137,8 +137,8 @@ impl AST<TypeExpression> {
                     func_type
                 }
             }
-            TypeExpression::SpecialType(SpecialType { kind, inner }) => Type::SpecialType {
-                kind,
+            TypeExpression::SpecialType(SpecialType { kind, inner }) => Type::MetaType {
+                kind: kind.into(),
                 inner: inner.resolve_type(ctx).rc(),
             },
             TypeExpression::ObjectType(ObjectType {
