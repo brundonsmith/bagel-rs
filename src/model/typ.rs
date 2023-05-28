@@ -813,7 +813,7 @@ impl Type {
                     Type::NamedType { mutability, name }
                 } else {
                     // add current symbol to symbols_encountered
-                    let symbols_encountered: Vec<Slice> = ctx
+                    let symbols_encountered = ctx
                         .symbols_encountered
                         .iter()
                         .cloned()

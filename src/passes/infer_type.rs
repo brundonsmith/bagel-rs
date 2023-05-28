@@ -1,86 +1,163 @@
 use std::rc::Rc;
 
+use colored::Color;
+
 use crate::{
     cli::ModulesStore,
-    model::{ast::*, MetaTypeKind, Mutability, ParsedModule, Slice, Type},
+    model::{ast::*, blue_string, MetaTypeKind, Mutability, ParsedModule, Slice, Type},
     passes::{ResolveSymbolContext, INT},
-    utils::Rcable,
+    utils::{cli_label, Rcable},
+    DEBUG_MODE,
 };
 
 #[derive(Clone, Copy, Debug)]
 pub struct InferTypeContext<'a> {
     pub modules: &'a ModulesStore,
     pub current_module: &'a ParsedModule,
+    pub expressions_encountered: &'a Vec<AST<Expression>>,
 }
 
 impl AST<Expression> {
     pub fn infer_type<'a>(&self, ctx: InferTypeContext<'a>) -> Type {
-        self.refine(
-            ctx,
-            self,
-            match self.downcast() {
-                Expression::BinaryOperation(op) => binary_operation_type(ctx, &op),
-                Expression::Parenthesis(Parenthesis(inner)) => inner.infer_type(ctx),
-                Expression::LocalIdentifier(LocalIdentifier(name)) => {
-                    if name == JS_GLOBAL_IDENTIFIER || name.as_str().starts_with(INT) {
-                        return Type::AnyType;
-                    }
+        if ctx.expressions_encountered.contains(self) {
+            if DEBUG_MODE {
+                println!(
+                    "{} Encountered inference cycle on {}",
+                    cli_label("Warning", Color::Yellow),
+                    blue_string(self)
+                );
+            }
 
-                    let resolved = self.resolve_symbol(
-                        ResolveSymbolContext::from(ctx).follow_imports(true),
-                        name.as_str(),
-                    );
+            // encountered cycle, bail out here to avoid infinite loop
+            Type::PoisonedType
+        } else {
+            // add current symbol to symbols_encountered
+            let expressions_encountered = ctx
+                .expressions_encountered
+                .iter()
+                .cloned()
+                .chain(std::iter::once(self.clone()))
+                .collect();
+            let expressions_encountered = &expressions_encountered;
+            let ctx = InferTypeContext {
+                modules: ctx.modules,
+                current_module: ctx.current_module,
+                expressions_encountered,
+            };
 
-                    if let Some(resolved) = resolved {
-                        match resolved.details() {
-                            Any::ProcDeclaration(ProcDeclaration {
-                                name: _,
-                                proc,
-                                exported: _,
-                                platforms: _,
-                                decorators: _,
-                            }) => proc.clone().recast::<Expression>().infer_type(ctx),
-                            Any::FuncDeclaration(FuncDeclaration {
-                                name: _,
-                                func,
-                                exported: _,
-                                platforms: _,
-                                decorators: _,
-                            }) => func.clone().recast::<Expression>().infer_type(ctx),
-                            Any::ValueDeclaration(ValueDeclaration {
-                                destination,
-                                value,
-                                is_const,
-                                exported: _,
-                                platforms: _,
-                            }) => match destination {
-                                DeclarationDestination::NameAndType(NameAndType {
+            self.refine(
+                ctx,
+                self,
+                match self.downcast() {
+                    Expression::BinaryOperation(op) => binary_operation_type(ctx, &op),
+                    Expression::Parenthesis(Parenthesis(inner)) => inner.infer_type(ctx),
+                    Expression::LocalIdentifier(LocalIdentifier(name)) => {
+                        if name == JS_GLOBAL_IDENTIFIER || name.as_str().starts_with(INT) {
+                            return Type::AnyType;
+                        }
+
+                        let resolved = self.resolve_symbol(
+                            ResolveSymbolContext::from(ctx).follow_imports(true),
+                            name.as_str(),
+                        );
+
+                        if let Some(resolved) = resolved {
+                            match resolved.details() {
+                                Any::ProcDeclaration(ProcDeclaration {
                                     name: _,
-                                    type_annotation,
-                                }) => type_annotation
-                                    .as_ref()
-                                    .map(|x| x.resolve_type(ctx.into()))
-                                    .unwrap_or_else(|| {
-                                        let base_type = value.infer_type(ctx);
+                                    proc,
+                                    exported: _,
+                                    platforms: _,
+                                    decorators: _,
+                                }) => proc.clone().recast::<Expression>().infer_type(ctx),
+                                Any::FuncDeclaration(FuncDeclaration {
+                                    name: _,
+                                    func,
+                                    exported: _,
+                                    platforms: _,
+                                    decorators: _,
+                                }) => func.clone().recast::<Expression>().infer_type(ctx),
+                                Any::ValueDeclaration(ValueDeclaration {
+                                    destination,
+                                    value,
+                                    is_const,
+                                    exported: _,
+                                    platforms: _,
+                                }) => match destination {
+                                    DeclarationDestination::NameAndType(NameAndType {
+                                        name: _,
+                                        type_annotation,
+                                    }) => type_annotation
+                                        .as_ref()
+                                        .map(|x| x.resolve_type(ctx.into()))
+                                        .unwrap_or_else(|| {
+                                            let base_type = value.infer_type(ctx);
 
-                                        if *is_const {
-                                            base_type
-                                        } else {
-                                            base_type.broaden_for_mutation()
-                                        }
-                                    }),
-                                DeclarationDestination::Destructure(_) => todo!(),
-                            },
-                            Any::Arg(Arg {
-                                name,
-                                type_annotation,
-                                optional,
-                            }) => type_annotation
-                                .as_ref()
-                                .map(|t| t.resolve_type(ctx.into()))
-                                .unwrap_or(Type::UnknownType(Mutability::Mutable)),
-                            Any::InlineDeclaration(InlineDeclaration { destination, value }) => {
-                                match destination {
+                                            if *is_const {
+                                                base_type
+                                            } else {
+                                                base_type.broaden_for_mutation()
+                                            }
+                                        }),
+                                    DeclarationDestination::Destructure(_) => todo!(),
+                                },
+                                Any::Arg(Arg {
+                                    name,
+                                    type_annotation,
+                                    optional,
+                                }) => {
+                                    let parent = resolved.parent().unwrap();
+                                    let arg_index = match parent.details() {
+                                        Any::FuncType(FuncType {
+                                            args,
+                                            type_params: _,
+                                            args_spread: _,
+                                            returns: _,
+                                        }) => args
+                                            .iter()
+                                            .enumerate()
+                                            .find(|(_, a)| {
+                                                a.downcast().name.downcast().0.as_str()
+                                                    == name.downcast().0.as_str()
+                                            })
+                                            .map(|(i, _)| i),
+                                        Any::ProcType(ProcType {
+                                            args,
+                                            type_params: _,
+                                            args_spread: _,
+                                            is_async: _,
+                                            throws: _,
+                                        }) => args
+                                            .iter()
+                                            .enumerate()
+                                            .find(|(_, a)| {
+                                                a.downcast().name.downcast().0.as_str()
+                                                    == name.downcast().0.as_str()
+                                            })
+                                            .map(|(i, _)| i),
+                                        _ => None,
+                                    };
+
+                                    if let Some(arg_index) = arg_index {
+                                        return parent
+                                            .parent()
+                                            .unwrap()
+                                            .try_recast::<Expression>()
+                                            .unwrap()
+                                            .infer_type(ctx)
+                                            .parameters()
+                                            .property(arg_index.into());
+                                    }
+
+                                    type_annotation
+                                        .as_ref()
+                                        .map(|t| t.resolve_type(ctx.into()))
+                                        .unwrap_or(Type::UnknownType(Mutability::Mutable))
+                                }
+                                Any::InlineDeclaration(InlineDeclaration {
+                                    destination,
+                                    value,
+                                }) => match destination {
                                     DeclarationDestination::NameAndType(NameAndType {
                                         name: _,
                                         type_annotation,
@@ -124,316 +201,322 @@ impl AST<Expression> {
                                             unreachable!()
                                         }
                                     }
-                                }
-                            }
-                            Any::ForLoop(ForLoop {
-                                item_identifier: _,
-                                iterable,
-                                body: _,
-                            }) => {
-                                let iterable_type = iterable.infer_type(ctx);
+                                },
+                                Any::ForLoop(ForLoop {
+                                    item_identifier: _,
+                                    iterable,
+                                    body: _,
+                                }) => {
+                                    let iterable_type = iterable.infer_type(ctx);
 
-                                if let Type::MetaType {
-                                    kind: MetaTypeKind::Iterable,
-                                    inner,
-                                } = iterable_type
-                                {
-                                    return inner.as_ref().clone();
-                                } else {
-                                    return Type::PoisonedType;
+                                    if let Type::MetaType {
+                                        kind: MetaTypeKind::Iterable,
+                                        inner,
+                                    } = iterable_type
+                                    {
+                                        return inner.as_ref().clone();
+                                    } else {
+                                        return Type::PoisonedType;
+                                    }
                                 }
-                            }
-                            Any::TryCatch(TryCatch {
-                                try_block,
-                                error_identifier: _,
-                                catch_block: _,
-                            }) => {
-                                let try_block_throws =
-                                    try_block.clone().recast::<Statement>().throws(ctx.into());
+                                Any::TryCatch(TryCatch {
+                                    try_block,
+                                    error_identifier: _,
+                                    catch_block: _,
+                                }) => {
+                                    let try_block_throws =
+                                        try_block.clone().recast::<Statement>().throws(ctx.into());
 
-                                match try_block_throws {
-                                    Some(try_block_throws) => try_block_throws,
-                                    None => Type::PoisonedType,
+                                    match try_block_throws {
+                                        Some(try_block_throws) => try_block_throws,
+                                        None => Type::PoisonedType,
+                                    }
                                 }
+                                Any::AnyLiteral(_) => Type::AnyType,
+                                _ => Type::PoisonedType,
                             }
-                            Any::AnyLiteral(_) => Type::AnyType,
-                            _ => Type::PoisonedType,
+                        } else {
+                            Type::PoisonedType
                         }
-                    } else {
-                        Type::PoisonedType
                     }
-                }
-                Expression::InlineConstGroup(InlineConstGroup {
-                    declarations: _,
-                    inner,
-                }) => inner.infer_type(ctx),
-                Expression::NilLiteral(_) => Type::NilType,
-                Expression::NumberLiteral(NumberLiteral(value)) => {
-                    value.as_str().parse::<i32>().unwrap().into()
-                }
-                Expression::BooleanLiteral(BooleanLiteral(value)) => Type::BooleanType(Some(value)),
-                Expression::ExactStringLiteral(ExactStringLiteral { value, tag: _ }) => {
-                    value.into()
-                }
-                Expression::StringLiteral(StringLiteral {
-                    tag: _,
-                    segments: _,
-                }) => Type::ANY_STRING,
-                Expression::ArrayLiteral(ArrayLiteral(members)) => Type::TupleType {
-                    mutability: Mutability::Literal,
-                    members: members
-                        .into_iter()
-                        .map(|member| match member {
-                            ElementOrSpread::Element(element) => {
-                                ElementOrSpread::Element(element.infer_type(ctx))
-                            }
-                            ElementOrSpread::Spread(spread) => {
-                                ElementOrSpread::Spread(spread.infer_type(ctx))
-                            }
-                        })
-                        .collect(),
-                },
-                Expression::ObjectLiteral(ObjectLiteral(entries)) => Type::ObjectType {
-                    mutability: Mutability::Literal,
-                    entries: entries
-                        .into_iter()
-                        .map(|entry| match entry {
-                            KeyValueOrSpread::KeyValue(key, value, _) => {
-                                KeyValueOrSpread::KeyValue(
-                                    key.infer_type(ctx),
-                                    value.infer_type(ctx),
-                                    false,
-                                )
-                            }
-                            KeyValueOrSpread::Spread(expr) => {
-                                KeyValueOrSpread::Spread(expr.infer_type(ctx))
-                            }
-                        })
-                        .collect(),
-                    is_interface: false,
-                },
-                Expression::NegationOperation(NegationOperation(_)) => Type::BooleanType(None),
-                Expression::Func(Func {
-                    type_annotation,
-                    is_async: _,
-                    body,
-                }) => {
-                    let type_annotation = type_annotation.downcast();
-                    let expected_arg_types = infer_expected_type(ctx, self).map(|t| t.parameters());
-                    let expected_arg_types = &expected_arg_types;
-
-                    Type::FuncType {
-                        args: type_annotation
-                            .args
+                    Expression::InlineConstGroup(InlineConstGroup {
+                        declarations: _,
+                        inner,
+                    }) => inner.infer_type(ctx),
+                    Expression::NilLiteral(_) => Type::NilType,
+                    Expression::NumberLiteral(NumberLiteral(value)) => {
+                        value.as_str().parse::<i32>().unwrap().into()
+                    }
+                    Expression::BooleanLiteral(BooleanLiteral(value)) => {
+                        Type::BooleanType(Some(value))
+                    }
+                    Expression::ExactStringLiteral(ExactStringLiteral { value, tag: _ }) => {
+                        value.into()
+                    }
+                    Expression::StringLiteral(StringLiteral {
+                        tag: _,
+                        segments: _,
+                    }) => Type::ANY_STRING,
+                    Expression::ArrayLiteral(ArrayLiteral(members)) => Type::TupleType {
+                        mutability: Mutability::Literal,
+                        members: members
                             .into_iter()
-                            .enumerate()
-                            .map(|(index, a)| {
-                                a.downcast()
-                                    .type_annotation
-                                    .map(|a| a.resolve_type(ctx.into()))
-                                    .or_else(|| {
-                                        expected_arg_types
-                                            .as_ref()
-                                            .map(|args| args.clone().property(index.into()))
-                                    })
+                            .map(|member| match member {
+                                ElementOrSpread::Element(element) => {
+                                    ElementOrSpread::Element(element.infer_type(ctx))
+                                }
+                                ElementOrSpread::Spread(spread) => {
+                                    ElementOrSpread::Spread(spread.infer_type(ctx))
+                                }
                             })
                             .collect(),
-                        args_spread: type_annotation
-                            .args_spread
-                            .as_ref()
-                            .map(|s| s.downcast().type_annotation.clone())
-                            .flatten()
-                            .map(|s| s.resolve_type(ctx.into()))
-                            .map(Rc::new),
-                        returns: type_annotation
-                            .returns
-                            .map(|r| r.resolve_type(ctx.into()))
-                            .unwrap_or_else(|| body.infer_type(ctx))
-                            .rc(),
-                    }
-                }
-                Expression::Proc(Proc {
-                    type_annotation,
-                    is_async,
-                    body,
-                }) => {
-                    let type_annotation = type_annotation.downcast();
-                    let expected_arg_types = infer_expected_type(ctx, self).map(|t| t.parameters());
-                    let expected_arg_types = &expected_arg_types;
-
-                    Type::ProcType {
-                        args: type_annotation
-                            .args
+                    },
+                    Expression::ObjectLiteral(ObjectLiteral(entries)) => Type::ObjectType {
+                        mutability: Mutability::Literal,
+                        entries: entries
                             .into_iter()
-                            .enumerate()
-                            .map(|(index, a)| {
-                                a.downcast()
-                                    .type_annotation
-                                    .map(|a| a.resolve_type(ctx.into()))
-                                    .or_else(|| {
-                                        expected_arg_types
-                                            .as_ref()
-                                            .map(|args| args.clone().property(index.into()))
-                                    })
+                            .map(|entry| match entry {
+                                KeyValueOrSpread::KeyValue(key, value, _) => {
+                                    KeyValueOrSpread::KeyValue(
+                                        key.infer_type(ctx),
+                                        value.infer_type(ctx),
+                                        false,
+                                    )
+                                }
+                                KeyValueOrSpread::Spread(expr) => {
+                                    KeyValueOrSpread::Spread(expr.infer_type(ctx))
+                                }
                             })
                             .collect(),
-                        args_spread: type_annotation
-                            .args_spread
-                            .as_ref()
-                            .map(|s| s.downcast().type_annotation.clone())
-                            .flatten()
-                            .map(|s| s.resolve_type(ctx.into()))
-                            .map(Rc::new),
+                        is_interface: false,
+                    },
+                    Expression::NegationOperation(NegationOperation(_)) => Type::BooleanType(None),
+                    Expression::Func(Func {
+                        type_annotation,
+                        is_async: _,
+                        body,
+                    }) => {
+                        let type_annotation = type_annotation.downcast();
+                        let expected_arg_types =
+                            infer_expected_type(ctx, self).map(|t| t.parameters());
+                        let expected_arg_types = &expected_arg_types;
+
+                        Type::FuncType {
+                            args: type_annotation
+                                .args
+                                .into_iter()
+                                .enumerate()
+                                .map(|(index, a)| {
+                                    a.downcast()
+                                        .type_annotation
+                                        .map(|a| a.resolve_type(ctx.into()))
+                                        .or_else(|| {
+                                            expected_arg_types
+                                                .as_ref()
+                                                .map(|args| args.clone().property(index.into()))
+                                        })
+                                })
+                                .collect(),
+                            args_spread: type_annotation
+                                .args_spread
+                                .as_ref()
+                                .map(|s| s.downcast().type_annotation.clone())
+                                .flatten()
+                                .map(|s| s.resolve_type(ctx.into()))
+                                .map(Rc::new),
+                            returns: type_annotation
+                                .returns
+                                .map(|r| r.resolve_type(ctx.into()))
+                                .unwrap_or_else(|| body.infer_type(ctx))
+                                .rc(),
+                        }
+                    }
+                    Expression::Proc(Proc {
+                        type_annotation,
                         is_async,
-                        throws: type_annotation
-                            .throws
-                            .map(|throws| throws.resolve_type(ctx.into()))
-                            .or_else(|| body.throws(ctx))
-                            .map(Rc::new),
-                    }
-                }
-                Expression::RangeExpression(RangeExpression { start, end }) => {
-                    let min = start.infer_type(ctx).to_exact_number();
-                    let max = end.infer_type(ctx).to_exact_number();
+                        body,
+                    }) => {
+                        let type_annotation = type_annotation.downcast();
+                        let expected_arg_types =
+                            infer_expected_type(ctx, self).map(|t| t.parameters());
+                        let expected_arg_types = &expected_arg_types;
 
-                    Type::MetaType {
-                        kind: MetaTypeKind::Iterable,
-                        inner: Type::NumberType { min, max }.rc(),
-                    }
-                }
-                Expression::AwaitExpression(AwaitExpression(inner)) => Type::MetaType {
-                    kind: MetaTypeKind::Awaited,
-                    inner: inner.infer_type(ctx).rc(),
-                },
-                Expression::Invocation(Invocation {
-                    subject,
-                    args,
-                    spread_args,
-                    type_args,
-                    bubbles,
-                    awaited_or_detached,
-                }) => {
-                    if let Some(inv) = method_call_as_invocation(
-                        ctx,
-                        self.clone().try_recast::<Invocation>().unwrap(),
-                    ) {
-                        inv.infer_type(ctx)
-                    } else {
-                        subject.infer_type(ctx).return_type()
-                    }
-                }
-                Expression::PropertyAccessor(PropertyAccessor {
-                    subject,
-                    property,
-                    optional,
-                }) => {
-                    // TODO: optional
-
-                    Type::PropertyType {
-                        subject: subject.infer_type(ctx).rc(),
-                        property: match property {
-                            Property::Expression(expr) => expr.infer_type(ctx.into()),
-                            Property::PlainIdentifier(ident) => {
-                                Type::StringType(Some(ident.downcast().0.clone()))
-                            }
+                        Type::ProcType {
+                            args: type_annotation
+                                .args
+                                .into_iter()
+                                .enumerate()
+                                .map(|(index, a)| {
+                                    a.downcast()
+                                        .type_annotation
+                                        .map(|a| a.resolve_type(ctx.into()))
+                                        .or_else(|| {
+                                            expected_arg_types
+                                                .as_ref()
+                                                .map(|args| args.clone().property(index.into()))
+                                        })
+                                })
+                                .collect(),
+                            args_spread: type_annotation
+                                .args_spread
+                                .as_ref()
+                                .map(|s| s.downcast().type_annotation.clone())
+                                .flatten()
+                                .map(|s| s.resolve_type(ctx.into()))
+                                .map(Rc::new),
+                            is_async,
+                            throws: type_annotation
+                                .throws
+                                .map(|throws| throws.resolve_type(ctx.into()))
+                                .or_else(|| body.throws(ctx))
+                                .map(Rc::new),
                         }
-                        .rc(),
                     }
-                }
-                Expression::IfElseExpression(IfElseExpression {
-                    cases,
-                    default_case,
-                }) => Type::UnionType(
-                    cases
-                        .iter()
-                        .map(|case| case.downcast().outcome.infer_type(ctx))
-                        .chain(
-                            default_case
-                                .as_ref()
-                                .map(|case| case.infer_type(ctx))
-                                .into_iter(),
-                        )
-                        .collect(),
-                ),
-                Expression::SwitchExpression(SwitchExpression {
-                    value,
-                    cases,
-                    default_case,
-                }) => Type::UnionType(
-                    cases
-                        .iter()
-                        .map(|case| case.downcast().outcome.infer_type(ctx))
-                        .chain(
-                            default_case
-                                .as_ref()
-                                .map(|case| case.infer_type(ctx))
-                                .into_iter(),
-                        )
-                        .collect(),
-                ),
-                Expression::ElementTag(ElementTag {
-                    tag_name,
-                    attributes,
-                    children,
-                }) => Type::ObjectType {
-                    mutability: Mutability::Literal,
-                    entries: vec![
-                        KeyValueOrSpread::KeyValue(
-                            Type::StringType(Some(Slice::new(String::from("tag").rc()))),
-                            Type::StringType(Some(tag_name.downcast().0.clone())),
-                            false,
-                        ),
-                        KeyValueOrSpread::KeyValue(
-                            Type::StringType(Some(Slice::new(String::from("attributes").rc()))),
-                            Type::ObjectType {
-                                mutability: Mutability::Literal,
-                                entries: attributes
-                                    .into_iter()
-                                    .map(|(key, value)| {
-                                        KeyValueOrSpread::KeyValue(
-                                            identifier_to_string_type(key)
-                                                .recast::<TypeExpression>()
-                                                .resolve_type(ctx.into()),
-                                            value.infer_type(ctx),
-                                            false,
-                                        )
-                                    })
-                                    .collect(),
-                                is_interface: false,
-                            },
-                            false,
-                        ),
-                        KeyValueOrSpread::KeyValue(
-                            Type::StringType(Some(Slice::new(String::from("children").rc()))),
-                            Type::TupleType {
-                                mutability: Mutability::Literal,
-                                members: children
-                                    .into_iter()
-                                    .map(|child| ElementOrSpread::Element(child.infer_type(ctx)))
-                                    .collect(),
-                            },
-                            false,
-                        ),
-                    ],
-                    is_interface: false,
+                    Expression::RangeExpression(RangeExpression { start, end }) => {
+                        let min = start.infer_type(ctx).to_exact_number();
+                        let max = end.infer_type(ctx).to_exact_number();
+
+                        Type::MetaType {
+                            kind: MetaTypeKind::Iterable,
+                            inner: Type::NumberType { min, max }.rc(),
+                        }
+                    }
+                    Expression::AwaitExpression(AwaitExpression(inner)) => Type::MetaType {
+                        kind: MetaTypeKind::Awaited,
+                        inner: inner.infer_type(ctx).rc(),
+                    },
+                    Expression::Invocation(Invocation {
+                        subject,
+                        args,
+                        spread_args,
+                        type_args,
+                        bubbles,
+                        awaited_or_detached,
+                    }) => {
+                        if let Some(inv) = method_call_as_invocation(
+                            ctx,
+                            self.clone().try_recast::<Invocation>().unwrap(),
+                        ) {
+                            inv.infer_type(ctx)
+                        } else {
+                            subject.infer_type(ctx).return_type()
+                        }
+                    }
+                    Expression::PropertyAccessor(PropertyAccessor {
+                        subject,
+                        property,
+                        optional,
+                    }) => {
+                        // TODO: optional
+
+                        Type::PropertyType {
+                            subject: subject.infer_type(ctx).rc(),
+                            property: match property {
+                                Property::Expression(expr) => expr.infer_type(ctx.into()),
+                                Property::PlainIdentifier(ident) => {
+                                    Type::StringType(Some(ident.downcast().0.clone()))
+                                }
+                            }
+                            .rc(),
+                        }
+                    }
+                    Expression::IfElseExpression(IfElseExpression {
+                        cases,
+                        default_case,
+                    }) => Type::UnionType(
+                        cases
+                            .iter()
+                            .map(|case| case.downcast().outcome.infer_type(ctx))
+                            .chain(
+                                default_case
+                                    .as_ref()
+                                    .map(|case| case.infer_type(ctx))
+                                    .into_iter(),
+                            )
+                            .collect(),
+                    ),
+                    Expression::SwitchExpression(SwitchExpression {
+                        value,
+                        cases,
+                        default_case,
+                    }) => Type::UnionType(
+                        cases
+                            .iter()
+                            .map(|case| case.downcast().outcome.infer_type(ctx))
+                            .chain(
+                                default_case
+                                    .as_ref()
+                                    .map(|case| case.infer_type(ctx))
+                                    .into_iter(),
+                            )
+                            .collect(),
+                    ),
+                    Expression::ElementTag(ElementTag {
+                        tag_name,
+                        attributes,
+                        children,
+                    }) => Type::ObjectType {
+                        mutability: Mutability::Literal,
+                        entries: vec![
+                            KeyValueOrSpread::KeyValue(
+                                Type::StringType(Some(Slice::new(String::from("tag").rc()))),
+                                Type::StringType(Some(tag_name.downcast().0.clone())),
+                                false,
+                            ),
+                            KeyValueOrSpread::KeyValue(
+                                Type::StringType(Some(Slice::new(String::from("attributes").rc()))),
+                                Type::ObjectType {
+                                    mutability: Mutability::Literal,
+                                    entries: attributes
+                                        .into_iter()
+                                        .map(|(key, value)| {
+                                            KeyValueOrSpread::KeyValue(
+                                                identifier_to_string_type(key)
+                                                    .recast::<TypeExpression>()
+                                                    .resolve_type(ctx.into()),
+                                                value.infer_type(ctx),
+                                                false,
+                                            )
+                                        })
+                                        .collect(),
+                                    is_interface: false,
+                                },
+                                false,
+                            ),
+                            KeyValueOrSpread::KeyValue(
+                                Type::StringType(Some(Slice::new(String::from("children").rc()))),
+                                Type::TupleType {
+                                    mutability: Mutability::Literal,
+                                    members: children
+                                        .into_iter()
+                                        .map(|child| {
+                                            ElementOrSpread::Element(child.infer_type(ctx))
+                                        })
+                                        .collect(),
+                                },
+                                false,
+                            ),
+                        ],
+                        is_interface: false,
+                    },
+                    Expression::AsCast(AsCast { inner: _, as_type }) => {
+                        as_type.resolve_type(ctx.into())
+                    }
+                    Expression::InstanceOf(InstanceOf {
+                        inner: _,
+                        possible_type: _,
+                    }) => Type::ANY_BOOLEAN,
+                    Expression::ErrorExpression(ErrorExpression(inner)) => Type::MetaType {
+                        kind: MetaTypeKind::Error,
+                        inner: inner.infer_type(ctx).rc(),
+                    },
+                    Expression::RegularExpression(RegularExpression { expr, flags }) => {
+                        Type::RegularExpressionType
+                    }
+                    Expression::AnyLiteral(_) => Type::AnyType,
                 },
-                Expression::AsCast(AsCast { inner: _, as_type }) => {
-                    as_type.resolve_type(ctx.into())
-                }
-                Expression::InstanceOf(InstanceOf {
-                    inner: _,
-                    possible_type: _,
-                }) => Type::ANY_BOOLEAN,
-                Expression::ErrorExpression(ErrorExpression(inner)) => Type::MetaType {
-                    kind: MetaTypeKind::Error,
-                    inner: inner.infer_type(ctx).rc(),
-                },
-                Expression::RegularExpression(RegularExpression { expr, flags }) => {
-                    Type::RegularExpressionType
-                }
-                Expression::AnyLiteral(_) => Type::AnyType,
-            },
-        )
+            )
+        }
     }
 }
 
