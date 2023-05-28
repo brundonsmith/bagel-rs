@@ -153,6 +153,30 @@ impl Ord for Type {
     }
 }
 
+impl From<Slice> for Type {
+    fn from(value: Slice) -> Self {
+        Type::StringType(Some(value))
+    }
+}
+
+impl From<i32> for Type {
+    fn from(value: i32) -> Self {
+        Type::NumberType {
+            min: Some(value),
+            max: Some(value),
+        }
+    }
+}
+
+impl From<usize> for Type {
+    fn from(value: usize) -> Self {
+        Type::NumberType {
+            min: Some(value as i32),
+            max: Some(value as i32),
+        }
+    }
+}
+
 #[memoize]
 pub fn string_template_safe_types() -> Type {
     Type::UnionType(vec![Type::ANY_STRING, Type::ANY_NUMBER, Type::ANY_BOOLEAN])
@@ -662,13 +686,6 @@ impl Type {
         Type::MetaType {
             kind: MetaTypeKind::ReturnType,
             inner: self.rc(),
-        }
-    }
-
-    pub fn exact_number(n: i32) -> Type {
-        Type::NumberType {
-            min: Some(n),
-            max: Some(n),
         }
     }
 
@@ -1313,10 +1330,10 @@ fn get_property<'a>(ctx: SubsumationContext<'a>, subject: &Type, property: &Type
                 Type::TupleType {
                     mutability: _,
                     members,
-                } => return Some(Type::exact_number(members.len() as i32)),
+                } => return Some(members.len().into()),
                 Type::StringType(string) => {
                     return match string {
-                        Some(string) => Some(Type::exact_number(string.len() as i32)),
+                        Some(string) => Some(string.len().into()),
                         None => Some(Type::ANY_NUMBER),
                     }
                 }

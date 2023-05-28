@@ -169,13 +169,11 @@ impl AST<Expression> {
                 }) => inner.infer_type(ctx),
                 Expression::NilLiteral(_) => Type::NilType,
                 Expression::NumberLiteral(NumberLiteral(value)) => {
-                    let n = Some(value.as_str().parse().unwrap());
-
-                    Type::NumberType { min: n, max: n }
+                    value.as_str().parse::<i32>().unwrap().into()
                 }
                 Expression::BooleanLiteral(BooleanLiteral(value)) => Type::BooleanType(Some(value)),
                 Expression::ExactStringLiteral(ExactStringLiteral { value, tag: _ }) => {
-                    Type::StringType(Some(value.clone()))
+                    value.into()
                 }
                 Expression::StringLiteral(StringLiteral {
                     tag: _,
@@ -235,9 +233,9 @@ impl AST<Expression> {
                                     .type_annotation
                                     .map(|a| a.resolve_type(ctx.into()))
                                     .or_else(|| {
-                                        expected_arg_types.as_ref().map(|args| {
-                                            args.clone().property(Type::exact_number(index as i32))
-                                        })
+                                        expected_arg_types
+                                            .as_ref()
+                                            .map(|args| args.clone().property(index.into()))
                                     })
                             })
                             .collect(),
@@ -276,9 +274,9 @@ impl AST<Expression> {
                                     .type_annotation
                                     .map(|a| a.resolve_type(ctx.into()))
                                     .or_else(|| {
-                                        expected_arg_types.as_ref().map(|args| {
-                                            args.clone().property(Type::exact_number(index as i32))
-                                        })
+                                        expected_arg_types
+                                            .as_ref()
+                                            .map(|args| args.clone().property(index.into()))
                                     })
                             })
                             .collect(),

@@ -8,9 +8,9 @@ use crate::utils::Loggable;
 use crate::{
     cli::ModulesStore,
     model::{
-        any_array, any_callable, any_error, any_iterable, any_object, any_plan, ast::*,
-        blue_string, number_or_string, string_template_safe_types, BagelError, ModuleType,
-        Mutability, ParsedModule, Slice, SubsumationContext, Type,
+        any_array, any_callable, any_error, any_function, any_iterable, any_object, any_plan,
+        any_procedure, ast::*, blue_string, number_or_string, string_template_safe_types,
+        BagelError, ModuleType, Mutability, ParsedModule, Slice, SubsumationContext, Type,
     },
     passes::{binary_operation_type, INT},
     utils::cli_label,
@@ -718,7 +718,24 @@ where
                 } else {
                     let subject_type = subject.infer_type(ctx.into());
 
-                    if !any_callable().subsumes(ctx.into(), &subject_type) {
+                    let in_statement_context =
+                        self.parent().unwrap().try_recast::<Statement>().is_some();
+
+                    if in_statement_context && any_function().subsumes(ctx.into(), &subject_type) {
+                        report_error(BagelError::MiscError {
+                            module_id: module_id.clone(),
+                            src: subject.slice().clone(),
+                            message: "Functions can't be called as statements".to_owned(),
+                        });
+                    } else if !in_statement_context
+                        && any_procedure().subsumes(ctx.into(), &subject_type)
+                    {
+                        report_error(BagelError::MiscError {
+                            module_id: module_id.clone(),
+                            src: subject.slice().clone(),
+                            message: "Procedures can't be called in expressions".to_owned(),
+                        });
+                    } else if !any_callable().subsumes(ctx.into(), &subject_type) {
                         report_error(BagelError::MiscError {
                             module_id: module_id.clone(),
                             src: subject.slice().clone(),
@@ -1352,9 +1369,7 @@ fn check_declaration_destination<'a, F: FnMut(BagelError)>(
                     );
 
                     for (index, property) in properties.iter().enumerate() {
-                        if !value_type
-                            .property_exists(ctx.into(), &Type::exact_number(index as i32))
-                        {
+                        if !value_type.property_exists(ctx.into(), &index.into()) {
                             report_error(BagelError::MiscError {
                                 module_id: module_id.clone(),
                                 src: property.slice().clone(),
@@ -1378,9 +1393,7 @@ fn check_declaration_destination<'a, F: FnMut(BagelError)>(
                     for property in properties {
                         let name = property.downcast().0.clone();
 
-                        if !value_type
-                            .property_exists(ctx.into(), &Type::StringType(Some(name.clone())))
-                        {
+                        if !value_type.property_exists(ctx.into(), &name.clone().into()) {
                             report_error(BagelError::MiscError {
                                 module_id: module_id.clone(),
                                 src: property.slice().clone(),
