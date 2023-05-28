@@ -218,10 +218,24 @@ where
                 type_annotation,
                 is_async,
                 body,
-            }) => todo!(),
+            }) => {
+                let type_annotation = type_annotation.downcast();
+
+                f.write_char('(')?;
+                type_annotation.args.format(f, opts)?;
+                f.write_char(')')?;
+                if let Some(throws) = type_annotation.throws {
+                    f.write_str(" throws ")?;
+                    throws.format(f, opts)?;
+                }
+                f.write_str(" |> ")?;
+
+                body.format(f, opts)
+            }
             Any::Block(Block(statements)) => {
                 f.write_str("{\n")?;
                 for stmt in statements {
+                    f.write_str("  ")?; // TODO: Replace with dynamic indentation
                     stmt.format(f, opts)?;
                     match stmt.downcast() {
                         Statement::Invocation(_) => f.write_char(';')?,
@@ -391,7 +405,32 @@ where
                 args_spread,
                 is_async,
                 throws,
-            }) => todo!(),
+            }) => {
+                if type_params.len() > 0 {
+                    f.write_char('<')?;
+                    for (index, param) in type_params.iter().enumerate() {
+                        if index > 0 {
+                            f.write_str(", ")?;
+                        }
+
+                        param.format(f, opts)?;
+                    }
+                    f.write_char('>')?;
+                }
+
+                f.write_char('(')?;
+                for arg in args {
+                    arg.format(f, opts)?;
+                }
+                f.write_char(')')?;
+
+                if let Some(throws) = throws {
+                    f.write_str(" throws ")?;
+                    throws.format(f, opts)?;
+                }
+
+                f.write_str(" |> {}")
+            }
             Any::FuncType(FuncType {
                 type_params,
                 args,
@@ -503,8 +542,30 @@ where
             Any::IfElseStatement(IfElseStatement {
                 cases,
                 default_case,
-            }) => todo!(),
-            Any::IfElseStatementCase(IfElseStatementCase { condition, outcome }) => todo!(),
+            }) => {
+                let mut is_first = true;
+                for case in cases {
+                    if !is_first {
+                        is_first = true;
+                        f.write_str(" else ")?;
+                    }
+
+                    case.format(f, opts)?;
+                }
+
+                if let Some(default_case) = default_case {
+                    f.write_str(" else ")?;
+                    default_case.format(f, opts)?;
+                }
+
+                Ok(())
+            }
+            Any::IfElseStatementCase(IfElseStatementCase { condition, outcome }) => {
+                f.write_str("if ")?;
+                condition.format(f, opts)?;
+                f.write_str(" ")?;
+                outcome.format(f, opts)
+            }
             Any::ForLoop(ForLoop {
                 item_identifier,
                 iterable,
