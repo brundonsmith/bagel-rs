@@ -202,7 +202,6 @@ where
             Any::Func(Func {
                 type_annotation,
                 is_async,
-                is_pure,
                 body,
             }) => {
                 let type_annotation = type_annotation.downcast();
@@ -218,7 +217,6 @@ where
             Any::Proc(Proc {
                 type_annotation,
                 is_async,
-                is_pure,
                 body,
             }) => todo!(),
             Any::Block(Block(statements)) => {
@@ -391,7 +389,6 @@ where
                 type_params,
                 args,
                 args_spread,
-                is_pure,
                 is_async,
                 throws,
             }) => todo!(),
@@ -399,8 +396,6 @@ where
                 type_params,
                 args,
                 args_spread,
-                is_pure,
-                is_async,
                 returns,
             }) => {
                 if type_params.len() > 0 {

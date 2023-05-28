@@ -22,6 +22,7 @@ pub struct CheckContext<'a> {
     pub modules: &'a ModulesStore,
     pub current_module: &'a ParsedModule,
     pub nearest_func_or_proc: Option<FuncOrProc>,
+    pub in_expression_context: bool,
 }
 
 impl ParsedModule {
@@ -273,8 +274,8 @@ where
                 decorators,
             }) => {
                 name.check(ctx, report_error);
-                func.check(ctx, report_error);
-                decorators.check(ctx, report_error);
+                func.check(&ctx.in_expression_context(), report_error);
+                decorators.check(&ctx.in_expression_context(), report_error);
             }
             Any::ProcDeclaration(ProcDeclaration {
                 name,
@@ -300,7 +301,7 @@ where
                 exported,
                 platforms,
             }) => {
-                value.check(ctx, report_error);
+                value.check(&ctx.in_expression_context(), report_error);
 
                 check_declaration_destination(
                     ctx,
@@ -454,33 +455,33 @@ where
                         Some(resolved) => {
                             if let Some(nearest_func_or_proc) = &ctx.nearest_func_or_proc {
                                 // Violation of pure func/proc boundary
-                                let purity_failure = match nearest_func_or_proc {
-                                    FuncOrProc::Func(func) => {
-                                        if func.downcast().is_pure && !func.contains(&resolved) {
-                                            Some("function")
-                                        } else {
-                                            None
-                                        }
-                                    }
-                                    FuncOrProc::Proc(proc) => {
-                                        if proc.downcast().is_pure && !proc.contains(&resolved) {
-                                            Some("procedure")
-                                        } else {
-                                            None
-                                        }
-                                    }
-                                };
+                                // let purity_failure = match nearest_func_or_proc {
+                                //     FuncOrProc::Func(func) => {
+                                //         if func.downcast().is_pure && !func.contains(&resolved) {
+                                //             Some("function")
+                                //         } else {
+                                //             None
+                                //         }
+                                //     }
+                                //     FuncOrProc::Proc(proc) => {
+                                //         if proc.downcast().is_pure && !proc.contains(&resolved) {
+                                //             Some("procedure")
+                                //         } else {
+                                //             None
+                                //         }
+                                //     }
+                                // };
 
-                                if let Some(failure) = purity_failure {
-                                    report_error(BagelError::MiscError {
-                                    module_id: module_id.clone(),
-                                    src: self.slice().clone(),
-                                    message: format!(
-                                        "Pure {}s can only reference identifiers declared within their own scope!",
-                                        failure,
-                                    ),
-                                });
-                                }
+                                // if let Some(failure) = purity_failure {
+                                //     report_error(BagelError::MiscError {
+                                //         module_id: module_id.clone(),
+                                //         src: self.slice().clone(),
+                                //         message: format!(
+                                //             "Pure {}s can only reference identifiers declared within their own scope!",
+                                //             failure,
+                                //         ),
+                                //     });
+                                // }
 
                                 // Violation of platform-specific constraints
                                 // if let Some(decl) = resolved.find_parent_of_type::<ImportDeclaration>()
@@ -599,7 +600,6 @@ where
             Any::Func(Func {
                 type_annotation,
                 is_async,
-                is_pure,
                 body,
             }) => {
                 let ctx = &ctx.in_func(self.clone().upcast().try_recast::<Func>().unwrap());
@@ -646,13 +646,12 @@ where
             Any::Proc(Proc {
                 type_annotation,
                 is_async,
-                is_pure,
                 body,
             }) => {
                 let ctx = &ctx.in_proc(self.clone().upcast().try_recast::<Proc>().unwrap());
 
                 type_annotation.check(ctx, report_error);
-                body.check(ctx, report_error);
+                body.check(&ctx.in_statement_context(), report_error);
             }
             Any::Block(Block(statements)) => {
                 statements.check(ctx, report_error);
@@ -704,9 +703,9 @@ where
                 bubbles,
                 awaited_or_detached,
             }) => {
-                subject.check(ctx, report_error);
+                subject.check(&ctx.in_expression_context(), report_error);
                 type_args.check(ctx, report_error);
-                args.check(ctx, report_error);
+                args.check(&ctx.in_expression_context(), report_error);
                 spread_args.check(ctx, report_error);
 
                 if let Some(inv) = method_call_as_invocation(
@@ -718,16 +717,17 @@ where
                 } else {
                     let subject_type = subject.infer_type(ctx.into());
 
-                    let in_statement_context =
-                        self.parent().unwrap().try_recast::<Statement>().is_some();
-
-                    if in_statement_context && any_function().subsumes(ctx.into(), &subject_type) {
+                    if !ctx.in_expression_context
+                        && !subject_type.is_poisoned_or_any(ctx.into()) // HACK
+                        && any_function().subsumes(ctx.into(), &subject_type)
+                    {
                         report_error(BagelError::MiscError {
                             module_id: module_id.clone(),
                             src: subject.slice().clone(),
                             message: "Functions can't be called as statements".to_owned(),
                         });
-                    } else if !in_statement_context
+                    } else if ctx.in_expression_context
+                        && !subject_type.is_poisoned_or_any(ctx.into()) // HACK
                         && any_procedure().subsumes(ctx.into(), &subject_type)
                     {
                         report_error(BagelError::MiscError {
@@ -831,7 +831,6 @@ where
                                 Type::FuncType {
                                     args: _,
                                     args_spread: _,
-                                    is_pure: _,
                                     returns: _
                                 }
                             ) && !matches!(
@@ -839,7 +838,6 @@ where
                                 Type::ProcType {
                                     args: _,
                                     args_spread: _,
-                                    is_pure: _,
                                     is_async: _,
                                     throws: _
                                 }
@@ -943,7 +941,6 @@ where
                 type_params,
                 args,
                 args_spread,
-                is_pure,
                 is_async,
                 throws,
             }) => {
@@ -956,8 +953,6 @@ where
                 type_params,
                 args,
                 args_spread,
-                is_pure,
-                is_async,
                 returns,
             }) => {
                 type_params.check(ctx, report_error);
@@ -1100,7 +1095,7 @@ where
                 operator,
             }) => {
                 target.check(ctx, report_error);
-                value.check(ctx, report_error);
+                value.check(&ctx.in_expression_context(), report_error);
                 operator.check(ctx, report_error);
 
                 let (invalid_target, reason) = match target.details() {
@@ -1483,6 +1478,7 @@ impl<'a> CheckContext<'a> {
             modules: self.modules,
             current_module: self.current_module,
             nearest_func_or_proc: Some(FuncOrProc::Func(func)),
+            in_expression_context: self.in_expression_context,
         }
     }
 
@@ -1491,6 +1487,25 @@ impl<'a> CheckContext<'a> {
             modules: self.modules,
             current_module: self.current_module,
             nearest_func_or_proc: Some(FuncOrProc::Proc(proc)),
+            in_expression_context: self.in_expression_context,
+        }
+    }
+
+    pub fn in_expression_context(&self) -> Self {
+        CheckContext {
+            modules: self.modules,
+            current_module: self.current_module,
+            nearest_func_or_proc: self.nearest_func_or_proc.clone(),
+            in_expression_context: true,
+        }
+    }
+
+    pub fn in_statement_context(&self) -> Self {
+        CheckContext {
+            modules: self.modules,
+            current_module: self.current_module,
+            nearest_func_or_proc: self.nearest_func_or_proc.clone(),
+            in_expression_context: false,
         }
     }
 }
@@ -1506,13 +1521,6 @@ impl FuncOrProc {
         match self {
             FuncOrProc::Func(func) => func.downcast().is_async,
             FuncOrProc::Proc(proc) => proc.downcast().is_async,
-        }
-    }
-
-    pub fn is_pure(&self) -> bool {
-        match self {
-            FuncOrProc::Func(func) => func.downcast().is_pure,
-            FuncOrProc::Proc(proc) => proc.downcast().is_pure,
         }
     }
 }

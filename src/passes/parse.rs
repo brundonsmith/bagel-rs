@@ -235,7 +235,6 @@ fn func_declaration(i: Slice) -> ParseResult<AST<FuncDeclaration>> {
             opt(declaration_platforms),
             many0(terminated(decorator, whitespace_required)),
             opt(terminated(tag("export"), whitespace_required)),
-            opt(terminated(tag("pure"), whitespace_required)),
             opt(terminated(tag("async"), whitespace_required)),
             terminated(tag("func"), whitespace_required),
             plain_identifier,
@@ -249,7 +248,6 @@ fn func_declaration(i: Slice) -> ParseResult<AST<FuncDeclaration>> {
             mut platforms,
             mut decorators,
             export,
-            pure,
             asyn,
             keyword,
             mut name,
@@ -261,11 +259,10 @@ fn func_declaration(i: Slice) -> ParseResult<AST<FuncDeclaration>> {
         )| {
             let src = export
                 .as_ref()
-                .unwrap_or(pure.as_ref().unwrap_or(asyn.as_ref().unwrap_or(&keyword)))
+                .unwrap_or(asyn.as_ref().unwrap_or(&keyword))
                 .clone()
                 .spanning(&body);
             let mut exported = export.is_some();
-            let mut is_pure = pure.is_some();
             let mut is_async = asyn.is_some();
 
             let mut type_annotation = make_node!(
@@ -277,12 +274,10 @@ fn func_declaration(i: Slice) -> ParseResult<AST<FuncDeclaration>> {
                 type_params,
                 args,
                 args_spread,
-                is_pure,
-                is_async,
                 returns
             );
 
-            let mut func = make_node!(Func, src.clone(), type_annotation, is_async, is_pure, body);
+            let mut func = make_node!(Func, src.clone(), type_annotation, is_async, body);
 
             make_node!(
                 FuncDeclaration,
@@ -387,7 +382,6 @@ fn proc_declaration(i: Slice) -> ParseResult<AST<ProcDeclaration>> {
             opt(declaration_platforms),
             many0(terminated(decorator, whitespace_required)),
             opt(terminated(tag("export"), whitespace_required)),
-            opt(terminated(tag("pure"), whitespace_required)),
             opt(terminated(tag("async"), whitespace_required)),
             terminated(tag("proc"), whitespace_required),
             plain_identifier,
@@ -401,7 +395,6 @@ fn proc_declaration(i: Slice) -> ParseResult<AST<ProcDeclaration>> {
             mut platforms,
             mut decorators,
             export,
-            pure,
             asyn,
             keyword,
             mut name,
@@ -413,11 +406,10 @@ fn proc_declaration(i: Slice) -> ParseResult<AST<ProcDeclaration>> {
         )| {
             let src = export
                 .clone()
-                .unwrap_or(pure.clone().unwrap_or(asyn.clone().unwrap_or(keyword)))
+                .unwrap_or(asyn.clone().unwrap_or(keyword))
                 .spanning(&body);
             let mut exported = export.is_some();
             let mut is_async = asyn.is_some();
-            let mut is_pure = pure.is_some();
 
             let mut type_annotation = make_node!(
                 ProcType,
@@ -428,12 +420,11 @@ fn proc_declaration(i: Slice) -> ParseResult<AST<ProcDeclaration>> {
                 type_params,
                 args,
                 args_spread,
-                is_pure,
                 is_async,
                 throws
             );
 
-            let mut proc = make_node!(Proc, src.clone(), type_annotation, is_async, is_pure, body);
+            let mut proc = make_node!(Proc, src.clone(), type_annotation, is_async, body);
 
             make_node!(
                 ProcDeclaration,
@@ -754,13 +745,12 @@ fn bound_generic_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
 fn func_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
     map(
         seq!(
-            opt(terminated(tag("pure"), whitespace_required)),
             type_params,
             args_parenthesized,
             tag("=>"),
             type_expression(None)
         ),
-        |(pure, mut type_params, (mut args, mut args_spread), _, returns)| {
+        |(mut type_params, (mut args, mut args_spread), _, returns)| {
             // TODO: func type with 0 arguments will have weird src
             let src = args
                 .get(0)
@@ -768,21 +758,10 @@ fn func_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
                 .unwrap_or(returns.slice().clone())
                 .spanning(&returns);
 
-            let mut is_pure = pure.is_some();
-            let mut is_async = false; // TODO
             let mut returns = Some(returns);
 
-            make_node!(
-                FuncType,
-                src,
-                type_params,
-                args,
-                args_spread,
-                is_pure,
-                is_async,
-                returns
-            )
-            .recast::<TypeExpression>()
+            make_node!(FuncType, src, type_params, args, args_spread, returns)
+                .recast::<TypeExpression>()
         },
     )(i)
 }
@@ -790,7 +769,7 @@ fn func_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
 fn proc_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
     map(
         seq!(
-            opt(terminated(tag("pure"), whitespace_required)),
+            opt(terminated(tag("async"), whitespace_required)),
             type_params,
             args_parenthesized,
             opt(throws_clause),
@@ -798,7 +777,7 @@ fn proc_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
             tag("{"),
             tag("}")
         ),
-        |(pure, mut type_params, (mut args, mut args_spread), mut throws, arrow, _, end)| {
+        |(asyn, mut type_params, (mut args, mut args_spread), mut throws, arrow, _, end)| {
             // TODO: proc type with 0 arguments will have weird src
             let src = args
                 .get(0)
@@ -806,8 +785,7 @@ fn proc_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
                 .unwrap_or(arrow)
                 .spanning(&end);
 
-            let mut is_pure = pure.is_some();
-            let mut is_async = false; // TODO
+            let mut is_async = asyn.is_some();
 
             make_node!(
                 ProcType,
@@ -815,7 +793,6 @@ fn proc_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
                 type_params,
                 args,
                 args_spread,
-                is_pure,
                 is_async,
                 throws
             )
@@ -1555,7 +1532,6 @@ fn range_expression(i: Slice) -> ParseResult<AST<Expression>> {
 fn proc(i: Slice) -> ParseResult<AST<Expression>> {
     map(
         seq!(
-            opt(tag("pure")),
             opt(tag("async")),
             type_params,
             alt((args_parenthesized, arg_singleton)),
@@ -1563,16 +1539,13 @@ fn proc(i: Slice) -> ParseResult<AST<Expression>> {
             tag("|>"),
             statement,
         ),
-        |(pure, asyn, mut type_params, (mut args, mut args_spread), mut throws, _, mut body)| {
+        |(asyn, mut type_params, (mut args, mut args_spread), mut throws, _, mut body)| {
             let mut is_async = asyn.is_some();
-            let mut is_pure = pure.is_some();
-            let src = pure
+            let src = asyn
                 .unwrap_or(
-                    asyn.unwrap_or(
-                        args.get(0)
-                            .map(|a| a.slice().clone())
-                            .unwrap_or(body.slice().clone()),
-                    ),
+                    args.get(0)
+                        .map(|a| a.slice().clone())
+                        .unwrap_or(body.slice().clone()),
                 )
                 .spanning(&body);
 
@@ -1582,12 +1555,11 @@ fn proc(i: Slice) -> ParseResult<AST<Expression>> {
                 type_params,
                 args,
                 args_spread,
-                is_pure,
                 is_async,
                 throws
             );
 
-            make_node!(Proc, src, type_annotation, is_async, is_pure, body).recast::<Expression>()
+            make_node!(Proc, src, type_annotation, is_async, body).recast::<Expression>()
         },
     )(i)
 }
@@ -1635,7 +1607,6 @@ fn element_tag(i: Slice) -> ParseResult<AST<Expression>> {
 fn func(i: Slice) -> ParseResult<AST<Expression>> {
     map(
         seq!(
-            opt(tag("pure")),
             opt(tag("async")),
             type_params,
             alt((args_parenthesized, arg_singleton)),
@@ -1643,16 +1614,13 @@ fn func(i: Slice) -> ParseResult<AST<Expression>> {
             tag("=>"),
             expression(None),
         ),
-        |(pure, asyn, mut type_params, (mut args, mut args_spread), mut returns, _, mut body)| {
+        |(asyn, mut type_params, (mut args, mut args_spread), mut returns, _, mut body)| {
             let mut is_async = asyn.is_some();
-            let mut is_pure = pure.is_some();
-            let src = pure
+            let src = asyn
                 .unwrap_or(
-                    asyn.unwrap_or(
-                        args.get(0)
-                            .map(|a| a.slice().clone())
-                            .unwrap_or(body.slice().clone()),
-                    ),
+                    args.get(0)
+                        .map(|a| a.slice().clone())
+                        .unwrap_or(body.slice().clone()),
                 )
                 .spanning(&body);
 
@@ -1662,12 +1630,10 @@ fn func(i: Slice) -> ParseResult<AST<Expression>> {
                 type_params,
                 args,
                 args_spread,
-                is_pure,
-                is_async,
                 returns
             );
 
-            make_node!(Func, src, type_annotation, is_async, is_pure, body).recast::<Expression>()
+            make_node!(Func, src, type_annotation, is_async, body).recast::<Expression>()
         },
     )(i)
 }

@@ -60,6 +60,7 @@ impl<'a> From<&CheckContext<'a>> for ResolveSymbolContext<'a> {
             modules,
             current_module,
             nearest_func_or_proc: _,
+            in_expression_context: _,
         }: &CheckContext<'a>,
     ) -> Self {
         Self {
@@ -76,6 +77,7 @@ impl<'a> From<&CheckContext<'a>> for SubsumationContext<'a> {
             modules,
             current_module,
             nearest_func_or_proc: _,
+            in_expression_context: _,
         }: &CheckContext<'a>,
     ) -> Self {
         Self {
@@ -139,6 +141,7 @@ impl<'a> From<&CheckContext<'a>> for ResolveTypeContext<'a> {
             modules,
             current_module,
             nearest_func_or_proc: _,
+            in_expression_context: _,
         }: &CheckContext<'a>,
     ) -> Self {
         Self {
@@ -169,6 +172,7 @@ impl<'a> From<&CheckContext<'a>> for InferTypeContext<'a> {
             modules,
             current_module,
             nearest_func_or_proc: _,
+            in_expression_context: _,
         }: &CheckContext<'a>,
     ) -> Self {
         Self {

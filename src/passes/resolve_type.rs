@@ -44,7 +44,6 @@ impl AST<TypeExpression> {
                 type_params,
                 args,
                 args_spread,
-                is_pure,
                 is_async,
                 throws,
             }) => {
@@ -64,7 +63,6 @@ impl AST<TypeExpression> {
                         .flatten()
                         .map(|s| s.resolve_type(ctx))
                         .map(Rc::new),
-                    is_pure,
                     is_async,
                     throws: throws.as_ref().map(|s| s.resolve_type(ctx)).map(Rc::new),
                 };
@@ -91,8 +89,6 @@ impl AST<TypeExpression> {
                 type_params,
                 args,
                 args_spread,
-                is_pure,
-                is_async: _,
                 returns,
             }) => {
                 let func_type = Type::FuncType {
@@ -111,7 +107,6 @@ impl AST<TypeExpression> {
                         .flatten()
                         .map(|s| s.resolve_type(ctx))
                         .map(Rc::new),
-                    is_pure,
                     returns: returns
                         .as_ref()
                         .map(|s| s.resolve_type(ctx))

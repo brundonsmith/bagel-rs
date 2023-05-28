@@ -445,6 +445,7 @@ pub fn gather_errors(modules_store: &ModulesStore) -> HashMap<ModuleID, Vec<Bage
                     modules: &modules_store,
                     current_module: &module,
                     nearest_func_or_proc: None,
+                    in_expression_context: false,
                 };
 
                 module.check(&mut context, report_error);

@@ -465,7 +465,6 @@ pub struct InlineDeclaration {
 pub struct Func {
     pub type_annotation: AST<FuncType>,
     pub is_async: bool,
-    pub is_pure: bool,
     pub body: AST<Expression>,
 }
 
@@ -473,7 +472,6 @@ pub struct Func {
 pub struct Proc {
     pub type_annotation: AST<ProcType>,
     pub is_async: bool,
-    pub is_pure: bool,
     pub body: AST<Statement>,
 }
 
@@ -661,7 +659,6 @@ pub struct ProcType {
     pub type_params: Vec<AST<TypeParam>>,
     pub args: Vec<AST<Arg>>,
     pub args_spread: Option<AST<Arg>>,
-    pub is_pure: bool,
     pub is_async: bool,
     pub throws: Option<AST<TypeExpression>>,
 }
@@ -671,8 +668,6 @@ pub struct FuncType {
     pub type_params: Vec<AST<TypeParam>>,
     pub args: Vec<AST<Arg>>,
     pub args_spread: Option<AST<Arg>>,
-    pub is_pure: bool,
-    pub is_async: bool,
     pub returns: Option<AST<TypeExpression>>,
 }
 

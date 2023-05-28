@@ -216,7 +216,6 @@ impl AST<Expression> {
                 Expression::Func(Func {
                     type_annotation,
                     is_async: _,
-                    is_pure,
                     body,
                 }) => {
                     let type_annotation = type_annotation.downcast();
@@ -246,7 +245,6 @@ impl AST<Expression> {
                             .flatten()
                             .map(|s| s.resolve_type(ctx.into()))
                             .map(Rc::new),
-                        is_pure,
                         returns: type_annotation
                             .returns
                             .map(|r| r.resolve_type(ctx.into()))
@@ -257,7 +255,6 @@ impl AST<Expression> {
                 Expression::Proc(Proc {
                     type_annotation,
                     is_async,
-                    is_pure,
                     body,
                 }) => {
                     let type_annotation = type_annotation.downcast();
@@ -288,7 +285,6 @@ impl AST<Expression> {
                             .map(|s| s.resolve_type(ctx.into()))
                             .map(Rc::new),
                         is_async,
-                        is_pure,
                         throws: type_annotation
                             .throws
                             .map(|throws| throws.resolve_type(ctx.into()))
@@ -319,7 +315,7 @@ impl AST<Expression> {
                 }) => {
                     if let Some(inv) = method_call_as_invocation(
                         ctx,
-                        self.clone().upcast().try_recast::<Invocation>().unwrap(),
+                        self.clone().try_recast::<Invocation>().unwrap(),
                     ) {
                         inv.infer_type(ctx)
                     } else {
@@ -463,7 +459,6 @@ fn infer_expected_type<'a>(ctx: InferTypeContext<'a>, expr: &AST<Expression>) ->
                         Type::FuncType {
                             args,
                             args_spread,
-                            is_pure,
                             returns,
                         } => {
                             return args[this_arg_index].clone();
@@ -471,7 +466,6 @@ fn infer_expected_type<'a>(ctx: InferTypeContext<'a>, expr: &AST<Expression>) ->
                         Type::ProcType {
                             args,
                             args_spread,
-                            is_pure,
                             is_async,
                             throws,
                         } => {
@@ -785,7 +779,6 @@ impl AST<Statement> {
                 Type::ProcType {
                     args: _,
                     args_spread: _,
-                    is_pure: _,
                     is_async: _,
                     throws,
                 } => throws.map(|rc| rc.as_ref().clone()),

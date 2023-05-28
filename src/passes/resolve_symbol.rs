@@ -206,7 +206,6 @@ where
             Any::Func(Func {
                 type_annotation,
                 is_async: _,
-                is_pure: _,
                 body: _,
             }) => {
                 let func_type = type_annotation.downcast();
@@ -236,7 +235,6 @@ where
             Any::Proc(Proc {
                 type_annotation,
                 is_async: _,
-                is_pure: _,
                 body: _,
             }) => {
                 let proc_type = type_annotation.downcast();
@@ -342,8 +340,6 @@ where
                 type_params,
                 args: _,
                 args_spread: _,
-                is_pure: _,
-                is_async: _,
                 returns: _,
             }) => {
                 if let Some(found) = type_params
@@ -357,7 +353,6 @@ where
                 type_params,
                 args: _,
                 args_spread: _,
-                is_pure: _,
                 is_async: _,
                 throws: _,
             }) => {

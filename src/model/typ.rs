@@ -51,14 +51,12 @@ pub enum Type {
     ProcType {
         args: Vec<Option<Type>>,
         args_spread: Option<Rc<Type>>,
-        is_pure: bool,
         is_async: bool,
         throws: Option<Rc<Type>>,
     },
     FuncType {
         args: Vec<Option<Type>>,
         args_spread: Option<Rc<Type>>,
-        is_pure: bool,
         returns: Rc<Type>,
     },
 
@@ -115,6 +113,7 @@ pub enum MetaTypeKind {
     Elementof,
     Parameters,
     ReturnType,
+    ThrowsType,
     Awaited,
 }
 
@@ -241,7 +240,6 @@ pub fn any_function() -> Type {
     Type::FuncType {
         args: Vec::new(),
         args_spread: Some(any_array().rc()),
-        is_pure: false,
         returns: Type::AnyType.rc(),
     }
 }
@@ -251,7 +249,6 @@ pub fn any_procedure() -> Type {
     Type::ProcType {
         args: Vec::new(),
         args_spread: Some(any_array().rc()),
-        is_pure: false,
         is_async: false,
         throws: Some(Type::AnyType.rc()),
     }
@@ -346,18 +343,78 @@ impl Type {
                     members: value_members,
                 },
             ) => {
-                if destination_mutability
-                    .encompasses(*value_mutability, || destination_members == value_members)
-                    && value_members.len() >= destination_members.len()
-                    && destination_members.iter().zip(value_members.iter()).all(
-                        |(destination, value)| match (destination, value) {
-                            (
-                                ElementOrSpread::Element(destination_element),
-                                ElementOrSpread::Element(value_element),
-                            ) => destination_element.subsumes(ctx, value_element),
-                            _ => false,
-                        },
-                    )
+                let mut destination_index = 0;
+                let mut value_index = 0;
+
+                while destination_index < destination_members.len()
+                    && value_index < value_members.len()
+                {
+                    let destination_member = &destination_members[destination_index];
+                    let value_member = &value_members[value_index];
+
+                    match (destination_member, value_member) {
+                        (
+                            ElementOrSpread::Element(destination_member),
+                            ElementOrSpread::Element(value_member),
+                        ) => {
+                            if let Some(issue) = destination_member.subsumation_issues(ctx, value) {
+                                return Some(issue);
+                            } else {
+                                destination_index += 1;
+                                value_index += 1;
+                            }
+                        }
+                        (
+                            ElementOrSpread::Element(destination_member),
+                            ElementOrSpread::Spread(value_member),
+                        ) => {
+                            if let Some(issue) = destination_member
+                                .subsumation_issues(ctx, &value.clone().elementof())
+                            {
+                                return Some(issue);
+                            } else {
+                                destination_index += 1;
+                            }
+                        }
+                        (
+                            ElementOrSpread::Spread(destination_member),
+                            ElementOrSpread::Element(value_member),
+                        ) => {
+                            if let Some(issue) = destination_member
+                                .clone()
+                                .elementof()
+                                .subsumation_issues(ctx, &value)
+                            {
+                                return Some(issue);
+                            } else {
+                                value_index += 1;
+                            }
+                        }
+                        (
+                            ElementOrSpread::Spread(destination_member),
+                            ElementOrSpread::Spread(value_member),
+                        ) => {
+                            if let Some(issue) = destination_member.subsumation_issues(ctx, value) {
+                                return Some(issue);
+                            } else {
+                                destination_index += 1;
+                                value_index += 1;
+                            }
+                        }
+                    }
+                }
+
+                // TODO: Will currently reject any spreads that aren't the last member in the tuple
+
+                if (destination_index == destination_members.len()
+                    && value_index == value_members.len())
+                    || (destination_index == destination_members.len() - 1
+                        && matches!(
+                            destination_members[destination_index],
+                            ElementOrSpread::Spread(_)
+                        ))
+                    || (value_index == value_members.len() - 1
+                        && matches!(value_members[value_index], ElementOrSpread::Spread(_)))
                 {
                     return None;
                 }
@@ -507,34 +564,20 @@ impl Type {
                 Type::ProcType {
                     args: destination_args,
                     args_spread: destination_args_spread,
-                    is_pure: destination_is_pure,
                     is_async: destination_is_async,
                     throws: destination_throws,
                 },
                 Type::ProcType {
                     args: value_args,
                     args_spread: value_args_spread,
-                    is_pure: value_is_pure,
                     is_async: value_is_async,
                     throws: value_throws,
                 },
             ) => {
-                if (!*destination_is_pure || *value_is_pure)
-                    && (!*value_is_async || *destination_is_async)
-                    && value_args.iter().enumerate().all(|(index, value_arg)| {
-                        value_arg
-                            .as_ref()
-                            .map(|value_arg| {
-                                destination_args.get(index).map(|destination_arg| {
-                                    destination_arg.as_ref().map(|destination_arg| {
-                                        destination_arg.subsumes(ctx, &value_arg)
-                                    })
-                                })
-                            })
-                            .flatten()
-                            .flatten()
-                            .unwrap_or(false)
-                    })
+                if value
+                    .clone()
+                    .parameters()
+                    .subsumes(ctx, &destination.clone().parameters())
                     && match (destination_throws, value_throws) {
                         (Some(destination_throws), Some(value_throws)) => {
                             destination_throws.subsumes(ctx, &value_throws)
@@ -550,32 +593,22 @@ impl Type {
                 Type::FuncType {
                     args: destination_args,
                     args_spread: destination_args_spread,
-                    is_pure: destination_is_pure,
                     returns: destination_returns,
                 },
                 Type::FuncType {
                     args: value_args,
                     args_spread: value_args_spread,
-                    is_pure: value_is_pure,
                     returns: value_returns,
                 },
             ) => {
-                if (!*destination_is_pure || *value_is_pure)
-                    && value_args.iter().enumerate().all(|(index, value_arg)| {
-                        value_arg
-                            .as_ref()
-                            .map(|value_arg| {
-                                destination_args.get(index).map(|destination_arg| {
-                                    destination_arg.as_ref().map(|destination_arg| {
-                                        destination_arg.subsumes(ctx, &value_arg)
-                                    })
-                                })
-                            })
-                            .flatten()
-                            .flatten()
-                            .unwrap_or(false)
-                    })
-                    && destination_returns.subsumes(ctx, &value_returns)
+                if value
+                    .clone()
+                    .parameters()
+                    .subsumes(ctx, &destination.clone().parameters())
+                    && destination
+                        .clone()
+                        .return_type()
+                        .subsumes(ctx, &value.clone().return_type())
                 {
                     return None;
                 }
@@ -671,8 +704,21 @@ impl Type {
         }
     }
 
+    pub fn is_poisoned_or_any<'a>(&self, ctx: SubsumationContext<'a>) -> bool {
+        let simplified = self.clone().simplify(ctx);
+
+        simplified == Type::PoisonedType || simplified == Type::AnyType
+    }
+
     pub fn union(self, other: Self) -> Self {
         Type::UnionType(vec![self, other])
+    }
+
+    pub fn elementof(self) -> Self {
+        Type::MetaType {
+            kind: MetaTypeKind::Elementof,
+            inner: self.rc(),
+        }
     }
 
     pub fn parameters(self) -> Self {
@@ -941,79 +987,26 @@ impl Type {
                     },
 
                     MetaTypeKind::Parameters => {
-                        let args_and_spread = match &inner {
-                            Type::FuncType {
-                                args,
-                                args_spread,
-                                is_pure: _,
-                                returns: _,
-                            } => Some((args, args_spread.clone())),
-                            Type::ProcType {
-                                args,
-                                args_spread,
-                                is_pure: _,
-                                is_async: _,
-                                throws: _,
-                            } => Some((args, args_spread.clone())),
-                            Type::GenericType { type_params, inner } => match inner.as_ref() {
-                                Type::FuncType {
-                                    args,
-                                    args_spread,
-                                    is_pure: _,
-                                    returns: _,
-                                } => Some((args, args_spread.clone())),
-                                Type::ProcType {
-                                    args,
-                                    args_spread,
-                                    is_pure: _,
-                                    is_async: _,
-                                    throws: _,
-                                } => Some((args, args_spread.clone())),
-                                _ => None,
-                            },
-                            _ => None,
-                        };
-
-                        if let Some((args, spread)) = args_and_spread {
-                            Type::TupleType {
-                                mutability: Mutability::Literal,
-                                members: args
-                                    .into_iter()
-                                    .map(|t| {
-                                        ElementOrSpread::Element(
-                                            t.clone()
-                                                .unwrap_or(Type::UnknownType(Mutability::Literal)),
-                                        )
-                                    })
-                                    .chain(
-                                        spread.map(|s| ElementOrSpread::Spread(s.as_ref().clone())),
-                                    )
-                                    .collect(),
-                            }
-                        } else {
-                            unknown_array()
-                        }
+                        args_and_spread_tuple(&inner).unwrap_or(unknown_array())
                     }
-                    MetaTypeKind::ReturnType => match inner.simplify(ctx.into()) {
+                    MetaTypeKind::ReturnType => match inner {
                         Type::FuncType {
                             args: _,
                             args_spread: _,
-                            is_pure: _,
                             returns,
                         } => returns.as_ref().clone(),
-                        Type::GenericType { type_params, inner } => {
-                            if let Type::FuncType {
-                                args,
-                                args_spread,
-                                is_pure,
-                                returns,
-                            } = inner.as_ref()
-                            {
-                                returns.as_ref().clone()
-                            } else {
-                                Type::PoisonedType
-                            }
-                        }
+                        Type::AnyType => Type::AnyType,
+                        _ => Type::PoisonedType,
+                    },
+                    MetaTypeKind::ThrowsType => match inner {
+                        Type::ProcType {
+                            args: _,
+                            args_spread: _,
+                            is_async: _,
+                            throws,
+                        } => throws
+                            .map(|t| t.as_ref().clone())
+                            .unwrap_or(Type::PoisonedType),
                         Type::AnyType => Type::AnyType,
                         _ => Type::PoisonedType,
                     },
@@ -1139,6 +1132,32 @@ impl Type {
                     unreachable!()
                 }
             }
+            Type::FuncType {
+                args,
+                args_spread,
+                returns,
+            } => Type::FuncType {
+                args: args
+                    .into_iter()
+                    .map(|a| a.map(|t| t.simplify(ctx)))
+                    .collect(),
+                args_spread: args_spread.map(|t| t.as_ref().clone().simplify(ctx).rc()),
+                returns: returns.as_ref().clone().simplify(ctx).rc(),
+            },
+            Type::ProcType {
+                args,
+                args_spread,
+                is_async,
+                throws,
+            } => Type::ProcType {
+                args: args
+                    .into_iter()
+                    .map(|a| a.map(|t| t.simplify(ctx)))
+                    .collect(),
+                args_spread: args_spread.map(|t| t.as_ref().clone().simplify(ctx).rc()),
+                is_async,
+                throws: throws.map(|t| t.as_ref().clone().simplify(ctx).rc()),
+            },
             _ => self,
         }
     }
@@ -1157,14 +1176,12 @@ impl Type {
             Type::ProcType {
                 args: _,
                 args_spread: _,
-                is_pure: _,
                 is_async: _,
                 throws: _,
             } => 8,
             Type::FuncType {
                 args: _,
                 args_spread: _,
-                is_pure: _,
                 returns: _,
             } => 9,
             Type::UnionType(_) => 10,
@@ -1269,14 +1286,12 @@ impl Type {
             // Type::ProcType {
             //     args,
             //     args_spread,
-            //     is_pure,
             //     is_async,
             //     throws,
             // } => todo!(),
             // Type::FuncType {
             //     args,
             //     args_spread,
-            //     is_pure,
             //     returns,
             // } => todo!(),
             _ => self,
@@ -1549,6 +1564,7 @@ impl Display for Type {
                 MetaTypeKind::Elementof => f.write_fmt(format_args!("elementof {}", inner)),
                 MetaTypeKind::Parameters => f.write_fmt(format_args!("Parameters<{}>", inner)),
                 MetaTypeKind::ReturnType => f.write_fmt(format_args!("ReturnType<{}>", inner)),
+                MetaTypeKind::ThrowsType => f.write_fmt(format_args!("ThrowsType<{}>", inner)),
                 MetaTypeKind::Awaited => f.write_fmt(format_args!("Awaited<{}>", inner)),
             },
             Type::PropertyType { subject, property } => {
@@ -1597,14 +1613,9 @@ impl Display for Type {
             Type::ProcType {
                 args,
                 args_spread,
-                is_pure,
                 is_async,
                 throws,
             } => {
-                if *is_pure {
-                    f.write_str("pure ")?;
-                }
-
                 if *is_async {
                     f.write_str("async ")?;
                 }
@@ -1628,13 +1639,8 @@ impl Display for Type {
             Type::FuncType {
                 args,
                 args_spread,
-                is_pure,
                 returns,
             } => {
-                if *is_pure {
-                    f.write_str("pure ")?;
-                }
-
                 f.write_char('(')?;
                 for (index, arg) in args.iter().enumerate() {
                     if index > 0 {
@@ -1767,6 +1773,50 @@ impl Display for Type {
             Type::AnyType => f.write_str("any"),
         }
     }
+}
+
+fn args_and_spread_tuple(callable: &Type) -> Option<Type> {
+    let args_and_spread = match callable {
+        Type::FuncType {
+            args,
+            args_spread,
+            returns: _,
+        } => Some((args, args_spread.clone())),
+        Type::ProcType {
+            args,
+            args_spread,
+            is_async: _,
+            throws: _,
+        } => Some((args, args_spread.clone())),
+        Type::GenericType { type_params, inner } => match inner.as_ref() {
+            Type::FuncType {
+                args,
+                args_spread,
+                returns: _,
+            } => Some((args, args_spread.clone())),
+            Type::ProcType {
+                args,
+                args_spread,
+                is_async: _,
+                throws: _,
+            } => Some((args, args_spread.clone())),
+            _ => None,
+        },
+        _ => None,
+    };
+
+    args_and_spread.map(|(args, spread)| Type::TupleType {
+        mutability: Mutability::Literal,
+        members: args
+            .into_iter()
+            .map(|t| {
+                ElementOrSpread::Element(
+                    t.clone().unwrap_or(Type::UnknownType(Mutability::Literal)),
+                )
+            })
+            .chain(spread.map(|s| ElementOrSpread::Spread(s.as_ref().clone())))
+            .collect(),
+    })
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
