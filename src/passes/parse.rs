@@ -84,25 +84,25 @@ pub fn parse(module_id: ModuleID, module_src: Rc<String>) -> Result<AST<Module>,
                 Ok(module)
             }
         }
-        Err(error) => match error {
-            nom::Err::Error(RawParseError { src, details }) => Err(ParseError {
+        Err(error) => {
+            let RawParseError { src, details } = match error {
+                nom::Err::Error(raw) => raw,
+                nom::Err::Failure(raw) => raw,
+                nom::Err::Incomplete(_) => unreachable!(),
+            };
+
+            Err(ParseError {
                 module_id: module_id.clone(),
                 src,
                 message: match details {
+                    RawParseErrorDetails::Expected(description) => {
+                        format!("Expected {}", description)
+                    }
                     RawParseErrorDetails::Kind(kind) => kind.description().to_owned(),
                     RawParseErrorDetails::Char(ch) => format!("Expected '{}'", ch),
                 },
-            }),
-            nom::Err::Failure(RawParseError { src, details }) => Err(ParseError {
-                module_id: module_id.clone(),
-                src,
-                message: match details {
-                    RawParseErrorDetails::Kind(kind) => kind.description().to_owned(),
-                    RawParseErrorDetails::Char(ch) => format!("Expected '{}'", ch),
-                },
-            }),
-            nom::Err::Incomplete(_) => unreachable!(),
-        },
+            })
+        }
     }
 }
 
@@ -147,9 +147,9 @@ fn import_all_declaration(i: Slice) -> ParseResult<AST<ImportAllDeclaration>> {
         seq!(
             opt(declaration_platforms),
             tag("import"),
-            exact_string_literal,
-            tag("as"),
-            plain_identifier,
+            expect(exact_string_literal, "import path"),
+            expect_tag("as"),
+            expect(plain_identifier, "import name"),
         ),
         |(mut platforms, start, mut path, _, mut name)| {
             make_node!(
@@ -168,14 +168,14 @@ fn import_declaration(i: Slice) -> ParseResult<AST<ImportDeclaration>> {
         seq!(
             opt(declaration_platforms),
             tag("from"),
-            exact_string_literal,
-            tag("import"),
-            tag("{"),
+            expect(exact_string_literal, "import path"),
+            expect_tag("import"),
+            expect_tag("{"),
             terminated(
                 separated_list0(w(tag(",")), w(import_item)),
                 opt(w(tag(",")))
             ),
-            tag("}"),
+            expect_tag("}"),
         ),
         |(mut platforms, start, mut path, _, _, mut imports, end)| {
             make_node!(
@@ -193,7 +193,10 @@ fn import_item(i: Slice) -> ParseResult<AST<ImportItem>> {
     map(
         pair(
             plain_identifier,
-            opt(map(seq!(tag("as"), plain_identifier), |(_, alias)| alias)),
+            opt(map(
+                seq!(tag("as"), expect(plain_identifier, "import alias")),
+                |(_, alias)| alias,
+            )),
         ),
         |(mut name, mut alias)| {
             make_node!(
@@ -211,9 +214,9 @@ fn type_declaration(i: Slice) -> ParseResult<AST<TypeDeclaration>> {
         seq!(
             opt(tag("export")),
             tag("type"),
-            plain_identifier,
-            tag("="),
-            type_expression(None),
+            expect(plain_identifier, "type name"),
+            expect_tag("="),
+            expect(type_expression(None), "type definition"),
         ),
         |(export, keyword, mut name, _, mut declared_type)| {
             let mut exported = export.is_some();
@@ -237,12 +240,12 @@ fn func_declaration(i: Slice) -> ParseResult<AST<FuncDeclaration>> {
             opt(terminated(tag("export"), whitespace_required)),
             opt(terminated(tag("async"), whitespace_required)),
             terminated(tag("func"), whitespace_required),
-            plain_identifier,
+            expect(plain_identifier, "function name"),
             type_params,
-            args_parenthesized,
+            expect(args_parenthesized, "function parameters"),
             opt(type_annotation),
-            tag("=>"),
-            expression(None),
+            expect_tag("=>"),
+            expect(expression(None), "function body"),
         ),
         |(
             mut platforms,
@@ -324,29 +327,30 @@ fn args_parenthesized(i: Slice) -> ParseResult<(Vec<AST<Arg>>, Option<AST<Arg>>)
                     ))
                 ))
             ),
-            opt(preceded(
-                tag("..."),
-                map(
-                    seq!(plain_identifier, opt(type_annotation)),
-                    |(mut name, mut type_annotation)| {
-                        let mut optional = false;
+            opt(map(
+                seq!(
+                    tag("..."),
+                    expect(plain_identifier, "spread parameters name"),
+                    opt(type_annotation)
+                ),
+                |(_, mut name, mut type_annotation)| {
+                    let mut optional = false;
 
-                        make_node!(
-                            Arg,
-                            name.spanning(
-                                type_annotation
-                                    .as_ref()
-                                    .map(|a| a.slice())
-                                    .unwrap_or(name.slice()),
-                            ),
-                            name,
-                            type_annotation,
-                            optional
-                        )
-                    }
-                )
+                    make_node!(
+                        Arg,
+                        name.spanning(
+                            type_annotation
+                                .as_ref()
+                                .map(|a| a.slice())
+                                .unwrap_or(name.slice()),
+                        ),
+                        name,
+                        type_annotation,
+                        optional
+                    )
+                }
             )),
-            tag(")"),
+            expect_tag(")"),
         ),
         |(start, args, spread, end)| {
             (
@@ -384,12 +388,12 @@ fn proc_declaration(i: Slice) -> ParseResult<AST<ProcDeclaration>> {
             opt(terminated(tag("export"), whitespace_required)),
             opt(terminated(tag("async"), whitespace_required)),
             terminated(tag("proc"), whitespace_required),
-            plain_identifier,
+            expect(plain_identifier, "proc name"),
             type_params,
-            args_parenthesized,
+            expect(args_parenthesized, "proc parameters"),
             opt(throws_clause),
-            tag("|>"),
-            statement,
+            expect_tag("|>"),
+            expect(statement, "proc body"),
         ),
         |(
             mut platforms,
@@ -444,7 +448,7 @@ fn type_params(i: Slice) -> ParseResult<Vec<AST<TypeParam>>> {
         opt(seq!(
             tag("<"),
             separated_list1(w(tag(",")), w(type_param)),
-            tag(">")
+            expect_tag(">")
         )),
         |res| res.map(|(_, params, _)| params).unwrap_or(Vec::new()),
     )(i)
@@ -458,7 +462,7 @@ fn type_param(i: Slice) -> ParseResult<AST<TypeParam>> {
                 whitespace_required,
                 tag("extends"),
                 whitespace_required,
-                type_expression(None),
+                expect(type_expression(None), "type"),
             ))),
         )),
         |(mut name, extends)| {
@@ -482,7 +486,7 @@ fn decorator(i: Slice) -> ParseResult<AST<Decorator>> {
             opt(seq!(
                 tag("("),
                 separated_list0(w(tag(",")), w(expression(None))),
-                tag(")")
+                expect_tag(")")
             )),
         )),
         |(start, mut name, arguments)| {
@@ -501,7 +505,7 @@ fn decorator(i: Slice) -> ParseResult<AST<Decorator>> {
 
 fn block(i: Slice) -> ParseResult<AST<Block>> {
     map(
-        seq!(tag("{"), many0(statement), tag("}")),
+        seq!(tag("{"), many0(statement), expect_tag("}")),
         |(open, mut statements, close)| make_node_tuple!(Block, open.spanning(&close), statements),
     )(i)
 }
@@ -512,9 +516,9 @@ fn value_declaration(i: Slice) -> ParseResult<AST<ValueDeclaration>> {
             opt(declaration_platforms),
             opt(terminated(tag("export"), whitespace_required)),
             terminated(alt((tag("const"), tag("let"))), whitespace_required),
-            declaration_destination,
-            tag("="),
-            expression(None),
+            expect(declaration_destination, "name or destructure"),
+            expect_tag("="),
+            expect(expression(None), "value"),
         ),
         |(mut platforms, export, keyword, mut destination, _, mut value)| {
             let mut exported = export.is_some();
@@ -539,7 +543,7 @@ fn symbol_declaration(i: Slice) -> ParseResult<AST<SymbolDeclaration>> {
         seq!(
             opt(terminated(tag("export"), whitespace_required)),
             terminated(tag("symbol"), whitespace_required),
-            plain_identifier
+            expect(plain_identifier, "symbol name")
         ),
         |(export, keyword, mut name)| {
             let mut exported = export.is_some();
@@ -555,12 +559,13 @@ fn test_expr_declaration(i: Slice) -> ParseResult<AST<TestExprDeclaration>> {
         seq!(
             opt(declaration_platforms),
             tag("test"),
+            whitespace_required,
             tag("expr"),
-            exact_string_literal,
-            tag("=>"),
-            expression(None),
+            expect(exact_string_literal, "test description string"),
+            expect_tag("=>"),
+            expect(expression(None), "test expression"),
         ),
-        |(mut platforms, start, _, mut name, _, mut expr)| {
+        |(mut platforms, start, _, _, mut name, _, mut expr)| {
             make_node!(
                 TestExprDeclaration,
                 start.spanning(&expr),
@@ -577,11 +582,12 @@ fn test_block_declaration(i: Slice) -> ParseResult<AST<TestBlockDeclaration>> {
         seq!(
             opt(declaration_platforms),
             tag("test"),
+            whitespace_required,
             tag("block"),
-            exact_string_literal,
-            block
+            expect(exact_string_literal, "test description string"),
+            expect(block, "test block")
         ),
-        |(mut platforms, start, _, mut name, mut block)| {
+        |(mut platforms, start, _, _, mut name, mut block)| {
             make_node!(
                 TestBlockDeclaration,
                 start.spanning(&block),
@@ -602,7 +608,7 @@ fn declaration_platforms(i: Slice) -> ParseResult<AST<DeclarationPlatforms>> {
         seq!(
             tag("["),
             separated_list0(w(tag(",")), w(plain_identifier)),
-            tag("]"),
+            expect_tag("]"),
         ),
         |(start, mut platforms, end)| {
             make_node!(DeclarationPlatforms, start.spanning(&end), platforms)
@@ -611,7 +617,7 @@ fn declaration_platforms(i: Slice) -> ParseResult<AST<DeclarationPlatforms>> {
 }
 
 fn type_annotation(i: Slice) -> ParseResult<AST<TypeExpression>> {
-    preceded(tag(":"), w(type_expression(None)))(i)
+    preceded(tag(":"), w(expect(type_expression(None), "type")))(i)
 }
 
 // --- TypeExpression ---
@@ -635,7 +641,7 @@ fn type_expression(
                     object_or_interface_type,
                     tuple_type,
                     parenthesized_type,
-                    string_lilteral_type,
+                    string_literal_type,
                     number_literal_type,
                 ],
                 &[named_type],
@@ -648,8 +654,12 @@ fn type_expression(
 
 fn typeof_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
     map(
-        seq!(tag("typeof"), expression(None)),
-        |(keyword, mut expr)| {
+        seq!(
+            tag("typeof"),
+            whitespace_required,
+            expect(expression(None), "expression")
+        ),
+        |(keyword, _, mut expr)| {
             make_node_tuple!(TypeofType, keyword.spanning(&expr), expr).recast::<TypeExpression>()
         },
     )(i)
@@ -664,9 +674,10 @@ fn modifier_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
                 tag(ModifierTypeKind::Elementof.into()),
                 tag(ModifierTypeKind::Readonly.into())
             )),
-            type_expression(None)
+            whitespace_required,
+            expect(type_expression(None), "type")
         ),
-        |(keyword, mut inner)| {
+        |(keyword, _, mut inner)| {
             let mut kind: ModifierTypeKind = keyword.as_str().try_into().unwrap();
             let src = keyword.spanning(&inner);
 
@@ -712,7 +723,7 @@ fn bound_generic_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
             type_expression(Some(bound_generic_type)),
             tag("<"),
             separated_list1(w(tag(",")), w(type_expression(None))),
-            tag(">"),
+            expect_tag(">"),
         ),
         |(generic, _, mut type_args, end)| {
             let mut generic = generic.recast::<TypeExpression>();
@@ -748,7 +759,7 @@ fn func_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
             type_params,
             args_parenthesized,
             tag("=>"),
-            type_expression(None)
+            expect(type_expression(None), "return type")
         ),
         |(mut type_params, (mut args, mut args_spread), _, returns)| {
             // TODO: func type with 0 arguments will have weird src
@@ -774,8 +785,8 @@ fn proc_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
             args_parenthesized,
             opt(throws_clause),
             tag("|>"),
-            tag("{"),
-            tag("}")
+            expect_tag("{"),
+            expect_tag("}")
         ),
         |(asyn, mut type_params, (mut args, mut args_spread), mut throws, arrow, _, end)| {
             // TODO: proc type with 0 arguments will have weird src
@@ -802,9 +813,14 @@ fn proc_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
 }
 
 fn throws_clause(i: Slice) -> ParseResult<AST<TypeExpression>> {
-    map(seq!(tag("throws"), type_expression(None)), |(_, throws)| {
-        throws
-    })(i)
+    map(
+        seq!(
+            tag("throws"),
+            whitespace_required,
+            expect(type_expression(None), "type thrown")
+        ),
+        |(_, _, throws)| throws,
+    )(i)
 }
 
 fn record_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
@@ -812,11 +828,11 @@ fn record_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
         seq!(
             tag("{"),
             tag("["),
-            type_expression(None),
-            tag("]"),
-            tag(":"),
-            type_expression(None),
-            tag("}"),
+            expect(type_expression(None), "key type"),
+            expect_tag("]"),
+            expect_tag(":"),
+            expect(type_expression(None), "value type"),
+            expect_tag("}"),
         ),
         |(open, _, mut key_type, _, _, mut value_type, close)| {
             make_node!(RecordType, open.spanning(&close), key_type, value_type)
@@ -835,7 +851,7 @@ fn object_or_interface_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
                     w(tag(",")),
                     w(alt((
                         map(
-                            preceded(tag("..."), type_expression(None)),
+                            preceded(tag("..."), expect(type_expression(None), "spread type")),
                             KeyValueOrSpread::Spread
                         ),
                         key_value_type,
@@ -843,7 +859,7 @@ fn object_or_interface_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
                 ),
                 opt(w(tag(","))),
             ),
-            tag("}"),
+            expect_tag("}"),
         ),
         |(interface, open, mut entries, close)| {
             let mut is_interface = interface.is_some();
@@ -865,7 +881,7 @@ fn key_value_type(i: Slice) -> ParseResult<KeyValueOrSpread<AST<TypeExpression>>
             plain_identifier,
             opt(tag("?")),
             tag(":"),
-            type_expression(None)
+            expect(type_expression(None), "value type")
         ),
         |(key, optional, _, value)| {
             KeyValueOrSpread::KeyValue(
@@ -886,7 +902,7 @@ fn tuple_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
                     w(tag(",")),
                     w(alt((
                         map(
-                            preceded(tag("..."), type_expression(None)),
+                            preceded(tag("..."), expect(type_expression(None), "spread type")),
                             ElementOrSpread::Spread
                         ),
                         map(type_expression(None), ElementOrSpread::Element),
@@ -894,7 +910,7 @@ fn tuple_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
                 ),
                 opt(w(tag(",")))
             ),
-            tag("]"),
+            expect_tag("]"),
         ),
         |(open, mut members, close)| {
             make_node_tuple!(TupleType, open.spanning(&close), members).recast::<TypeExpression>()
@@ -904,7 +920,11 @@ fn tuple_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
 
 fn parenthesized_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
     map(
-        seq!(tag("("), type_expression(None), tag(")")),
+        seq!(
+            tag("("),
+            expect(type_expression(None), "type"),
+            expect_tag(")")
+        ),
         |(open, mut inner, close)| {
             make_node_tuple!(ParenthesizedType, open.spanning(&close), inner)
                 .recast::<TypeExpression>()
@@ -912,9 +932,9 @@ fn parenthesized_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
     )(i)
 }
 
-fn string_lilteral_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
+fn string_literal_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
     map(
-        tuple((tag("\'"), string_contents, tag("\'"))),
+        tuple((tag("\'"), string_contents, expect_tag("\'"))),
         |(open_quote, value, close_quote)| {
             StringLiteralType(value)
                 .as_ast(open_quote.spanning(&close_quote))
@@ -974,7 +994,7 @@ fn statement(i: Slice) -> ParseResult<AST<Statement>> {
         map(autorun, AST::recast::<Statement>),
         map(block, AST::recast::<Statement>),
         map(
-            seq!(invocation_accessor_chain, tag(";")),
+            seq!(invocation_accessor_chain, expect_tag(";")),
             |(invocation, _)| {
                 invocation
                     .try_recast::<Invocation>()
@@ -989,9 +1009,10 @@ fn if_else_statement(i: Slice) -> ParseResult<AST<IfElseStatement>> {
     map(
         seq!(
             separated_list1(w(tag("else")), w(if_else_statement_case)),
-            opt(map(w(seq!(tag("else"), block)), |(_, default_case)| {
-                default_case
-            },)),
+            opt(map(
+                w(seq!(tag("else"), expect(block, "else block"))),
+                |(_, default_case)| { default_case },
+            )),
         ),
         |(mut cases, mut default_case)| {
             make_node!(
@@ -1006,7 +1027,11 @@ fn if_else_statement(i: Slice) -> ParseResult<AST<IfElseStatement>> {
 
 fn if_else_statement_case(i: Slice) -> ParseResult<AST<IfElseStatementCase>> {
     map(
-        seq!(tag("if"), expression(None), block),
+        seq!(
+            tag("if"),
+            expect(expression(None), "condition"),
+            expect(block, "block")
+        ),
         |(start, mut condition, mut outcome)| {
             make_node!(
                 IfElseStatementCase,
@@ -1022,10 +1047,10 @@ fn for_loop(i: Slice) -> ParseResult<AST<ForLoop>> {
     map(
         seq!(
             tag("for"),
-            plain_identifier,
-            tag("of"),
-            expression(None),
-            block,
+            expect(plain_identifier, "item name"),
+            expect_tag("of"),
+            expect(expression(None), "iterable"),
+            expect(block, "loop block"),
         ),
         |(start, mut item_identifier, _, mut iterable, mut body)| {
             make_node!(
@@ -1041,7 +1066,11 @@ fn for_loop(i: Slice) -> ParseResult<AST<ForLoop>> {
 
 fn while_loop(i: Slice) -> ParseResult<AST<WhileLoop>> {
     map(
-        seq!(tag("while"), expression(None), block),
+        seq!(
+            tag("while"),
+            expect(expression(None), "loop condition"),
+            expect(block, "loop block")
+        ),
         |(start, mut condition, mut body)| {
             make_node!(WhileLoop, start.spanning(&body), condition, body)
         },
@@ -1073,8 +1102,8 @@ fn assignment(i: Slice) -> ParseResult<AST<Assignment>> {
                 )),
                 tag("=")
             ),
-            expression(None),
-            tag(";")
+            expect(expression(None), "value for assignment"),
+            expect_tag(";")
         ),
         |(mut target, (mut operator, _), mut value, end)| {
             make_node!(Assignment, target.spanning(&end), target, value, operator)
@@ -1084,7 +1113,13 @@ fn assignment(i: Slice) -> ParseResult<AST<Assignment>> {
 
 fn try_catch(i: Slice) -> ParseResult<AST<TryCatch>> {
     map(
-        seq!(tag("try"), block, tag("catch"), plain_identifier, block,),
+        seq!(
+            tag("try"),
+            expect(block, "try block"),
+            expect_tag("catch"),
+            expect(plain_identifier, "error name"),
+            expect(block, "catch block"),
+        ),
         |(start, mut try_block, _, mut error_identifier, mut catch_block)| {
             make_node!(
                 TryCatch,
@@ -1099,7 +1134,11 @@ fn try_catch(i: Slice) -> ParseResult<AST<TryCatch>> {
 
 fn throw_statement(i: Slice) -> ParseResult<AST<ThrowStatement>> {
     map(
-        seq!(tag("throw"), expression(None), tag(";")),
+        seq!(
+            tag("throw"),
+            expect(expression(None), "value to be thrown"),
+            expect_tag(";")
+        ),
         |(start, mut error_expression, end)| {
             make_node!(ThrowStatement, start.spanning(&end), error_expression)
         },
@@ -1110,15 +1149,22 @@ fn autorun(i: Slice) -> ParseResult<AST<Autorun>> {
     map(
         seq!(
             tag("autorun"),
-            block,
-            alt((
-                map(tag("forever"), |_| None),
-                map(
-                    seq!(tag("until"), tag("=>"), expression(None)),
-                    |(_, _, until)| Some(until),
-                ),
-            )),
-            tag(";"),
+            expect(block, "autorun block"),
+            expect(
+                alt((
+                    map(tag("forever"), |_| None),
+                    map(
+                        seq!(
+                            tag("until"),
+                            expect_tag("=>"),
+                            expect(expression(None), "until-condition")
+                        ),
+                        |(_, _, until)| Some(until),
+                    ),
+                )),
+                "autorun duration (either 'forever' or 'until => _')"
+            ),
+            expect_tag(";"),
         ),
         |(start, mut effect_block, mut until, end)| {
             make_node!(Autorun, start.spanning(&end), effect_block, until)
@@ -1243,13 +1289,13 @@ fn invocation_args(i: Slice) -> ParseResult<InvocationOrPropertyAccess> {
                 seq!(
                     tag("<"),
                     separated_list0(w(tag(",")), w(type_expression(None))),
-                    tag(">")
+                    expect_tag(">")
                 ),
                 |(_, type_args, _)| type_args
             )),
             tag("("),
             separated_list0(w(tag(",")), w(expression(None))),
-            tag(")")
+            expect_tag(")")
         ),
         |(type_args, open, args, close)| {
             InvocationOrPropertyAccess::InvokingWith(
@@ -1263,7 +1309,12 @@ fn invocation_args(i: Slice) -> ParseResult<InvocationOrPropertyAccess> {
 
 fn indexer_expression(i: Slice) -> ParseResult<InvocationOrPropertyAccess> {
     map(
-        tuple((opt(tag("?.")), tag("["), w(expression(None)), w(tag("]")))),
+        tuple((
+            opt(tag("?.")),
+            tag("["),
+            w(expect(expression(None), "index or property")),
+            w(expect_tag("]")),
+        )),
         |(question_dot, open, property, close)| InvocationOrPropertyAccess::Accessing {
             property: Property::Expression(property),
             optional: question_dot.is_some(),
@@ -1278,7 +1329,11 @@ fn indexer_expression(i: Slice) -> ParseResult<InvocationOrPropertyAccess> {
 
 fn dot_property_access(i: Slice) -> ParseResult<InvocationOrPropertyAccess> {
     map(
-        tuple((opt(tag("?")), tag("."), plain_identifier)),
+        tuple((
+            opt(tag("?")),
+            tag("."),
+            expect(plain_identifier, "property name"),
+        )),
         |(question, dot, property)| {
             let src = question
                 .as_ref()
@@ -1359,7 +1414,7 @@ fn regular_expression(i: Slice) -> ParseResult<AST<Expression>> {
                 '\\',
                 one_of("/\\"),
             ),
-            tag("/"),
+            expect_tag("/"),
             many0(regular_expression_flag),
         )),
         |(start, mut expr, end, mut flags)| {
@@ -1385,7 +1440,12 @@ fn regular_expression_flag(i: Slice) -> ParseResult<RegularExpressionFlag> {
 
 fn error_expression(i: Slice) -> ParseResult<AST<Expression>> {
     map(
-        seq!(tag("Error"), tag("("), expression(None), tag(")")),
+        seq!(
+            tag("Error"),
+            tag("("),
+            expect(expression(None), "error value"),
+            expect_tag(")")
+        ),
         |(start, _, mut inner, end)| {
             make_node_tuple!(ErrorExpression, start.spanning(&end), inner,).recast::<Expression>()
         },
@@ -1397,7 +1457,7 @@ fn instance_of(i: Slice) -> ParseResult<AST<Expression>> {
         seq!(
             expression(Some(instance_of)),
             tag("instanceof"),
-            type_expression(None)
+            expect(type_expression(None), "type")
         ),
         |(mut inner, _, mut possible_type)| {
             make_node!(
@@ -1413,7 +1473,11 @@ fn instance_of(i: Slice) -> ParseResult<AST<Expression>> {
 
 fn as_cast(i: Slice) -> ParseResult<AST<Expression>> {
     map(
-        seq!(expression(Some(as_cast)), tag("as"), type_expression(None)),
+        seq!(
+            expression(Some(as_cast)),
+            tag("as"),
+            expect(type_expression(None), "type")
+        ),
         |(mut inner, _, mut as_type)| {
             make_node!(AsCast, inner.spanning(&as_type), inner, as_type).recast::<Expression>()
         },
@@ -1425,7 +1489,12 @@ fn if_else_expression(i: Slice) -> ParseResult<AST<Expression>> {
         seq!(
             separated_list1(w(tag("else")), w(if_else_expression_case)),
             opt(map(
-                seq!(tag("else"), tag("{"), expression(None), tag("}")),
+                seq!(
+                    tag("else"),
+                    expect_tag("{"),
+                    expect(expression(None), "expression"),
+                    expect_tag("}")
+                ),
                 |(_, _, outcome, end)| (outcome, end),
             )),
         ),
@@ -1453,10 +1522,10 @@ fn if_else_expression_case(i: Slice) -> ParseResult<AST<IfElseExpressionCase>> {
     map(
         seq!(
             tag("if"),
-            expression(None),
-            tag("{"),
-            expression(None),
-            tag("}"),
+            expect(expression(None), "condition"),
+            expect_tag("{"),
+            expect(expression(None), "expression"),
+            expect_tag("}"),
         ),
         |(start, mut condition, _, mut outcome, end)| {
             make_node!(
@@ -1473,16 +1542,16 @@ fn switch_expression(i: Slice) -> ParseResult<AST<Expression>> {
     map(
         seq!(
             tag("switch"),
-            expression(None),
-            tag("{"),
+            expect(expression(None), "value to switch over"),
+            expect_tag("{"),
             separated_list1(
                 w(tag(",")),
                 w(map(
                     seq!(
                         tag("case"),
-                        type_expression(None),
-                        tag(":"),
-                        expression(None)
+                        expect(type_expression(None), "type to match against"),
+                        expect_tag(":"),
+                        expect(expression(None), "result value")
                     ),
                     |(keyword, mut type_filter, _, mut outcome)| {
                         make_node!(
@@ -1497,12 +1566,17 @@ fn switch_expression(i: Slice) -> ParseResult<AST<Expression>> {
             opt(preceded(
                 whitespace,
                 map(
-                    seq!(tag(","), tag("default"), tag(":"), expression(None)),
+                    seq!(
+                        tag(","),
+                        tag("default"),
+                        expect_tag(":"),
+                        expect(expression(None), "default value")
+                    ),
                     |(_, _, _, expr)| expr
                 ),
             )),
             opt(w(tag(","))),
-            tag("}"),
+            expect_tag("}"),
         ),
         |(start, mut value, _, mut cases, mut default_case, _, end)| {
             make_node!(
@@ -1519,7 +1593,11 @@ fn switch_expression(i: Slice) -> ParseResult<AST<Expression>> {
 
 fn range_expression(i: Slice) -> ParseResult<AST<Expression>> {
     map(
-        seq!(number_literal, tag(".."), number_literal),
+        seq!(
+            number_literal,
+            tag(".."),
+            expect(number_literal, "range end")
+        ),
         |(start, _, end)| {
             let mut start = start.recast::<Expression>();
             let mut end = end.recast::<Expression>();
@@ -1537,7 +1615,7 @@ fn proc(i: Slice) -> ParseResult<AST<Expression>> {
             alt((args_parenthesized, arg_singleton)),
             opt(throws_clause),
             tag("|>"),
-            statement,
+            expect(statement, "proc body"),
         ),
         |(asyn, mut type_params, (mut args, mut args_spread), mut throws, _, mut body)| {
             let mut is_async = asyn.is_some();
@@ -1572,29 +1650,42 @@ fn element_tag(i: Slice) -> ParseResult<AST<Expression>> {
             many0(preceded(
                 whitespace_required,
                 map(
-                    tuple((plain_identifier, tag("={"), expression(None), tag("}"))),
-                    |(key, _, value, _)| (key, value),
-                ),
-            )),
-            alt((
-                map(
                     tuple((
-                        w(tag(">")),
-                        many0(w(alt((
-                            map(element_tag, |el| el.recast::<Expression>()),
-                            map(
-                                seq!(tag("{"), expression(None), tag("}")),
-                                |(_, expr, _)| expr,
-                            ),
-                        )))),
-                        w(tag("</")),
                         plain_identifier,
-                        w(tag(">")),
+                        tag("="),
+                        expect_tag("{"),
+                        expect(expression(None), "value"),
+                        expect_tag("}"),
                     )),
-                    |(_, children, _, closing_tag, end)| (children, Some(closing_tag), end),
+                    |(key, _, _, value, _)| (key, value),
                 ),
-                map(w(tag("/>")), |end| (Vec::new(), None, end)),
             )),
+            expect(
+                alt((
+                    map(
+                        tuple((
+                            w(tag(">")),
+                            many0(w(alt((
+                                map(element_tag, |el| el.recast::<Expression>()),
+                                map(
+                                    seq!(
+                                        tag("{"),
+                                        expect(expression(None), "value"),
+                                        expect_tag("}")
+                                    ),
+                                    |(_, expr, _)| expr,
+                                ),
+                            )))),
+                            w(tag("</")),
+                            plain_identifier,
+                            w(expect_tag(">")),
+                        )),
+                        |(_, children, _, closing_tag, end)| (children, Some(closing_tag), end),
+                    ),
+                    map(w(tag("/>")), |end| (Vec::new(), None, end)),
+                )),
+                "closing tag",
+            ),
         )),
         |(start, mut tag_name, mut attributes, (mut children, closing_tag, end))| {
             let src = start.spanning(&end);
@@ -1612,7 +1703,7 @@ fn func(i: Slice) -> ParseResult<AST<Expression>> {
             alt((args_parenthesized, arg_singleton)),
             opt(type_annotation),
             tag("=>"),
-            expression(None),
+            expect(expression(None), "function body"),
         ),
         |(asyn, mut type_params, (mut args, mut args_spread), mut returns, _, mut body)| {
             let mut is_async = asyn.is_some();
@@ -1657,10 +1748,10 @@ fn inline_declaration(i: Slice) -> ParseResult<AST<InlineDeclaration>> {
     map(
         seq!(
             tag("const"),
-            declaration_destination,
-            tag("="),
-            expression(None),
-            tag(",")
+            expect(declaration_destination, "name or destructure"),
+            expect_tag("="),
+            expect(expression(None), "value"),
+            expect_tag(",")
         ),
         |(start, mut destination, _, mut value, end)| {
             make_node!(InlineDeclaration, start.spanning(&end), destination, value)
@@ -1675,7 +1766,7 @@ fn declaration_destination(i: Slice) -> ParseResult<DeclarationDestination> {
                 tag("{"),
                 separated_list0(w(char(',')), w(plain_identifier)),
                 opt(tag(",")),
-                tag("}"),
+                expect_tag("}"),
             ),
             |(_, properties, _, _)| {
                 DeclarationDestination::Destructure(Destructure {
@@ -1690,7 +1781,7 @@ fn declaration_destination(i: Slice) -> ParseResult<DeclarationDestination> {
                 tag("["),
                 separated_list0(w(char(',')), w(plain_identifier)),
                 opt(w(tag(","))),
-                tag("]"),
+                expect_tag("]"),
             ),
             |(_, properties, _, _)| {
                 DeclarationDestination::Destructure(Destructure {
@@ -1701,13 +1792,7 @@ fn declaration_destination(i: Slice) -> ParseResult<DeclarationDestination> {
             },
         ),
         map(
-            seq!(
-                plain_identifier,
-                opt(map(
-                    seq!(tag(":"), type_expression(None)),
-                    |(_, type_annotation)| type_annotation
-                ))
-            ),
+            seq!(plain_identifier, opt(type_annotation)),
             |(name, type_annotation)| {
                 DeclarationDestination::NameAndType(NameAndType {
                     name,
@@ -1729,7 +1814,11 @@ fn negation_operation(i: Slice) -> ParseResult<AST<Expression>> {
 
 fn parenthesis(i: Slice) -> ParseResult<AST<Expression>> {
     map(
-        seq!(tag("("), expression(None), tag(")")),
+        seq!(
+            tag("("),
+            expect(expression(None), "parenthesized expression"),
+            expect_tag(")")
+        ),
         |(open_paren, mut inner, close_paren)| {
             make_node_tuple!(Parenthesis, open_paren.spanning(&close_paren), inner)
                 .recast::<Expression>()
@@ -1746,7 +1835,7 @@ fn object_literal(i: Slice) -> ParseResult<AST<Expression>> {
                     w(char(',')),
                     w(alt((
                         map(
-                            preceded(tag("..."), expression(None)),
+                            preceded(tag("..."), expect(expression(None), "spread expression")),
                             KeyValueOrSpread::Spread
                         ),
                         key_value_expression,
@@ -1754,7 +1843,7 @@ fn object_literal(i: Slice) -> ParseResult<AST<Expression>> {
                 ),
                 opt(w(tag(",")))
             ),
-            tag("}"),
+            expect_tag("}"),
         ),
         |(open_bracket, mut entries, close_bracket)| {
             make_node_tuple!(
@@ -1769,7 +1858,11 @@ fn object_literal(i: Slice) -> ParseResult<AST<Expression>> {
 
 fn key_value_expression(i: Slice) -> ParseResult<KeyValueOrSpread<AST<Expression>>> {
     map(
-        seq!(plain_identifier, tag(":"), expression(None)),
+        seq!(
+            plain_identifier,
+            tag(":"),
+            expect(expression(None), "value")
+        ),
         |(key, _, value)| {
             KeyValueOrSpread::KeyValue(
                 identifier_to_string(key).recast::<Expression>(),
@@ -1789,7 +1882,7 @@ fn array_literal(i: Slice) -> ParseResult<AST<Expression>> {
                     w(char(',')),
                     w(alt((
                         map(
-                            preceded(tag("..."), expression(None)),
+                            preceded(tag("..."), expect(expression(None), "spread expression")),
                             ElementOrSpread::Spread
                         ),
                         map(expression(None), ElementOrSpread::Element),
@@ -1797,7 +1890,7 @@ fn array_literal(i: Slice) -> ParseResult<AST<Expression>> {
                 ),
                 opt(w(tag(",")))
             ),
-            tag("]"),
+            expect_tag("]"),
         ),
         |(open_bracket, mut entries, close_bracket)| {
             make_node_tuple!(ArrayLiteral, open_bracket.spanning(&close_bracket), entries)
@@ -1810,7 +1903,7 @@ fn string_literal(i: Slice) -> ParseResult<AST<Expression>> {
     map(
         pair(
             opt(plain_identifier),
-            tuple((tag("\'"), many0(string_literal_segment), tag("\'"))),
+            tuple((tag("\'"), many0(string_literal_segment), expect_tag("\'"))),
         ),
         |(mut tag, (open_quote, mut segments, close_quote))| {
             make_node!(
@@ -1835,7 +1928,7 @@ fn exact_string_literal(i: Slice) -> ParseResult<AST<ExactStringLiteral>> {
     map(
         pair(
             opt(plain_identifier),
-            tuple((tag("\'"), string_contents, tag("\'"))),
+            tuple((tag("\'"), string_contents, expect_tag("\'"))),
         ),
         |(mut tag, (open_quote, mut value, close_quote))| {
             make_node!(
@@ -1854,7 +1947,7 @@ fn exact_string_literal(i: Slice) -> ParseResult<AST<ExactStringLiteral>> {
 fn string_literal_segment(i: Slice) -> ParseResult<StringLiteralSegment> {
     alt((
         map(
-            tuple((tag("${"), w(expression(None)), w(tag("}")))),
+            tuple((tag("${"), w(expression(None)), w(expect_tag("}")))),
             |(_, expr, _)| expr.into(),
         ),
         map(string_contents, |s| s.into()),
@@ -1863,7 +1956,11 @@ fn string_literal_segment(i: Slice) -> ParseResult<StringLiteralSegment> {
 
 fn number_literal(i: Slice) -> ParseResult<AST<Expression>> {
     map(
-        tuple((opt(tag("-")), numeric, opt(tuple((tag("."), numeric))))),
+        tuple((
+            opt(tag("-")),
+            numeric,
+            opt(tuple((tag("."), expect(numeric, "decimal")))),
+        )),
         |(neg, int, tail)| {
             let front = neg.unwrap_or(int.clone());
             let back = tail.map(|(_, decimal)| decimal).unwrap_or(int);
@@ -2008,6 +2105,7 @@ pub struct RawParseError {
 
 #[derive(Debug, Clone, PartialEq)]
 enum RawParseErrorDetails {
+    Expected(String),
     Kind(nom::error::ErrorKind),
     Char(char),
 }
@@ -2043,6 +2141,42 @@ impl<E> nom::error::FromExternalError<Slice, E> for RawParseError {
         Self {
             src: input,
             details: RawParseErrorDetails::Kind(kind),
+        }
+    }
+}
+
+fn expect<TResult, F: FnMut(Slice) -> ParseResult<TResult>>(
+    f: F,
+    description: &'static str,
+) -> impl FnMut(Slice) -> ParseResult<TResult> {
+    expect_inner(f, description, false)
+}
+
+fn expect_tag(t: &'static str) -> impl FnMut(Slice) -> ParseResult<Slice> {
+    expect_inner(tag(t), t, true)
+}
+
+fn expect_inner<TResult, F: FnMut(Slice) -> ParseResult<TResult>>(
+    mut f: F,
+    description: &'static str,
+    quoted: bool,
+) -> impl FnMut(Slice) -> ParseResult<TResult> {
+    move |i: Slice| {
+        let res = f(i.clone());
+
+        if matches!(res, Err(nom::Err::Error(_))) {
+            let details = if quoted {
+                format!("'{}'", description)
+            } else {
+                description.to_owned()
+            };
+
+            Err(nom::Err::Failure(RawParseError {
+                src: i,
+                details: RawParseErrorDetails::Expected(details),
+            }))
+        } else {
+            res
         }
     }
 }
