@@ -1,7 +1,7 @@
 use crate::{
     model::{
         ast::{Expression, AST},
-        Slice, SubsumationContext,
+        ResEnv, Slice, SubsumationContext,
     },
     passes::{
         CheckContext, CompileContext, InferTypeContext, ResolveSymbolContext, ResolveTypeContext,
@@ -48,6 +48,7 @@ impl<'a> From<SubsumationContext<'a>> for ResolveSymbolContext<'a> {
             modules,
             current_module,
             symbols_encountered: _,
+            type_symbol_resolution_env: _,
         }: SubsumationContext<'a>,
     ) -> Self {
         Self {
@@ -88,6 +89,7 @@ impl<'a> From<&CheckContext<'a>> for SubsumationContext<'a> {
             modules,
             current_module,
             symbols_encountered: NO_SYMBOLS_ENCOUNTERED,
+            type_symbol_resolution_env: ResEnv::empty(),
         }
     }
 }
@@ -104,6 +106,7 @@ impl<'a> From<InferTypeContext<'a>> for SubsumationContext<'a> {
             modules,
             current_module,
             symbols_encountered: NO_SYMBOLS_ENCOUNTERED,
+            type_symbol_resolution_env: ResEnv::empty(),
         }
     }
 }
@@ -120,6 +123,7 @@ impl<'a> From<ResolveSymbolContext<'a>> for SubsumationContext<'a> {
             modules,
             current_module,
             symbols_encountered: NO_SYMBOLS_ENCOUNTERED,
+            type_symbol_resolution_env: ResEnv::empty(),
         }
     }
 }
@@ -164,6 +168,7 @@ impl<'a> From<SubsumationContext<'a>> for ResolveTypeContext<'a> {
             modules,
             current_module,
             symbols_encountered: _,
+            type_symbol_resolution_env: _,
         }: SubsumationContext<'a>,
     ) -> Self {
         Self {

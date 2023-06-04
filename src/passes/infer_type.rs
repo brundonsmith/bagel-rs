@@ -6,7 +6,7 @@ use crate::{
     cli::ModulesStore,
     model::{ast::*, blue_string, MetaTypeKind, Mutability, ParsedModule, Slice, Type},
     passes::{ResolveSymbolContext, INT},
-    utils::{cli_label, Rcable},
+    utils::{cli_label, Loggable, Rcable},
     DEBUG_MODE,
 };
 
@@ -301,7 +301,7 @@ impl AST<Expression> {
                             infer_expected_type(ctx, self).map(|t| t.parameters());
                         let expected_arg_types = &expected_arg_types;
 
-                        Type::FuncType {
+                        let func_type = Type::FuncType {
                             args: type_annotation
                                 .args
                                 .into_iter()
@@ -329,6 +329,19 @@ impl AST<Expression> {
                                 .map(|r| r.resolve_type(ctx.into()))
                                 .unwrap_or_else(|| body.infer_type(ctx))
                                 .rc(),
+                        };
+
+                        if type_annotation.type_params.len() > 0 {
+                            Type::GenericType {
+                                type_params: type_annotation
+                                    .type_params
+                                    .into_iter()
+                                    .map(|p| crate::model::TypeParam::from(ctx.into(), p))
+                                    .collect(),
+                                inner: func_type.rc(),
+                            }
+                        } else {
+                            func_type
                         }
                     }
                     Expression::Proc(Proc {
@@ -341,7 +354,7 @@ impl AST<Expression> {
                             infer_expected_type(ctx, self).map(|t| t.parameters());
                         let expected_arg_types = &expected_arg_types;
 
-                        Type::ProcType {
+                        let proc_type = Type::ProcType {
                             args: type_annotation
                                 .args
                                 .into_iter()
@@ -370,6 +383,19 @@ impl AST<Expression> {
                                 .map(|throws| throws.resolve_type(ctx.into()))
                                 .or_else(|| body.throws(ctx))
                                 .map(Rc::new),
+                        };
+
+                        if type_annotation.type_params.len() > 0 {
+                            Type::GenericType {
+                                type_params: type_annotation
+                                    .type_params
+                                    .into_iter()
+                                    .map(|p| crate::model::TypeParam::from(ctx.into(), p))
+                                    .collect(),
+                                inner: proc_type.rc(),
+                            }
+                        } else {
+                            proc_type
                         }
                     }
                     Expression::RangeExpression(RangeExpression { start, end }) => {
@@ -399,7 +425,16 @@ impl AST<Expression> {
                         ) {
                             inv.infer_type(ctx)
                         } else {
-                            subject.infer_type(ctx).return_type()
+                            let subject_type = subject.infer_type(ctx);
+
+                            subject_type
+                                .bound(
+                                    type_args
+                                        .into_iter()
+                                        .map(|a| a.resolve_type(ctx.into()))
+                                        .collect(),
+                                )
+                                .return_type()
                         }
                     }
                     Expression::PropertyAccessor(PropertyAccessor {

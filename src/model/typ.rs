@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     fmt::{Debug, Display, Write},
     rc::Rc,
 };
@@ -16,9 +17,11 @@ use crate::{
             SpecialTypeKind, SymbolDeclaration, TypeDeclaration, AST,
         },
         parsed_module::ParsedModule,
+        slice::Interned,
         slice::Slice,
         ModuleID,
     },
+    passes::ResolveTypeContext,
     utils::Rcable,
 };
 
@@ -264,6 +267,37 @@ pub struct SubsumationContext<'a> {
     pub modules: &'a ModulesStore,
     pub current_module: &'a ParsedModule,
     pub symbols_encountered: &'a Vec<Slice>,
+    pub type_symbol_resolution_env: ResEnv<'a>,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct ResEnv<'a> {
+    parent: Option<&'a ResEnv<'a>>,
+    map: Option<&'a HashMap<Interned, Type>>,
+}
+
+impl<'a> ResEnv<'a> {
+    pub fn empty() -> Self {
+        Self {
+            parent: None,
+            map: None,
+        }
+    }
+
+    pub fn extend(&'a self, map: &'a HashMap<Interned, Type>) -> ResEnv<'a> {
+        Self {
+            parent: Some(self),
+            map: Some(map),
+        }
+    }
+
+    pub fn resolve(&self, symbol: &Interned) -> Option<Type> {
+        self.map
+            .map(|m| m.get(symbol))
+            .flatten()
+            .cloned()
+            .or_else(|| self.parent.map(|p| p.resolve(symbol)).flatten())
+    }
 }
 
 impl Type {
@@ -660,6 +694,12 @@ impl Type {
                     return None;
                 }
             }
+            (Type::GenericType { type_params, inner }, value) => {
+                return inner.subsumation_issues(ctx, value);
+            }
+            (destination, Type::GenericType { type_params, inner }) => {
+                return destination.subsumation_issues(ctx, inner);
+            }
             (Type::UnknownType(destination_mutability), value) => {
                 return None;
             }
@@ -746,6 +786,17 @@ impl Type {
         }
     }
 
+    pub fn bound(self, type_args: Vec<Type>) -> Self {
+        if type_args.len() > 0 {
+            Type::BoundGenericType {
+                type_args,
+                generic: self.rc(),
+            }
+        } else {
+            self
+        }
+    }
+
     pub fn broaden_for_mutation(self) -> Type {
         match self {
             Type::BooleanType(_) => Type::ANY_BOOLEAN,
@@ -805,7 +856,7 @@ impl Type {
         }
     }
 
-    fn simplify<'a>(self, ctx: SubsumationContext<'a>) -> Type {
+    pub fn simplify<'a>(self, ctx: SubsumationContext<'a>) -> Type {
         // println!("simplify {} {:?}", self, ctx.symbols_encountered);
 
         match self {
@@ -828,32 +879,39 @@ impl Type {
                         modules: ctx.modules,
                         current_module: ctx.current_module,
                         symbols_encountered,
+                        type_symbol_resolution_env: ctx.type_symbol_resolution_env,
                     };
 
-                    name.resolve_symbol(ctx.into(), name_slice.as_str())
-                        .map(|resolved| match resolved.details() {
-                            Any::TypeDeclaration(TypeDeclaration {
-                                name: _,
-                                declared_type,
-                                exported: _,
-                            }) => declared_type.resolve_type(ctx.into()),
-                            Any::SymbolDeclaration(SymbolDeclaration { name, exported }) => {
-                                Type::SymbolType {
-                                    module_id: name.clone().upcast().module_id().unwrap(),
-                                    name: name.downcast().0.clone(),
-                                }
-                            }
-                            Any::TypeParam(crate::model::ast::TypeParam { name, extends }) => {
-                                extends
-                                    .as_ref()
-                                    .map(|extends| extends.resolve_type(ctx.into()))
-                                    .unwrap_or(Type::UnknownType(Mutability::Mutable))
-                            }
-                            _ => Type::PoisonedType,
+                    ctx.type_symbol_resolution_env
+                        .resolve(&name.downcast().0.into())
+                        .unwrap_or_else(|| {
+                            name.resolve_symbol(ctx.into(), name_slice.as_str())
+                                .map(|resolved| match resolved.details() {
+                                    Any::TypeDeclaration(TypeDeclaration {
+                                        name: _,
+                                        declared_type,
+                                        exported: _,
+                                    }) => declared_type.resolve_type(ctx.into()),
+                                    Any::SymbolDeclaration(SymbolDeclaration {
+                                        name,
+                                        exported,
+                                    }) => Type::SymbolType {
+                                        module_id: name.clone().upcast().module_id().unwrap(),
+                                        name: name.downcast().0.clone(),
+                                    },
+                                    Any::TypeParam(crate::model::ast::TypeParam {
+                                        name,
+                                        extends,
+                                    }) => extends
+                                        .as_ref()
+                                        .map(|extends| extends.resolve_type(ctx.into()))
+                                        .unwrap_or(Type::UnknownType(Mutability::Mutable)),
+                                    _ => Type::PoisonedType,
+                                })
+                                .unwrap_or(Type::PoisonedType)
+                                .simplify(ctx)
+                                .with_mutability(mutability)
                         })
-                        .unwrap_or(Type::PoisonedType)
-                        .simplify(ctx)
-                        .with_mutability(mutability)
                 }
             }
             Type::UnionType(members) => {
@@ -1130,10 +1188,26 @@ impl Type {
             },
             Type::BoundGenericType { type_args, generic } => {
                 if let Type::GenericType { type_params, inner } = generic.as_ref() {
-                    // let params_to_args = type_params.iter().zip(type_args.iter()).collect();
-                    todo!()
+                    if type_args.len() != type_params.len() {
+                        Type::PoisonedType
+                    } else {
+                        let env_map = type_params
+                            .into_iter()
+                            .map(|p| p.name.clone().into())
+                            .zip(type_args.into_iter())
+                            .collect();
+
+                        inner.as_ref().clone().simplify(SubsumationContext {
+                            modules: ctx.modules,
+                            current_module: ctx.current_module,
+                            symbols_encountered: ctx.symbols_encountered,
+                            type_symbol_resolution_env: ctx
+                                .type_symbol_resolution_env
+                                .extend(&env_map),
+                        })
+                    }
                 } else {
-                    unreachable!()
+                    Type::PoisonedType
                 }
             }
             Type::FuncType {
@@ -1871,4 +1945,15 @@ pub enum SubsumationIssue {
 pub struct TypeParam {
     pub name: Slice,
     pub extends: Option<Type>,
+}
+
+impl TypeParam {
+    pub fn from<'a>(ctx: ResolveTypeContext<'a>, value: AST<crate::model::ast::TypeParam>) -> Self {
+        let value = value.downcast();
+
+        TypeParam {
+            name: value.name.downcast().0,
+            extends: value.extends.map(|e| e.resolve_type(ctx)),
+        }
+    }
 }

@@ -5,6 +5,33 @@ use memoize::memoize;
 use nom::{AsChar, Compare, InputIter, InputLength, InputTake, Offset, UnspecializedInput};
 
 #[derive(Clone, Eq)]
+pub struct Interned(Slice);
+
+impl From<Slice> for Interned {
+    fn from(value: Slice) -> Self {
+        Self(value)
+    }
+}
+
+impl core::hash::Hash for Interned {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.as_str().hash(state);
+    }
+}
+
+impl PartialEq for Interned {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.as_str() == other.0.as_str()
+    }
+}
+
+impl Debug for Interned {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("Interned").field(&self.0.as_str()).finish()
+    }
+}
+
+#[derive(Clone, Eq)]
 pub struct Slice {
     pub full_string: Rc<String>,
     pub start: usize,
@@ -26,7 +53,9 @@ impl core::hash::Hash for Slice {
 
 impl PartialEq for Slice {
     fn eq(&self, other: &Self) -> bool {
-        self.as_str() == other.as_str()
+        self.full_string.as_ptr() == other.full_string.as_ptr()
+            && self.start == other.start
+            && self.end == other.end
     }
 }
 

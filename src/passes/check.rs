@@ -756,7 +756,14 @@ where
                         };
 
                         check_subsumation(
-                            &subject_type.parameters(),
+                            &subject_type
+                                .bound(
+                                    type_args
+                                        .into_iter()
+                                        .map(|a| a.resolve_type(ctx.into()))
+                                        .collect(),
+                                )
+                                .parameters(),
                             args_type,
                             self.slice(),
                             report_error,
@@ -848,7 +855,7 @@ where
                                     message: format!(
                                         "Property {} does not exist on type {}",
                                         blue_string(&ident),
-                                        blue_string(&subject_type)
+                                        blue_string(&subject_type.clone().simplify(ctx.into()))
                                     ),
                                 })
                             }
