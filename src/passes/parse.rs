@@ -558,14 +558,13 @@ fn test_expr_declaration(i: Slice) -> ParseResult<AST<TestExprDeclaration>> {
     map(
         seq!(
             opt(declaration_platforms),
-            tag("test"),
-            whitespace_required,
+            break_after(tag("test")),
             tag("expr"),
             expect(exact_string_literal, "test description string"),
             expect_tag("=>"),
             expect(expression(None), "test expression"),
         ),
-        |(mut platforms, start, _, _, mut name, _, mut expr)| {
+        |(mut platforms, start, _, mut name, _, mut expr)| {
             make_node!(
                 TestExprDeclaration,
                 start.spanning(&expr),
@@ -581,13 +580,12 @@ fn test_block_declaration(i: Slice) -> ParseResult<AST<TestBlockDeclaration>> {
     map(
         seq!(
             opt(declaration_platforms),
-            tag("test"),
-            whitespace_required,
+            break_after(tag("test")),
             tag("block"),
             expect(exact_string_literal, "test description string"),
             expect(block, "test block")
         ),
-        |(mut platforms, start, _, _, mut name, mut block)| {
+        |(mut platforms, start, _, mut name, mut block)| {
             make_node!(
                 TestBlockDeclaration,
                 start.spanning(&block),
@@ -655,11 +653,10 @@ fn type_expression(
 fn typeof_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
     map(
         seq!(
-            tag("typeof"),
-            whitespace_required,
+            break_after(tag("typeof")),
             expect(expression(None), "expression")
         ),
-        |(keyword, _, mut expr)| {
+        |(keyword, mut expr)| {
             make_node_tuple!(TypeofType, keyword.spanning(&expr), expr).recast::<TypeExpression>()
         },
     )(i)
@@ -668,16 +665,15 @@ fn typeof_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
 fn modifier_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
     map(
         seq!(
-            alt((
+            break_after(alt((
                 tag(ModifierTypeKind::Keyof.into()),
                 tag(ModifierTypeKind::Valueof.into()),
                 tag(ModifierTypeKind::Elementof.into()),
                 tag(ModifierTypeKind::Readonly.into())
-            )),
-            whitespace_required,
+            ))),
             expect(type_expression(None), "type")
         ),
-        |(keyword, _, mut inner)| {
+        |(keyword, mut inner)| {
             let mut kind: ModifierTypeKind = keyword.as_str().try_into().unwrap();
             let src = keyword.spanning(&inner);
 
@@ -815,11 +811,10 @@ fn proc_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
 fn throws_clause(i: Slice) -> ParseResult<AST<TypeExpression>> {
     map(
         seq!(
-            tag("throws"),
-            whitespace_required,
+            break_after(tag("throws")),
             expect(type_expression(None), "type thrown")
         ),
-        |(_, _, throws)| throws,
+        |(_, throws)| throws,
     )(i)
 }
 
@@ -2018,6 +2013,13 @@ where
     preceded(whitespace, parser)
 }
 
+fn break_after<O, G>(parser: G) -> impl FnMut(Slice) -> ParseResult<O>
+where
+    G: Parser<Slice, O, RawParseError>,
+{
+    terminated(parser, whitespace_required)
+}
+
 #[memoize]
 fn string_contents(i: Slice) -> ParseResult<Slice> {
     escaped(
@@ -2320,4 +2322,13 @@ mod precedence_index {
         });
         r
     }
+}
+
+fn log<T: std::fmt::Debug, F: FnMut(Slice) -> ParseResult<T>>(
+    f: F,
+) -> impl FnMut(Slice) -> ParseResult<T> {
+    map(f, |r| {
+        println!("{:?}", r);
+        r
+    })
 }
