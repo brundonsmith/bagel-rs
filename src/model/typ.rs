@@ -357,7 +357,9 @@ impl Type {
                             ElementOrSpread::Element(destination_member),
                             ElementOrSpread::Element(value_member),
                         ) => {
-                            if let Some(issue) = destination_member.subsumation_issues(ctx, value) {
+                            if let Some(issue) =
+                                destination_member.subsumation_issues(ctx, value_member)
+                            {
                                 return Some(issue);
                             } else {
                                 destination_index += 1;
@@ -369,7 +371,7 @@ impl Type {
                             ElementOrSpread::Spread(value_member),
                         ) => {
                             if let Some(issue) = destination_member
-                                .subsumation_issues(ctx, &value.clone().elementof())
+                                .subsumation_issues(ctx, &value_member.clone().elementof())
                             {
                                 return Some(issue);
                             } else {
@@ -383,7 +385,7 @@ impl Type {
                             if let Some(issue) = destination_member
                                 .clone()
                                 .elementof()
-                                .subsumation_issues(ctx, &value)
+                                .subsumation_issues(ctx, &value_member)
                             {
                                 return Some(issue);
                             } else {
@@ -394,7 +396,9 @@ impl Type {
                             ElementOrSpread::Spread(destination_member),
                             ElementOrSpread::Spread(value_member),
                         ) => {
-                            if let Some(issue) = destination_member.subsumation_issues(ctx, value) {
+                            if let Some(issue) =
+                                destination_member.subsumation_issues(ctx, value_member)
+                            {
                                 return Some(issue);
                             } else {
                                 destination_index += 1;
