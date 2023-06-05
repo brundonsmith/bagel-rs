@@ -1144,12 +1144,10 @@ where
                         } else {
                             let subject_type = subject.infer_type(ctx.into());
 
-                            if let Some(mutability) = subject_type.mutability(ctx.into()) {
-                                match mutability {
-                                    Mutability::Constant => (true, Some("")),
-                                    Mutability::Readonly => (true, Some("")),
-                                    _ => (false, None),
-                                }
+                            if subject_type.mutability(ctx.into()).map(|m| m.is_readonly())
+                                == Some(true)
+                            {
+                                (true, Some("it's readonly"))
                             } else {
                                 (false, None)
                             }
