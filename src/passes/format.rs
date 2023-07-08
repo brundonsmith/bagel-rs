@@ -1,14 +1,44 @@
 use crate::model::{ast::*, ParsedModule};
 use std::fmt::{Display, Formatter, Result, Write};
 
+#[derive(Debug, Clone, Copy)]
+pub struct FormatContext {
+    pub options: FormatOptions,
+    pub current_indentation: usize,
+}
+
+impl FormatContext {
+    pub fn indent(self) -> Self {
+        FormatContext {
+            options: self.options,
+            current_indentation: self.current_indentation.saturating_add(1),
+        }
+    }
+
+    pub fn unindent(self) -> Self {
+        FormatContext {
+            options: self.options,
+            current_indentation: self.current_indentation.saturating_sub(1),
+        }
+    }
+
+    pub fn write_indentation<W: Write>(&self, f: &mut W) -> Result {
+        for _ in 0..self.current_indentation {
+            f.write_str(self.options.indentation_chars)?;
+        }
+
+        Ok(())
+    }
+}
+
 pub trait Formattable {
-    fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result;
+    fn format<W: Write>(&self, f: &mut W, ctx: FormatContext) -> Result;
 }
 
 impl Formattable for ParsedModule {
-    fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
+    fn format<W: Write>(&self, f: &mut W, ctx: FormatContext) -> Result {
         match self {
-            ParsedModule::Bagel { module_id: _, ast } => ast.format(f, opts),
+            ParsedModule::Bagel { module_id: _, ast } => ast.format(f, ctx),
             ParsedModule::JavaScript { module_id: _ } => Ok(()),
             ParsedModule::Singleton {
                 module_id: _,
@@ -23,14 +53,14 @@ where
     TKind: Clone + TryFrom<Any>,
     Any: From<TKind>,
 {
-    fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
+    fn format<W: Write>(&self, f: &mut W, ctx: FormatContext) -> Result {
         match self.details() {
             Any::Module(Module {
                 module_id: _,
                 declarations,
             }) => {
                 for decl in declarations {
-                    decl.format(f, opts)?;
+                    decl.format(f, ctx)?;
                     f.write_str("\n\n")?;
                 }
 
@@ -40,13 +70,32 @@ where
                 platforms,
                 name,
                 path,
-            }) => todo!(),
+            }) => {
+                f.write_str("import ")?;
+                path.format(f, ctx)?;
+                f.write_str(" as ")?;
+                name.format(f, ctx)
+            }
             Any::ImportDeclaration(ImportDeclaration {
                 platforms,
                 imports,
                 path,
-            }) => todo!(),
-            Any::ImportItem(ImportItem { name, alias }) => todo!(),
+            }) => {
+                f.write_str("from ")?;
+                path.format(f, ctx)?;
+                f.write_str(" import { ")?;
+                format_multi(f, ctx, imports, ", ")?;
+                f.write_str(" }")
+            }
+            Any::ImportItem(ImportItem { name, alias }) => {
+                name.format(f, ctx)?;
+                if let Some(alias) = alias {
+                    f.write_str(" as ")?;
+                    alias.format(f, ctx)?;
+                }
+
+                Ok(())
+            }
             Any::TypeDeclaration(TypeDeclaration {
                 name,
                 declared_type,
@@ -58,14 +107,46 @@ where
                 exported,
                 platforms,
                 decorators,
-            }) => todo!(),
+            }) => {
+                let type_annotation = func.downcast().type_annotation.downcast();
+
+                write_if(f, "export ", *exported)?;
+                f.write_str("func ")?;
+                name.format(f, ctx)?;
+                f.write_char('(')?;
+                type_annotation.args.format(f, ctx)?;
+                f.write_char(')')?;
+                format_type_annotation(f, ctx, type_annotation.returns.as_ref())?;
+                f.write_str(" => \n")?;
+
+                let ctx = ctx.indent();
+                ctx.write_indentation(f)?;
+                func.downcast().body.format(f, ctx)
+            }
             Any::ProcDeclaration(ProcDeclaration {
                 name,
                 proc,
                 exported,
                 platforms,
                 decorators,
-            }) => todo!(),
+            }) => {
+                let type_annotation = proc.downcast().type_annotation.downcast();
+
+                write_if(f, "export ", *exported)?;
+                f.write_str("proc ")?;
+                name.format(f, ctx)?;
+
+                f.write_char('(')?;
+                type_annotation.args.format(f, ctx)?;
+                f.write_char(')')?;
+                if let Some(throws) = type_annotation.throws {
+                    f.write_str(" throws ")?;
+                    throws.format(f, ctx)?;
+                }
+                f.write_str(" |> ")?;
+
+                proc.downcast().body.format(f, ctx)
+            }
             Any::Decorator(Decorator { name, arguments }) => todo!(),
             Any::ValueDeclaration(ValueDeclaration {
                 destination,
@@ -74,22 +155,16 @@ where
                 exported,
                 platforms,
             }) => {
-                if *exported {
-                    f.write_str("export ")?;
-                }
-
+                write_if(f, "export ", *exported)?;
                 f.write_str(if *is_const { "const " } else { "let " })?;
-                destination.format(f, opts)?;
+                destination.format(f, ctx)?;
                 f.write_str(" = ")?;
-                value.format(f, opts)
+                value.format(f, ctx)
             }
             Any::SymbolDeclaration(SymbolDeclaration { name, exported }) => {
-                if *exported {
-                    f.write_str("export ")?;
-                }
-
+                write_if(f, "export ", *exported)?;
                 f.write_str("symbol ")?;
-                name.format(f, opts)
+                name.format(f, ctx)
             }
             Any::TestExprDeclaration(TestExprDeclaration {
                 platforms,
@@ -108,13 +183,7 @@ where
             }) => todo!(),
             Any::DeclarationPlatforms(DeclarationPlatforms { platforms }) => {
                 f.write_char('[')?;
-                for (index, platform) in platforms.iter().enumerate() {
-                    if index > 0 {
-                        f.write_str(", ")?;
-                    }
-
-                    platform.format(f, opts)?;
-                }
+                format_multi(f, ctx, platforms, ", ")?;
                 f.write_char(']')
             }
             Any::NilLiteral(_) => f.write_str("nil"),
@@ -123,82 +192,72 @@ where
                 false => "false",
             }),
             Any::NumberLiteral(NumberLiteral(value)) => f.write_str(value.as_str()),
-            Any::StringLiteral(StringLiteral { tag, segments }) => todo!(),
+            Any::StringLiteral(StringLiteral { tag, segments }) => {
+                if let Some(tag) = tag {
+                    tag.format(f, ctx)?;
+                }
+                f.write_str("'")?;
+                format_multi(f, ctx, segments, "")?;
+                f.write_str("'")
+            }
             Any::ExactStringLiteral(ExactStringLiteral { tag, value }) => {
-                f.write_str("\"")?;
+                if let Some(tag) = tag {
+                    tag.format(f, ctx)?;
+                }
+                f.write_str("'")?;
                 f.write_str(value.as_str())?;
-                f.write_str("\"")
+                f.write_str("'")
             }
             Any::ArrayLiteral(ArrayLiteral(entries)) => {
                 f.write_char('[')?;
-                for (index, entry) in entries.iter().enumerate() {
-                    if index > 0 {
-                        f.write_char(',')?;
-                    }
-
-                    f.write_char(' ')?;
-                    match entry {
-                        ElementOrSpread::Element(element) => {
-                            element.format(f, opts)?;
-                        }
-                        ElementOrSpread::Spread(spread) => {
-                            f.write_str("...")?;
-                            spread.format(f, opts)?;
-                        }
-                    }
-                }
+                format_multi(f, ctx, entries, ", ")?;
                 f.write_str(" ]")
             }
             Any::ObjectLiteral(ObjectLiteral(entries)) => {
                 f.write_char('{')?;
-                for (index, entry) in entries.iter().enumerate() {
-                    if index > 0 {
-                        f.write_char(',')?;
-                    }
-
-                    f.write_char(' ')?;
-
-                    match entry {
-                        KeyValueOrSpread::KeyValue(key, value, _) => {
-                            key.format(f, opts)?;
-                            f.write_str(": ")?;
-                            value.format(f, opts)?;
-                        }
-                        KeyValueOrSpread::Spread(expr) => {
-                            f.write_str("...")?;
-                            expr.format(f, opts)?;
-                        }
-                    }
-                }
+                format_multi(f, ctx, entries, ", ")?;
                 f.write_str(" }")
             }
             Any::SpreadExpression(SpreadExpression(inner)) => {
                 f.write_str("...")?;
-                inner.format(f, opts)
+                inner.format(f, ctx)
             }
             Any::BinaryOperation(BinaryOperation { left, op, right }) => {
-                left.format(f, opts)?;
+                left.format(f, ctx)?;
                 f.write_char(' ')?;
-                op.format(f, opts)?;
+                op.format(f, ctx)?;
                 f.write_char(' ')?;
-                right.format(f, opts)
+                right.format(f, ctx)
             }
             Any::BinaryOperator(BinaryOperator(op)) => f.write_str(op.into()),
             Any::NegationOperation(NegationOperation(inner)) => {
                 f.write_char('!')?;
-                inner.format(f, opts)
+                inner.format(f, ctx)
             }
             Any::Parenthesis(Parenthesis(inner)) => {
                 f.write_char('(')?;
-                inner.format(f, opts)?;
+                inner.format(f, ctx)?;
                 f.write_char(')')
             }
             Any::LocalIdentifier(LocalIdentifier(name)) => f.write_str(name.as_str()),
             Any::InlineConstGroup(InlineConstGroup {
                 declarations,
                 inner,
-            }) => todo!(),
-            Any::InlineDeclaration(InlineDeclaration { destination, value }) => todo!(),
+            }) => {
+                for dec in declarations {
+                    dec.format(f, ctx)?;
+                    f.write_str(",\n")?;
+                    ctx.write_indentation(f)?;
+                }
+
+                inner.format(f, ctx)
+            }
+            Any::InlineDeclaration(InlineDeclaration { destination, value }) => {
+                f.write_str("const ")?;
+                destination.format(f, ctx)?;
+                f.write_str(" = ")?;
+                value.format(f, ctx)
+            }
             Any::Func(Func {
                 type_annotation,
                 is_async,
@@ -207,12 +266,13 @@ where
                 let type_annotation = type_annotation.downcast();
 
                 f.write_char('(')?;
-                type_annotation.args.format(f, opts)?;
+                type_annotation.args.format(f, ctx)?;
                 f.write_char(')')?;
-                format_type_annotation(f, opts, type_annotation.returns.as_ref())?;
-                f.write_str(" => ")?;
+                format_type_annotation(f, ctx, type_annotation.returns.as_ref())?;
+                f.write_str(" => \n")?;
 
-                body.format(f, opts)
+                let ctx = ctx.indent();
+                body.format(f, ctx)
             }
             Any::Proc(Proc {
                 type_annotation,
@@ -222,21 +282,23 @@ where
                 let type_annotation = type_annotation.downcast();
 
                 f.write_char('(')?;
-                type_annotation.args.format(f, opts)?;
+                type_annotation.args.format(f, ctx)?;
                 f.write_char(')')?;
                 if let Some(throws) = type_annotation.throws {
                     f.write_str(" throws ")?;
-                    throws.format(f, opts)?;
+                    throws.format(f, ctx)?;
                 }
                 f.write_str(" |> ")?;
 
-                body.format(f, opts)
+                body.format(f, ctx)
             }
             Any::Block(Block(statements)) => {
                 f.write_str("{\n")?;
+                let ctx = ctx.indent();
+
                 for stmt in statements {
-                    f.write_str("  ")?; // TODO: Replace with dynamic indentation
-                    stmt.format(f, opts)?;
+                    ctx.write_indentation(f)?;
+                    stmt.format(f, ctx)?;
                     match stmt.downcast() {
                         Statement::Invocation(_) => f.write_char(';')?,
                         Statement::Assignment(_) => f.write_char(';')?,
@@ -249,13 +311,13 @@ where
                 f.write_char('}')
             }
             Any::RangeExpression(RangeExpression { start, end }) => {
-                start.format(f, opts)?;
+                start.format(f, ctx)?;
                 f.write_str("..")?;
-                end.format(f, opts)
+                end.format(f, ctx)
             }
             Any::AwaitExpression(AwaitExpression(inner)) => {
                 f.write_str("await ")?;
-                inner.format(f, opts)
+                inner.format(f, ctx)
             }
             Any::Invocation(Invocation {
                 subject,
@@ -269,35 +331,25 @@ where
                     f.write_str(awaited_or_detached.into())?;
                 }
 
-                subject.format(f, opts)?;
+                subject.format(f, ctx)?;
 
                 if type_args.len() > 0 {
                     f.write_char('<')?;
-                    for (index, arg) in type_args.iter().enumerate() {
-                        if index > 0 {
-                            f.write_str(", ")?;
-                        }
-
-                        arg.format(f, opts)?;
-                    }
+                    format_multi(f, ctx, type_args, ", ")?;
                     f.write_char('>')?;
                 }
 
                 f.write_char('(')?;
-                for (index, arg) in args.iter().enumerate() {
-                    if index > 0 {
-                        f.write_str(", ")?;
-                    }
+                format_multi(f, ctx, args, ", ")?;
 
-                    arg.format(f, opts)?;
-                }
                 if let Some(spread_args) = spread_args {
                     if args.len() > 0 {
                         f.write_str(", ")?;
                     }
 
-                    spread_args.format(f, opts)?;
+                    spread_args.format(f, ctx)?;
                 }
+
                 f.write_char(')')?;
 
                 if *bubbles {
@@ -311,7 +363,7 @@ where
                 property,
                 optional,
             }) => {
-                subject.format(f, opts)?;
+                subject.format(f, ctx)?;
 
                 match property {
                     Property::Expression(expr) => {
@@ -320,7 +372,7 @@ where
                         }
 
                         f.write_char('[')?;
-                        expr.format(f, opts)?;
+                        expr.format(f, ctx)?;
                         f.write_char(']')
                     }
                     Property::PlainIdentifier(ident) => {
@@ -329,7 +381,7 @@ where
                         }
 
                         f.write_char('.')?;
-                        ident.format(f, opts)
+                        ident.format(f, ctx)
                     }
                 }
             }
@@ -337,28 +389,27 @@ where
                 cases,
                 default_case,
             }) => {
-                for (index, case) in cases.iter().enumerate() {
-                    if index > 0 {
-                        f.write_str(" else ")?;
-                    }
-
-                    case.format(f, opts)?;
-                }
+                format_multi(f, ctx, cases, " else ")?;
 
                 if let Some(default_case) = default_case {
-                    f.write_str(" else { ")?;
-                    default_case.format(f, opts)?;
-                    f.write_str(" }")?;
+                    f.write_str(" else {\n")?;
+                    let ctx = ctx.indent();
+                    ctx.write_indentation(f)?;
+                    default_case.format(f, ctx)?;
+                    ctx.write_indentation(f)?;
+                    f.write_str("\n}")?;
                 }
 
                 Ok(())
             }
             Any::IfElseExpressionCase(IfElseExpressionCase { condition, outcome }) => {
                 f.write_str("if ")?;
-                condition.format(f, opts)?;
-                f.write_str(" { ")?;
-                outcome.format(f, opts)?;
-                f.write_str(" }")
+                condition.format(f, ctx)?;
+                f.write_str(" {\n")?;
+                let ctx = ctx.indent();
+                ctx.write_indentation(f)?;
+                outcome.format(f, ctx)?;
+                f.write_str("\n}")
             }
             Any::SwitchExpression(SwitchExpression {
                 value,
@@ -382,22 +433,12 @@ where
             Any::ErrorExpression(ErrorExpression(_)) => todo!(),
             Any::RegularExpression(RegularExpression { expr, flags }) => todo!(),
             Any::AnyLiteral(AnyLiteral) => f.write_str("nil"),
-            Any::UnionType(UnionType(members)) => {
-                for (index, member) in members.iter().enumerate() {
-                    if index > 0 {
-                        f.write_str(" | ")?;
-                    }
-
-                    member.format(f, opts)?;
-                }
-
-                Ok(())
-            }
+            Any::UnionType(UnionType(members)) => format_multi(f, ctx, members, " | "),
             Any::MaybeType(MaybeType(inner)) => {
-                inner.format(f, opts)?;
+                inner.format(f, ctx)?;
                 f.write_char('?')
             }
-            Any::NamedType(NamedType(name)) => name.format(f, opts),
+            Any::NamedType(NamedType(name)) => name.format(f, ctx),
             Any::GenericParamType(GenericParamType { name, extends }) => todo!(),
             Any::ProcType(ProcType {
                 type_params,
@@ -408,25 +449,17 @@ where
             }) => {
                 if type_params.len() > 0 {
                     f.write_char('<')?;
-                    for (index, param) in type_params.iter().enumerate() {
-                        if index > 0 {
-                            f.write_str(", ")?;
-                        }
-
-                        param.format(f, opts)?;
-                    }
+                    format_multi(f, ctx, type_params, ", ")?;
                     f.write_char('>')?;
                 }
 
                 f.write_char('(')?;
-                for arg in args {
-                    arg.format(f, opts)?;
-                }
+                format_multi(f, ctx, args, ", ")?;
                 f.write_char(')')?;
 
                 if let Some(throws) = throws {
                     f.write_str(" throws ")?;
-                    throws.format(f, opts)?;
+                    throws.format(f, ctx)?;
                 }
 
                 f.write_str(" |> {}")
@@ -439,26 +472,16 @@ where
             }) => {
                 if type_params.len() > 0 {
                     f.write_char('<')?;
-                    for (index, param) in type_params.iter().enumerate() {
-                        if index > 0 {
-                            f.write_str(", ")?;
-                        }
-
-                        param.format(f, opts)?;
-                    }
+                    format_multi(f, ctx, type_params, ", ")?;
                     f.write_char('>')?;
                 }
 
                 f.write_char('(')?;
-                for arg in args {
-                    arg.format(f, opts)?;
-                }
-                f.write_char(')')?;
-
-                f.write_str(" => ")?;
+                format_multi(f, ctx, args, ", ")?;
+                f.write_str(") => ")?;
 
                 if let Some(returns) = returns {
-                    returns.format(f, opts)?;
+                    returns.format(f, ctx)?;
                 } else {
                     f.write_str("<none>")?;
                 }
@@ -470,19 +493,19 @@ where
                 type_annotation,
                 optional,
             }) => {
-                name.format(f, opts)?;
+                name.format(f, ctx)?;
                 if *optional {
                     f.write_char('?')?;
                 }
-                format_type_annotation(f, opts, type_annotation.as_ref())
+                format_type_annotation(f, ctx, type_annotation.as_ref())
             }
             Any::GenericType(GenericType { type_params, inner }) => todo!(),
             Any::TypeParam(TypeParam { name, extends }) => {
-                name.format(f, opts)?;
+                name.format(f, ctx)?;
 
                 if let Some(extends) = extends {
                     f.write_str(" extends ")?;
-                    extends.format(f, opts)?;
+                    extends.format(f, ctx)?;
                 }
 
                 Ok(())
@@ -501,13 +524,13 @@ where
             Any::SpecialType(SpecialType { kind, inner }) => {
                 f.write_str(kind.into())?;
                 f.write_char('<')?;
-                inner.format(f, opts)?;
+                inner.format(f, ctx)?;
                 f.write_char('>')
             }
             Any::ModifierType(ModifierType { kind, inner }) => {
                 f.write_str(kind.into())?;
                 f.write_char(' ')?;
-                inner.format(f, opts)
+                inner.format(f, ctx)
             }
             Any::StringLiteralType(StringLiteralType(value)) => {
                 f.write_char('\'')?;
@@ -526,12 +549,12 @@ where
             Any::UnknownType(_) => f.write_str("unknown"),
             Any::ParenthesizedType(ParenthesizedType(inner)) => {
                 f.write_char('(')?;
-                inner.format(f, opts)?;
+                inner.format(f, ctx)?;
                 f.write_char(')')
             }
             Any::TypeofType(TypeofType(inner)) => {
                 f.write_str("typeof ")?;
-                inner.format(f, opts)
+                inner.format(f, ctx)
             }
             Any::RegularExpressionType(_) => todo!(),
             Any::PropertyType(PropertyType {
@@ -543,28 +566,20 @@ where
                 cases,
                 default_case,
             }) => {
-                let mut is_first = true;
-                for case in cases {
-                    if !is_first {
-                        is_first = true;
-                        f.write_str(" else ")?;
-                    }
-
-                    case.format(f, opts)?;
-                }
+                format_multi(f, ctx, cases, " else ")?;
 
                 if let Some(default_case) = default_case {
                     f.write_str(" else ")?;
-                    default_case.format(f, opts)?;
+                    default_case.format(f, ctx)?;
                 }
 
                 Ok(())
             }
             Any::IfElseStatementCase(IfElseStatementCase { condition, outcome }) => {
                 f.write_str("if ")?;
-                condition.format(f, opts)?;
+                condition.format(f, ctx)?;
                 f.write_str(" ")?;
-                outcome.format(f, opts)
+                outcome.format(f, ctx)
             }
             Any::ForLoop(ForLoop {
                 item_identifier,
@@ -577,13 +592,13 @@ where
                 value,
                 operator,
             }) => {
-                target.format(f, opts)?;
+                target.format(f, ctx)?;
                 f.write_char(' ')?;
                 if let Some(operator) = operator {
-                    operator.format(f, opts)?;
+                    operator.format(f, ctx)?;
                 }
                 f.write_str("= ")?;
-                value.format(f, opts)
+                value.format(f, ctx)
             }
             Any::TryCatch(TryCatch {
                 try_block,
@@ -601,34 +616,75 @@ where
 }
 
 impl Formattable for Arg {
-    fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
+    fn format<W: Write>(&self, f: &mut W, ctx: FormatContext) -> Result {
         let Arg {
             name,
             type_annotation,
             optional,
         } = self;
 
-        name.format(f, opts)?;
+        name.format(f, ctx)?;
         if *optional {
             f.write_char('?')?;
         }
-        format_type_annotation(f, opts, type_annotation.as_ref())?;
+        format_type_annotation(f, ctx, type_annotation.as_ref())?;
 
         Ok(())
     }
 }
 
+impl<T: Formattable> Formattable for ElementOrSpread<T> {
+    fn format<W: Write>(&self, f: &mut W, ctx: FormatContext) -> Result {
+        match self {
+            ElementOrSpread::Element(element) => element.format(f, ctx),
+            ElementOrSpread::Spread(spread) => {
+                f.write_str("...")?;
+                spread.format(f, ctx)
+            }
+        }
+    }
+}
+
+impl<T: Formattable> Formattable for KeyValueOrSpread<T> {
+    fn format<W: Write>(&self, f: &mut W, ctx: FormatContext) -> Result {
+        match self {
+            KeyValueOrSpread::KeyValue(key, value, _) => {
+                key.format(f, ctx)?;
+                f.write_str(": ")?;
+                value.format(f, ctx)
+            }
+            KeyValueOrSpread::Spread(expr) => {
+                f.write_str("...")?;
+                expr.format(f, ctx)
+            }
+        }
+    }
+}
+
+impl Formattable for StringLiteralSegment {
+    fn format<W: Write>(&self, f: &mut W, ctx: FormatContext) -> Result {
+        match self {
+            StringLiteralSegment::Slice(s) => f.write_str(s.as_str()),
+            StringLiteralSegment::AST(expr) => {
+                f.write_str("${")?;
+                expr.format(f, ctx)?;
+                f.write_str("}")
+            }
+        }
+    }
+}
+
 impl Formattable for DeclarationDestination {
-    fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
+    fn format<W: Write>(&self, f: &mut W, ctx: FormatContext) -> Result {
         match self {
             DeclarationDestination::NameAndType(NameAndType {
                 name,
                 type_annotation,
             }) => {
-                name.format(f, opts)?;
+                name.format(f, ctx)?;
                 if let Some(type_annotation) = type_annotation {
                     f.write_str(": ")?;
-                    type_annotation.format(f, opts)?;
+                    type_annotation.format(f, ctx)?;
                 }
 
                 Ok(())
@@ -648,7 +704,7 @@ impl Formattable for DeclarationDestination {
                         f.write_str(", ")?;
                     }
 
-                    property.format(f, opts)?;
+                    property.format(f, ctx)?;
                 }
 
                 if let Some(spread) = spread {
@@ -656,7 +712,7 @@ impl Formattable for DeclarationDestination {
                         f.write_str(", ")?;
                     }
 
-                    spread.format(f, opts)?;
+                    spread.format(f, ctx)?;
                 }
 
                 f.write_char(match destructure_kind {
@@ -672,9 +728,9 @@ impl<T> Formattable for Option<T>
 where
     T: Formattable,
 {
-    fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
+    fn format<W: Write>(&self, f: &mut W, ctx: FormatContext) -> Result {
         if let Some(sel) = self {
-            sel.format(f, opts)?;
+            sel.format(f, ctx)?;
         }
 
         Ok(())
@@ -685,9 +741,9 @@ impl<T> Formattable for Vec<T>
 where
     T: Formattable,
 {
-    fn format<W: Write>(&self, f: &mut W, opts: FormatOptions) -> Result {
+    fn format<W: Write>(&self, f: &mut W, ctx: FormatContext) -> Result {
         for el in self.iter() {
-            el.format(f, opts)?;
+            el.format(f, ctx)?;
         }
 
         Ok(())
@@ -696,22 +752,26 @@ where
 
 fn format_type_annotation<W: Write>(
     f: &mut W,
-    opts: FormatOptions,
+    ctx: FormatContext,
     type_annotation: Option<&AST<TypeExpression>>,
 ) -> Result {
     if let Some(type_annotation) = type_annotation {
         f.write_str(": ")?;
-        type_annotation.format(f, opts)?;
+        type_annotation.format(f, ctx)?;
     }
 
     Ok(())
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct FormatOptions {}
+pub struct FormatOptions {
+    indentation_chars: &'static str,
+}
 
 impl FormatOptions {
-    pub const DEFAULT: FormatOptions = FormatOptions {};
+    pub const DEFAULT: FormatOptions = FormatOptions {
+        indentation_chars: "  ",
+    };
 }
 
 impl<TKind> Display for AST<TKind>
@@ -720,6 +780,37 @@ where
     Any: From<TKind>,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        self.format(f, FormatOptions::DEFAULT)
+        self.format(
+            f,
+            FormatContext {
+                options: FormatOptions::DEFAULT,
+                current_indentation: 0,
+            },
+        )
     }
+}
+
+fn format_multi<W: Write, T: Formattable>(
+    f: &mut W,
+    ctx: FormatContext,
+    items: &Vec<T>,
+    sep: &str,
+) -> Result {
+    for (index, item) in items.iter().enumerate() {
+        if index > 0 {
+            f.write_str(sep)?;
+        }
+
+        item.format(f, ctx)?;
+    }
+
+    Ok(())
+}
+
+fn write_if<W: Write>(f: &mut W, s: &str, condition: bool) -> Result {
+    if condition {
+        f.write_str(s)?;
+    }
+
+    Ok(())
 }
