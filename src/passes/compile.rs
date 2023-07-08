@@ -7,6 +7,8 @@ use std::{
     fmt::{Result, Write},
 };
 
+use super::ResolveSymbolContext;
+
 #[derive(Debug, Clone, Copy)]
 pub struct CompileContext<'a> {
     pub modules: &'a ModulesStore,
@@ -352,7 +354,14 @@ where
                 if name == JS_GLOBAL_IDENTIFIER {
                     f.write_str("globalThis")
                 } else {
-                    let resolved = self.resolve_symbol(ctx.into(), name.as_str());
+                    let resolved = self.resolve_symbol(
+                        ResolveSymbolContext {
+                            modules: ctx.modules,
+                            current_module: ctx.current_module,
+                            follow_imports: false,
+                        },
+                        name.as_str(),
+                    );
 
                     match resolved.as_ref().map(|r| r.details()) {
                         Some(Any::ImportDeclaration(ImportDeclaration {
