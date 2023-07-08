@@ -17,7 +17,6 @@ use nom::{
     IResult, Parser,
 };
 use std::{rc::Rc, str::FromStr, time::SystemTime};
-use swc_common::util::take::Take;
 
 macro_rules! seq {
     ($( $s:expr ),* $(,)?) => {
@@ -626,8 +625,9 @@ fn type_expression(
         precedence(
             &[
                 &[typeof_type],
-                &[modifier_type],
                 &[union_type],
+                &[modifier_type],
+                &[generic_type],
                 &[maybe_type],
                 &[array_type],
                 &[bound_generic_type],
@@ -691,6 +691,21 @@ fn union_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
             1 => members.pop().unwrap(),
             _ => make_node_tuple!(UnionType, covering(&members).unwrap(), members)
                 .recast::<TypeExpression>(),
+        },
+    )(i)
+}
+
+fn generic_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
+    map(
+        seq!(
+            tag("<"),
+            separated_list1(w(tag(",")), w(type_param)),
+            expect_tag(">"),
+            type_expression(Some(bound_generic_type)),
+        ),
+        |(start, mut type_params, _, mut inner)| {
+            make_node!(GenericType, start.spanning(&inner), type_params, inner)
+                .recast::<TypeExpression>()
         },
     )(i)
 }
@@ -889,7 +904,7 @@ fn key_value_type(i: Slice) -> ParseResult<KeyValueOrSpread<AST<TypeExpression>>
         ),
         |(key, optional, _, value)| {
             KeyValueOrSpread::KeyValue(
-                identifier_to_string_type(key).recast::<TypeExpression>(),
+                AST::<StringLiteralType>::from(key).recast::<TypeExpression>(),
                 value,
                 optional.is_some(),
             )
@@ -1847,6 +1862,11 @@ fn object_literal(i: Slice) -> ParseResult<AST<Expression>> {
                             KeyValueOrSpread::Spread
                         ),
                         key_value_expression,
+                        map(local_identifier, |i| KeyValueOrSpread::KeyValue(
+                            AST::<ExactStringLiteral>::from(i.clone()).recast::<Expression>(),
+                            i.recast::<Expression>(),
+                            false
+                        ))
                     )))
                 ),
                 opt(w(tag(",")))
@@ -1873,7 +1893,7 @@ fn key_value_expression(i: Slice) -> ParseResult<KeyValueOrSpread<AST<Expression
         ),
         |(key, _, value)| {
             KeyValueOrSpread::KeyValue(
-                identifier_to_string(key).recast::<Expression>(),
+                AST::<ExactStringLiteral>::from(key).recast::<Expression>(),
                 value,
                 false,
             )

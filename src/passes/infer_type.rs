@@ -184,10 +184,12 @@ impl AST<Expression> {
                                                     }
                                                     .rc(),
                                                     DestructureKind::Object => {
-                                                        identifier_to_string_type(property.clone())
-                                                            .recast::<TypeExpression>()
-                                                            .resolve_type(ctx.into())
-                                                            .rc()
+                                                        AST::<StringLiteralType>::from(
+                                                            property.clone(),
+                                                        )
+                                                        .recast::<TypeExpression>()
+                                                        .resolve_type(ctx.into())
+                                                        .rc()
                                                     }
                                                 },
                                             }
@@ -506,7 +508,7 @@ impl AST<Expression> {
                                         .into_iter()
                                         .map(|(key, value)| {
                                             KeyValueOrSpread::KeyValue(
-                                                identifier_to_string_type(key)
+                                                AST::<StringLiteralType>::from(key)
                                                     .recast::<TypeExpression>()
                                                     .resolve_type(ctx.into()),
                                                 value.infer_type(ctx),

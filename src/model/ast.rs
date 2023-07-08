@@ -436,6 +436,12 @@ pub struct ExactStringLiteral {
     pub value: Slice,
 }
 
+impl From<Slice> for ExactStringLiteral {
+    fn from(value: Slice) -> Self {
+        Self { tag: None, value }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ArrayLiteral(pub Vec<ElementOrSpread<AST<Expression>>>);
 
@@ -582,6 +588,17 @@ impl From<AST<PlainIdentifier>> for AST<LocalIdentifier> {
     fn from(plain_identifier: AST<PlainIdentifier>) -> Self {
         let mut local =
             LocalIdentifier(plain_identifier.downcast().0).as_ast(plain_identifier.slice().clone());
+
+        local.set_parent(plain_identifier.parent().as_ref().unwrap());
+
+        local
+    }
+}
+
+impl From<AST<LocalIdentifier>> for AST<PlainIdentifier> {
+    fn from(plain_identifier: AST<LocalIdentifier>) -> Self {
+        let mut local =
+            PlainIdentifier(plain_identifier.downcast().0).as_ast(plain_identifier.slice().clone());
 
         local.set_parent(plain_identifier.parent().as_ref().unwrap());
 
@@ -1207,16 +1224,30 @@ where
     }
 }
 
-pub fn identifier_to_string(ast: AST<PlainIdentifier>) -> AST<ExactStringLiteral> {
-    ExactStringLiteral {
-        tag: None,
-        value: ast.downcast().0.clone(),
+impl From<AST<PlainIdentifier>> for AST<ExactStringLiteral> {
+    fn from(value: AST<PlainIdentifier>) -> Self {
+        ExactStringLiteral {
+            tag: None,
+            value: value.downcast().0.clone(),
+        }
+        .as_ast(value.slice().clone())
     }
-    .as_ast(ast.slice().clone())
 }
 
-pub fn identifier_to_string_type(ast: AST<PlainIdentifier>) -> AST<StringLiteralType> {
-    StringLiteralType(ast.downcast().0.clone()).as_ast(ast.slice().clone())
+impl From<AST<LocalIdentifier>> for AST<ExactStringLiteral> {
+    fn from(value: AST<LocalIdentifier>) -> Self {
+        ExactStringLiteral {
+            tag: None,
+            value: value.downcast().0.clone(),
+        }
+        .as_ast(value.slice().clone())
+    }
+}
+
+impl From<AST<PlainIdentifier>> for AST<StringLiteralType> {
+    fn from(value: AST<PlainIdentifier>) -> Self {
+        StringLiteralType(value.downcast().0.clone()).as_ast(value.slice().clone())
+    }
 }
 
 // --- AST groups ---
