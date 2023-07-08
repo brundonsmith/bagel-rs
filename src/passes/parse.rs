@@ -6,7 +6,6 @@ use crate::{
     DEBUG_MODE,
 };
 use colored::Color;
-use memoize::memoize;
 use nom::{
     branch::alt,
     bytes::complete::{escaped, tag, take_while, take_while1},
@@ -18,6 +17,7 @@ use nom::{
     IResult, Parser,
 };
 use std::{rc::Rc, str::FromStr, time::SystemTime};
+use swc_common::util::take::Take;
 
 macro_rules! seq {
     ($( $s:expr ),* $(,)?) => {
@@ -126,7 +126,6 @@ fn module(i: Slice, module_id: ModuleID) -> ParseResult<AST<Module>> {
 
 // --- Declaration
 
-#[memoize]
 fn declaration(i: Slice) -> ParseResult<AST<Declaration>> {
     alt((
         map(import_all_declaration, AST::recast::<Declaration>),
@@ -686,29 +685,34 @@ fn union_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
     map(
         preceded(
             opt(w(tag("|"))),
-            separated_list2(w(tag("|")), w(type_expression(Some(union_type)))),
+            separated_list1(w(tag("|")), w(type_expression(Some(union_type)))),
         ),
-        |mut members| {
-            make_node_tuple!(UnionType, covering(&members).unwrap(), members)
-                .recast::<TypeExpression>()
+        |mut members| match members.len() {
+            1 => members.pop().unwrap(),
+            _ => make_node_tuple!(UnionType, covering(&members).unwrap(), members)
+                .recast::<TypeExpression>(),
         },
     )(i)
 }
 
 fn maybe_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
     map(
-        seq!(type_expression(Some(maybe_type)), tag("?")),
-        |(mut inner, end)| {
-            make_node_tuple!(MaybeType, inner.spanning(&end), inner).recast::<TypeExpression>()
+        seq!(type_expression(Some(maybe_type)), opt(tag("?"))),
+        |(mut inner, question)| match question {
+            Some(question) => make_node_tuple!(MaybeType, inner.spanning(&question), inner)
+                .recast::<TypeExpression>(),
+            None => inner,
         },
     )(i)
 }
 
 fn array_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
     map(
-        seq!(type_expression(Some(array_type)), tag("[]")),
-        |(mut element, end)| {
-            make_node_tuple!(ArrayType, element.spanning(&end), element).recast::<TypeExpression>()
+        seq!(type_expression(Some(array_type)), opt(tag("[]"))),
+        |(mut element, brackets)| match brackets {
+            Some(brackets) => make_node_tuple!(ArrayType, element.spanning(&brackets), element)
+                .recast::<TypeExpression>(),
+            None => element,
         },
     )(i)
 }
@@ -717,34 +721,39 @@ fn bound_generic_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
     map(
         seq!(
             type_expression(Some(bound_generic_type)),
-            tag("<"),
-            separated_list1(w(tag(",")), w(type_expression(None))),
-            expect_tag(">"),
+            opt(seq!(
+                tag("<"),
+                separated_list1(w(tag(",")), w(type_expression(None))),
+                expect_tag(">"),
+            ))
         ),
-        |(generic, _, mut type_args, end)| {
-            let mut generic = generic.recast::<TypeExpression>();
-            let src = generic.spanning(&end);
+        |(generic, bindings)| match bindings {
+            Some((_, mut type_args, end)) => {
+                let mut generic = generic.recast::<TypeExpression>();
+                let src = generic.spanning(&end);
 
-            if let Some(name) = generic.try_downcast::<NamedType>() {
-                if type_args.len() == 1 {
-                    let kind = match name.0.downcast().0.as_str() {
-                        "Plan" => Some(SpecialTypeKind::Plan),
-                        "Iterable" => Some(SpecialTypeKind::Iterable),
-                        "Error" => Some(SpecialTypeKind::Error),
-                        _ => None,
-                    };
+                if let Some(name) = generic.try_downcast::<NamedType>() {
+                    if type_args.len() == 1 {
+                        let kind = match name.0.downcast().0.as_str() {
+                            "Plan" => Some(SpecialTypeKind::Plan),
+                            "Iterable" => Some(SpecialTypeKind::Iterable),
+                            "Error" => Some(SpecialTypeKind::Error),
+                            _ => None,
+                        };
 
-                    if let Some(mut kind) = kind {
-                        let mut inner = type_args.into_iter().next().unwrap();
+                        if let Some(mut kind) = kind {
+                            let mut inner = type_args.into_iter().next().unwrap();
 
-                        return make_node!(SpecialType, src, kind, inner)
-                            .recast::<TypeExpression>();
+                            return make_node!(SpecialType, src, kind, inner)
+                                .recast::<TypeExpression>();
+                        }
                     }
                 }
-            }
 
-            return make_node!(BoundGenericType, src, generic, type_args)
-                .recast::<TypeExpression>();
+                return make_node!(BoundGenericType, src, generic, type_args)
+                    .recast::<TypeExpression>();
+            }
+            None => generic,
         },
     )(i)
 }
@@ -973,7 +982,6 @@ fn named_type(i: Slice) -> ParseResult<AST<TypeExpression>> {
 
 // --- Statement ---
 
-#[memoize]
 fn statement(i: Slice) -> ParseResult<AST<Statement>> {
     alt((
         map(
@@ -1216,7 +1224,7 @@ fn invocation_accessor_chain(i: Slice) -> ParseResult<AST<Expression>> {
         seq!(
             await_or_detach,
             expression(Some(invocation_accessor_chain)),
-            many1(alt((
+            many0(alt((
                 invocation_args,
                 indexer_expression,
                 w(dot_property_access),
@@ -1361,7 +1369,7 @@ macro_rules! binary_operation {
             map(
                 tuple((
                     expression(Some($name)),
-                    many1(pair(
+                    many0(pair(
                         w(alt(($(tag($operator),)*))),
                         w(expression(Some($name))),
                     )),
@@ -1451,17 +1459,20 @@ fn instance_of(i: Slice) -> ParseResult<AST<Expression>> {
     map(
         seq!(
             expression(Some(instance_of)),
-            tag("instanceof"),
-            expect(type_expression(None), "type")
+            opt(seq!(
+                tag("instanceof"),
+                expect(type_expression(None), "type")
+            ))
         ),
-        |(mut inner, _, mut possible_type)| {
-            make_node!(
+        |(mut inner, instanceof_clause)| match instanceof_clause {
+            Some((_, mut possible_type)) => make_node!(
                 InstanceOf,
                 inner.spanning(&possible_type),
                 inner,
                 possible_type
             )
-            .recast::<Expression>()
+            .recast::<Expression>(),
+            None => inner,
         },
     )(i)
 }
@@ -1470,11 +1481,13 @@ fn as_cast(i: Slice) -> ParseResult<AST<Expression>> {
     map(
         seq!(
             expression(Some(as_cast)),
-            tag("as"),
-            expect(type_expression(None), "type")
+            opt(seq!(tag("as"), expect(type_expression(None), "type")))
         ),
-        |(mut inner, _, mut as_type)| {
-            make_node!(AsCast, inner.spanning(&as_type), inner, as_type).recast::<Expression>()
+        |(mut inner, as_clause)| match as_clause {
+            Some((_, mut as_type)) => {
+                make_node!(AsCast, inner.spanning(&as_type), inner, as_type).recast::<Expression>()
+            }
+            None => inner,
         },
     )(i)
 }
@@ -2020,7 +2033,6 @@ where
     terminated(parser, whitespace_required)
 }
 
-#[memoize]
 fn string_contents(i: Slice) -> ParseResult<Slice> {
     escaped(
         take_while1(|ch: char| ch != '\'' && ch != '$' && ch != '\\'),
