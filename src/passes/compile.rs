@@ -261,7 +261,7 @@ where
                 destination_type,
                 value_type,
             }) => todo!(),
-            Any::NilLiteral(_) => f.write_str("undefined"),
+            Any::NilLiteral(_) => f.write_str(NIL),
             Any::BooleanLiteral(BooleanLiteral(value)) => f.write_str(match value {
                 true => "true",
                 false => "false",
@@ -598,7 +598,7 @@ where
                 if let Some(default_case) = default_case {
                     default_case.compile(ctx, f)?;
                 } else {
-                    f.write_str("undefined")?;
+                    f.write_str(NIL)?;
                 }
                 f.write_char(')')
             }
@@ -612,11 +612,31 @@ where
                 value,
                 cases,
                 default_case,
-            }) => todo!(),
+            }) => {
+                f.write_str("(() => {\n  const ___v = ")?;
+                value.compile(ctx, f)?;
+                f.write_str("\n  return ")?;
+                for case in cases {
+                    case.compile(ctx, f)?;
+                }
+
+                match default_case {
+                    Some(default_case) => default_case.compile(ctx, f)?,
+                    None => f.write_str(NIL)?,
+                }
+                f.write_str("})()")
+            }
             Any::SwitchExpressionCase(SwitchExpressionCase {
                 type_filter,
                 outcome,
-            }) => todo!(),
+            }) => {
+                f.write_str(INT)?;
+                f.write_str("instanceOf(___v, ")?;
+                compile_runtime_type(f, type_filter)?;
+                f.write_str(") ? ")?;
+                outcome.compile(ctx, f)?;
+                f.write_str(" : ")
+            }
             Any::ElementTag(ElementTag {
                 tag_name,
                 attributes,
@@ -1223,6 +1243,7 @@ impl Compilable for DeclarationDestination {
 
 pub const INT: &str = "___";
 pub const INT_FN: &str = "___fn_";
+const NIL: &str = "undefined";
 
 // --- Util functions ---
 
